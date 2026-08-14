@@ -5,7 +5,7 @@
   <p>An addon for <a href="https://meteorclient.com/">Meteor Client</a> that adds 65+ modules, custom commands, and HUD elements for anarchy, griefing, and quality of life.</p>
 
   <!-- Badges -->
-  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-2.1.1-orange" alt="Version"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.0-orange" alt="Version"></a>
   <img src="https://img.shields.io/badge/Minecraft-1.21.11-blue" alt="Minecraft version">
   <img src="https://img.shields.io/badge/Java-21-green" alt="Java version">
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/github/downloads/player19425/Meteor-Orbiter/total" alt="Downloads"></a>

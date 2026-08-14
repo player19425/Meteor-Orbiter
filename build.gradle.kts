@@ -7,7 +7,7 @@ val mavenGroup = providers.gradleProperty("maven_group").get()
 
 base {
     archivesName = archivesBaseName
-    version = libs.versions.mod.version.get()
+    version = libs.versions.mod.version.get() + "-" + libs.versions.minecraft.get()
     group = mavenGroup
 }
 
