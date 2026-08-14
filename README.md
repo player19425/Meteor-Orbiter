@@ -1,175 +1,208 @@
-# Orbiter V2.1
+<div align="center">
+  <!-- Logo and Title -->
+  <img src="src/main/resources/assets/orbiter/icon.png" alt="Orbiter logo" width="20%"/>
+  <h1>Meteor Orbiter</h1>
+  <p>An addon for <a href="https://meteorclient.com/">Meteor Client</a> that adds 65+ modules, custom commands, and HUD elements for anarchy, griefing, and quality of life.</p>
 
-Orbiter is a Meteor Client addon for Minecraft 1.21.11. Features that send
-commands are server-dependent and never imply that a client-only setting can
-override server validation.
+  <!-- Badges -->
+  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-2.1.1-orange" alt="Version"></a>
+  <img src="https://img.shields.io/badge/Minecraft-1.21.11-blue" alt="Minecraft version">
+  <img src="https://img.shields.io/badge/Java-21-green" alt="Java version">
+  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/github/downloads/player19425/Meteor-Orbiter/total" alt="Downloads"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/stargazers"><img src="https://img.shields.io/github/stars/player19425/Meteor-Orbiter" alt="Stars"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/commits/1.21.11"><img src="https://img.shields.io/github/last-commit/player19425/Meteor-Orbiter" alt="Last commit"></a>
+  <img src="https://img.shields.io/github/languages/code-size/player19425/Meteor-Orbiter" alt="Code size">
+  <img src="https://img.shields.io/github/issues/player19425/Meteor-Orbiter" alt="Issues">
+</div>
 
-## Safety and compatibility
+<hr />
 
-- CrashFixer overlap is delegated conditionally through the mixin plugin;
-  Orbiter logs the ownership decision at startup.
-- ServerProtect preserves valid item components, including custom spawn-egg
-  `minecraft:entity_data`. The legacy destructive entity-data option is
-  disabled by default.
-- Dialog protection validates bounded payload complexity and offers a local
-  emergency close/suppress action. Temporary suppression lasts 15 minutes by
-  default and resets on disconnect.
-- Command-producing modules use capability detection and bounded queues where
-  supported. Command availability does not prove permission.
-- WorldEraser rejects invalid coordinates and excessive estimated work before
-  iteration. Large cuboids use lazy `/fill` subdivision under the vanilla
-  32,768-block fill limit.
-- ViewBlocks and BeaconOptimizer are client-side visual tools. BeaconOptimizer
-  never hides an on-screen beam.
+# About
 
-## Server-dependent operator tools
+Orbiter is a collection of modules and tools for [Meteor Client](https://meteorclient.com/), originally built for survival, anarchy, and creative/OP play on 1.21.11 servers.
 
-WorldEdit, Essentials, LuckPerms, UUIDBan, reach methods, and destructive
-operations depend on the server command tree, permissions, and plugin behavior.
-Vanilla `/kill` cannot be made permanently immune by client code. A resilient
-entity can only be monitored and optionally re-summoned while the controlling
-client remains connected and authorized.
+Everything is organized into four in-game categories:
 
-Destructive features must use explicit confirmation and should only be tested
-on disposable local servers with backups.
+- **Orbiter Survival** — general purpose and anti-abuse modules
+- **Orbiter Vanilla** — modules that only use vanilla mechanics
+- **Orbiter Creative/OP** — modules that require Creative mode or operator permissions
+- **Orbiter Stupid** — joke / experimental modules
 
-## Development
+# Requirements
 
-A template to allow easy usage of the Meteor Addon API.
+- [Java](https://adoptium.net/temurin/releases) 21 or higher
+- [Fabric Loader](https://fabricmc.net/use/installer/) 0.18.2+
+- [Meteor Client](https://meteorclient.com/) for 1.21.11
 
-### How to use
+# Installation
 
-#### Use GitHub Template (Recommended)
+1. Download the latest [release](https://github.com/player19425/Meteor-Orbiter/releases) of the mod.
+2. Put the `.jar` in your `.minecraft/mods` folder.
+3. Launch the game with Fabric and Meteor Client installed.
 
-- Click the green `Use this template` button in the top right corner of this page.  
-  This will create a new repository with this template and a clean history.
+*Note: features that send commands require the server to support them and never imply that a client-only setting can override server validation.*
 
-#### Clone Manually
+# Modules
 
-- Alternatively, clone this repository using these commands for a clean history:
-  ```bash
-  git clone --depth 1 https://github.com/MeteorDevelopment/meteor-addon-template your-addon-name
-  cd your-addon-name
-  rm -rf .git
-  git init
-  git add .
-  git commit -m "Initial commit from template"
-  ```
+## Combat
 
-#### Development
+| Module | Description |
+|---|---|
+| **aim-assist-plus** | Smooth aim assist with separate yaw/pitch speeds and filters. |
+| **anti-knockback** | Handles knockback only. |
+| **bow-assist** | Aims the bow with accurate projectile physics, movement prediction, and auto-fire support. |
+| **crossbow-assist** | Aims a loaded crossbow with projectile physics, movement prediction, and auto-fire. |
+| **mace-assist** | Auto-aim and strike with the Mace, including Elytra swapping for critical hits on landing. |
+| **no-friend-hit** | Prevents attacking Meteor friends. |
+| **out-of-reach** | Aggressively teleports you outside player reach using gamemode detection and movement prediction. |
+| **precision-shot** | Predicts projectile trajectories and supports silent packet aiming. |
+| **shield-assist** | Auto-blocks with a shield against projectiles, melee, and special attacks, with smart release for counter-attacks. |
+| **spear-assist** | Jab and charge attack control with smart mode switching. |
+| **trident-assist** | Manual or automatic trident throwing and melee combat. |
 
-- Use this template to add custom modules, commands, HUDs, and other features to Meteor Client.
-- To test, run the `Minecraft Client` configuration in your IDE.
-  This will start a Minecraft client with the Meteor Client mod and your addon loaded.
-- To build, run the gradle `build` task. This will create a JAR file in the `build/libs` folder.
-    - Move the JAR file to the `mods` folder of your Minecraft installation, alongside the Meteor Client mod and run the
-      game.
+## Movement
 
-### Updating to newer Minecraft versions
+| Module | Description |
+|---|---|
+| **anti-push** | Stops fluid and entity push only. |
+| **auto-clutch** | Automatically clutches to prevent fall damage using blocks, boats, water, or any fall-canceling item. |
+| **force-invisibility** | Spoofs server Y and only drops to real Y when needed. |
+| **jump-a** | Jump over walls or reach blocks you're looking at with calculated velocity. |
+| **slime-jump** | Automatically bounce when standing on slime, with configurable timing. |
 
-To update this template to a newer Minecraft version, follow these steps:
+## Player
 
-1. Ensure a Meteor Client snapshot is available for the new Minecraft version.
-2. Update `gradle/libs.versions.toml` (the versions catalog):
-    - Set the version entries to the new versions. Common keys to update are:
-        - `versions.minecraft` - Minecraft version
-        - `versions.yarn-mappings` - Yarn mappings
-        - `versions.fabric-loader` - Fabric loader version
-        - `versions.meteor` - Meteor Client snapshot version
-    - If your addon depends on other libraries listed under the `[libraries]` section, update their versions there as
-      needed.
-    - After editing, refresh Gradle dependencies and rebuild your project in the IDE.
-3. Update Loom:
-    - Change the `loom` version in `gradle/libs.versions.toml` (the `versions.loom` entry) to the latest version
-      compatible with the new Minecraft version.
-4. Update the Gradle wrapper:
-    - Run the wrapper update command for your platform. Examples:
-      - Unix / macOS / Windows (Powershell): `./gradlew wrapper --gradle-version <version> && ./gradlew wrapper`
-      - Windows (cmd.exe): `gradlew.bat wrapper --gradle-version <version> && gradlew.bat wrapper`
-    - This updates and regenerates the Gradle Wrapper scripts (`gradlew`, `gradlew.bat`, etc.) for the specified version.
-5. Update your source code:
-    - Adjust for Minecraft or Yarn mapping changes: method names, imports, mixins, etc.
-    - Check for Meteor Client API changes that may affect your addon by comparing against the
-      [master branch](https://github.com/MeteorDevelopment/meteor-client/tree/master).
-6. Build and test:
-    - Run the gradle `build` task.
-    - Confirm the build succeeds and your addon works with the new Minecraft version.
+| Module | Description |
+|---|---|
+| **auto-craft-plus** | Automatically crafts items at max speed. Configure the recipe, enable, and watch it go. |
+| **client-side-mine** | Instantly breaks blocks client-side with anti-rubber-band to stay in the hole you dug. |
+| **close-kp-inv** | Keeps items in crafting/armor/offhand when closing inventory. |
+| **restock** | Fast hotbar restocking from inventory first, then open storage GUIs. |
 
-### Project structure
+## World
 
-```text
-.
-│── .github
-│   ╰── workflows
-│       │── dev_build.yml
-│       ╰── pull_request.yml
-│── gradle
-│   │── libs.versions.toml
-│   ╰── wrapper
-│       │── gradle-wrapper.jar
-│       ╰── gradle-wrapper.properties
-│── src
-│   ╰── main
-│       │── java
-│       │   ╰── com
-│       │       ╰── example
-│       │           ╰── addon
-│       │               │── commands
-│       │               │   ╰── CommandExample
-│       │               │── hud
-│       │               │   ╰── HudExample
-│       │               │── modules
-│       │               │   ╰── ModuleExample
-│       │               ╰── AddonTemplate
-│       ╰── resources
-│           │── assets
-│           │   ╰── template
-│           │       ╰── icon.png
-│           │── addon-template.mixins.json
-│           ╰── fabric.mod.json
-│── .editorconfig
-│── .gitignore
-│── build.gradle.kts
-│── gradle.properties
-│── gradlew
-│── gradlew.bat
-│── LICENSE
-│── README.md
-╰── settings.gradle.kts
+| Module | Description |
+|---|---|
+| **auto-build** | Litematica Printer: automatically places blocks from loaded schematics with full rotation support. Requires Litematica. |
+| **auto-farming** | Harvests crops/cactus/sugarcane/bamboo, breeds animals, applies bonemeal and replants with delay. |
+| **bonemeal-painter** | Paints the world with bonemeal. Creative/OP only. |
+| **command-block-placer** | Places command blocks with set commands. Requires Creative + OP. |
+| **control-player** | Uses owner-authorized OP commands to rotate selected players around you. |
+| **destroy-now** | Toggle 4 times within 20s to execute: inspect → arm → preview → execute. |
+| **entity-spammer** | Mega entity manipulation module: spawn, fill, animate, and dominate entities. OP required. |
+| **item-creator** | Create custom items with names, enchants, attributes, and entity NBT. Creative only. |
+| **item-generator** | Spawns random or specific items with optional random enchants/attributes. Requires Creative mode. |
+| **nbt-lectern-crasher** | Places lecterns with malicious books. |
+| **operator-nuker** | Nuke blocks using /fill or /setblock commands. Requires OP permissions. |
+| **rng-spammer** | Spawns valid loot tables around selected players. OP required. |
+| **tnt-rain** | Spawns TNT falling from the sky in a radius. OP required. |
+| **uuid-ban** | Ban a player by summoning a UUID-named entity. |
+| **world-downloader** | Downloads the world around you while moving. |
+| **world-edit** | Expanded client-side WorldEdit using vanilla commands. Chat: `.we <command>` |
+| **world-eraser** | Erases blocks in a radius. Enable TWICE within 10s to trigger. OP permissions required. |
+
+## Render
+
+| Module | Description |
+|---|---|
+| **beacon-optimizer** | Reduces beacon animation-state churn without hiding visible beacon beams. |
+| **block-spoof** | Replace block textures/models client-side for visual deception. |
+| **bossbar-flash** | Rapidly creates/updates boss bars with random colors and titles. OP required. |
+| **camera-360** | Removes camera rotation limits for full 360°+ movement. |
+| **firework-show** | Launch choreographed firework shows with customizable shapes, colors, and patterns. |
+| **particle-control** | Creates optimized rotating particle shapes around selected players with OP /particle commands. |
+| **particle-spam** | Spams /particle commands in a radius. OP required. |
+| **playsound-spam** | Spams every sound in the game via /playsound. OP required. |
+| **view-blocks** | ESP for invisible and custom blocks with chunk-based scanning. |
+
+## Misc
+
+| Module | Description |
+|---|---|
+| **actions** | Reactive trigger/action system with module toggles, commands, chat, disconnect, and conditional logic. |
+| **anti-staff** | Detects staff, watched players, and spectators via tab, chat, proximity. Auto-leaves, sends commands, toggles modules. |
+| **auto-find** | Scan for stashes, bases, and storage. World-wrapping flight scanner. |
+| **auto-shop** | Runs the server shop sequence and deposits purchased items into nearby chests. |
+| **client-side-things** | Local visual spoof system for HUD, inventory, weather, equipment, overlays, fog, crosshair, and bossbar. |
+| **exploit-preventer** | Prevents common server-side exploits: brand fingerprinting, resource pack SSRF, and channel fingerprinting. |
+| **i-sell-wand** | Automates selling by equipping a sell wand and right-clicking recorded/nearby chests. |
+| **infini-reach** | Extended reach via OP attributes or an invisible offhand item. |
+| **item-info** | Adds client-side-only lore to item tooltips: durability, enchantments, components, and full NBT. |
+| **item-stealer** | Clone items with pick-block (no server packet), bypass trades, auto-steal GUIs, and persist items to disk. |
+| **leave-message** | Intercepts close events, sends leave chat, waits, then disconnects gracefully. |
+| **message-formatter** | Formats outgoing chat with color codes, gradients, font presets, Zalgo, and character injection. |
+| **peak-plugin-scanner** | Detects server plugins via command tree analysis, systematic probing, namespace/help probing, and channel fingerprinting. |
+| **ping-spoof** | Advanced ping/movement spoof with bypass, spoof, adaptive, competitive, and dynamic adaptive modes. |
+| **server-protect** | Comprehensive anti-abuse module. Blocks crash packets, entity spam, malicious items, and more. |
+| **spam-plus** | Spam module with letter-ladder and auto-split features. |
+| **stupid-modules** | Master toggle for joke / experimental / stupid modules. |
+
+## Exploit
+
+| Module | Description |
+|---|---|
+| **fastload-exploit** | Forces chunk loading via rapid teleportation. |
+
+# Commands
+
+| Command | Description | Aliases |
+|---|---|---|
+| `.autoshop` | Toggle and control the AutoShop module. | `autoshopdetect` |
+| `.ckp` | Close Keep Inventory — stash held item into XCarry slots. | |
+| `.destroynow` | Inspect, arm, preview, execute, or cancel DestroyNow. | |
+| `.escape` | Controls ForceInvisibility escape logic. | |
+| `.exportmodulelist` | Exports all module names to clipboard. | |
+| `.fixdeath` | Stops fake death loops and force-resyncs client/server state. | |
+| `.givepresetitems` | 300+ useful creative-mode presets. | `gpi` |
+| `.hidekeybind` | Hides Meteor keybinds from the Controls screen. | |
+| `.isellwand` | Control the ISellWand module. | `sellwand` |
+| `.itemcrash` | Overloads your held item with extreme enchantments, attributes, and NBT data. | |
+| `.itemstealer` | Save / load / manage cloned items. | `is`, `steal` |
+| `.modules-order` | Reorder module display in HUD. | `morder` |
+| `.multicommand` | Run commands targeting multiple players via selectors. | |
+| `.nbt` | Copies the held item's full NBT to the clipboard. | |
+| `.orbitergivepreset` | Gives 120+ special preset items with lore. | `ogp` |
+| `.peakscan` | Plugin scanner — detect server plugins. | |
+| `.setprefix` | Sets Meteor's chat command prefix. | |
+| `.tntrain` | Triggers TNT rain with specified parameters. | |
+| `.transfer` | Transfer to another server without disconnecting. | |
+| `.ultrapanic` | Reversibly swap `.minecraft` to a clean vanilla copy, hiding all mod evidence. | `up` |
+| `.uuidban` | Ban a player by summoning a UUID entity. | |
+| `.verify-protect` | Tests ServerProtect crash-item detection against known payloads. | |
+| `.we` | Expanded WorldEdit commands with dynamic autocomplete. | `worldedit` |
+
+# HUD
+
+| Element | Description |
+|---|---|
+| **Custom Text** | Displays custom text on the HUD with placeholders. |
+| **Nearest Player** | Shows the nearest player and their distance. |
+| **Render Distance** | Shows current render distance. |
+| **Server Info** | Shows server info: brand, version, IP, difficulty, time, anticheats, plugins. |
+| **Weapon Cooldown** | Shows current weapon attack cooldown in seconds. |
+
+# Building from Source
+
+### Prerequisites
+- [JDK](https://adoptium.net/temurin/releases) 21 or higher
+
+### Steps
+```bash
+git clone https://github.com/player19425/Meteor-Orbiter.git
+cd Meteor-Orbiter
+
+./gradlew build
 ```
 
-This is the default project structure. Each folder/file has a specific purpose.  
-Here is a brief explanation of the ones you might need to modify:
+The compiled JAR will be in `build/libs/`.
 
-- `.github/workflows`: Contains the GitHub Actions configuration files.
-- `gradle`: Contains the Gradle wrapper files and the versions catalog.  
-  - `libs.versions.toml`: Defines version numbers for Minecraft, Loom, Meteor, and other dependencies.
-  - `wrapper`: Contains the Gradle wrapper executable files.  
-    To update the Gradle wrapper executable itself, run the wrapper update command (examples are shown above).
-- `src/main/java/com/example/addon`: Contains the main class of the addon.  
-  Here you can register your custom commands, modules, and HUDs.  
-  Edit the `getPackage` method to reflect the package of your addon.
-- `src/main/resources`: Contains the resources of the addon.
-    - `assets`: Contains the assets of the addon.  
-      You can add your own assets here, separated in subfolders.
-        - `template`: Contains the assets of the template.  
-          You can replace the `icon.png` file with your own addon icon.  
-          Also, rename this folder to reflect the name of your addon.
-    - `addon-template.mixins.json`: Contains the Mixin configuration for the addon.  
-      You can add your own mixins in the `client` array.
-    - `fabric.mod.json`: Contains the metadata of the addon.  
-      Edit the various fields to reflect the metadata of your addon.
-- `build.gradle.kts`: Contains the Gradle build script.  
-  You can manage the dependencies of the addon here.  
-  Remember to keep the `fabric-loom` version up-to-date.
-- `gradle.properties`: Contains additional build properties used by the build script
-  (for example `maven_group` and `archives_base_name`).  
-  Dependency and platform version numbers are stored in `gradle/libs.versions.toml`.
-- `LICENSE`: Contains the license of the addon.  
-  You can edit this file to change the license of your addon.
-- `README.md`: Contains the documentation of the addon.  
-  You can edit this file to reflect the documentation of your addon, and showcase its features.
+# Safety
 
-## License
+- Destructive features require explicit confirmation and should only be tested on disposable local servers with backups.
+- WorldEraser rejects invalid coordinates and excessive estimated work before iterating.
+- ServerProtect preserves valid item components and blocks crash packets, entity spam, and malicious items.
+- Command-producing modules use capability detection and bounded queues where supported. Command availability does not prove permission.
 
-This template is available under the CC0 license. Feel free to use it for your own projects.
+# Credits
+
+- [Meteor Client](https://github.com/MeteorDevelopment/meteor-client) — the client this addon builds on
