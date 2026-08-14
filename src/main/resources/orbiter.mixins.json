@@ -43,7 +43,6 @@
     "ServerProtectDialogPacketMixin",
     "ServerProtectDialogScreenMixin",
     "Camera360Mixin",
-    "CloseKPInvMixin",
     "PacketDecoderMixin",
     "ModulesMixin",
     "CrashFixerParticleManagerMixin",

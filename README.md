@@ -76,7 +76,6 @@ Everything is organized into four in-game categories:
 |---|---|
 | **auto-craft-plus** | Automatically crafts items at max speed. Configure the recipe, enable, and watch it go. |
 | **client-side-mine** | Instantly breaks blocks client-side with anti-rubber-band to stay in the hole you dug. |
-| **close-kp-inv** | Keeps items in crafting/armor/offhand when closing inventory. |
 | **restock** | Fast hotbar restocking from inventory first, then open storage GUIs. |
 
 ## World
@@ -148,7 +147,6 @@ Everything is organized into four in-game categories:
 | Command | Description | Aliases |
 |---|---|---|
 | `.autoshop` | Toggle and control the AutoShop module. | `autoshopdetect` |
-| `.ckp` | Close Keep Inventory — stash held item into XCarry slots. | |
 | `.destroynow` | Inspect, arm, preview, execute, or cancel DestroyNow. | |
 | `.escape` | Controls ForceInvisibility escape logic. | |
 | `.exportmodulelist` | Exports all module names to clipboard. | |
