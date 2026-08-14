@@ -127,7 +127,7 @@ public class SlimeJump extends Module {
         Vec3d vel = mc.player.getVelocity();
         mc.player.setVelocity(vel.x, newVel, vel.z);
 
-        info("Bounce #" + bounceCount + " — velocity: " + String.format("%.2f", newVel));
+        info("Bounce #" + bounceCount + " • velocity: " + String.format("%.2f", newVel));
     }
 
     private boolean isOnSlime() {

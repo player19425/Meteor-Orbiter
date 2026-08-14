@@ -23,10 +23,10 @@ Orbiter is a collection of modules and tools for [Meteor Client](https://meteorc
 
 Everything is organized into four in-game categories:
 
-- **Orbiter Survival** — general purpose and anti-abuse modules
-- **Orbiter Vanilla** — modules that only use vanilla mechanics
-- **Orbiter Creative/OP** — modules that require Creative mode or operator permissions
-- **Orbiter Stupid** — joke / experimental modules
+- **Orbiter Survival** • general purpose and anti-abuse modules
+- **Orbiter Vanilla** • modules that only use vanilla mechanics
+- **Orbiter Creative/OP** • modules that require Creative mode or operator permissions
+- **Orbiter Stupid** • joke / experimental modules
 
 # Requirements
 
@@ -160,7 +160,7 @@ Everything is organized into four in-game categories:
 | `.multicommand` | Run commands targeting multiple players via selectors. | |
 | `.nbt` | Copies the held item's full NBT to the clipboard. | |
 | `.orbitergivepreset` | Gives 120+ special preset items with lore. | `ogp` |
-| `.peakscan` | Plugin scanner — detect server plugins. | |
+| `.peakscan` | Plugin scanner • detect server plugins. | |
 | `.setprefix` | Sets Meteor's chat command prefix. | |
 | `.tntrain` | Triggers TNT rain with specified parameters. | |
 | `.transfer` | Transfer to another server without disconnecting. | |
@@ -203,4 +203,4 @@ The compiled JAR will be in `build/libs/`.
 
 # Credits
 
-- [Meteor Client](https://github.com/MeteorDevelopment/meteor-client) — the client this addon builds on
+- [Meteor Client](https://github.com/MeteorDevelopment/meteor-client) • the client this addon builds on

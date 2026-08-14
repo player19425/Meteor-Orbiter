@@ -145,15 +145,15 @@ public class GivePresetItemsCommand extends Command {
 
     private void registerTools() {
         for (ToolMat m : MATS) {
-            reg("op-" + m.id + "-sword", m.display + " Sword — Sharp 255, Fire Aspect 255, Looting 255",
+            reg("op-" + m.id + "-sword", m.display + " Sword • Sharp 255, Fire Aspect 255, Looting 255",
                 () -> makeGodSword(m));
-            reg("op-" + m.id + "-axe", m.display + " Axe — Sharp 255, Efficiency 255, Fortune 255",
+            reg("op-" + m.id + "-axe", m.display + " Axe • Sharp 255, Efficiency 255, Fortune 255",
                 () -> makeGodAxe(m));
-            reg("op-" + m.id + "-pickaxe", m.display + " Pickaxe — Efficiency 255, Fortune 255, Silk Touch",
+            reg("op-" + m.id + "-pickaxe", m.display + " Pickaxe • Efficiency 255, Fortune 255, Silk Touch",
                 () -> makeGodPickaxe(m));
-            reg("op-" + m.id + "-shovel", m.display + " Shovel — Efficiency 255, Fortune 255, Silk Touch",
+            reg("op-" + m.id + "-shovel", m.display + " Shovel • Efficiency 255, Fortune 255, Silk Touch",
                 () -> makeGodShovel(m));
-            reg("op-" + m.id + "-hoe", m.display + " Hoe — Efficiency 255, Fortune 255, Silk Touch, Unbreaking 255",
+            reg("op-" + m.id + "-hoe", m.display + " Hoe • Efficiency 255, Fortune 255, Silk Touch, Unbreaking 255",
                 () -> makeGodHoe(m));
         }
     }
@@ -236,7 +236,7 @@ public class GivePresetItemsCommand extends Command {
         addEnchant(eb, "mending", 1);
         s.set(DataComponentTypes.ENCHANTMENTS, eb.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Efficiency 255 + Fortune 255 + Silk Touch — instant mine"),
+            line("Efficiency 255 + Fortune 255 + Silk Touch • instant mine"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -260,20 +260,20 @@ public class GivePresetItemsCommand extends Command {
 
     private void registerArmor() {
         for (ToolMat m : MATS) {
-            reg("op-" + m.id + "-helmet", m.display + " Helmet — all Protection 255, Respiration 255",
+            reg("op-" + m.id + "-helmet", m.display + " Helmet • all Protection 255, Respiration 255",
                 () -> makeGodHelmet(m));
-            reg("op-" + m.id + "-chestplate", m.display + " Chestplate — all Protection 255, Thorns 255",
+            reg("op-" + m.id + "-chestplate", m.display + " Chestplate • all Protection 255, Thorns 255",
                 () -> makeGodChest(m));
-            reg("op-" + m.id + "-leggings", m.display + " Leggings — all Protection 255, Swift Sneak 255",
+            reg("op-" + m.id + "-leggings", m.display + " Leggings • all Protection 255, Swift Sneak 255",
                 () -> makeGodLegs(m));
-            reg("op-" + m.id + "-boots", m.display + " Boots — all Protection 255, Depth Strider 255, Soul Speed 255",
+            reg("op-" + m.id + "-boots", m.display + " Boots • all Protection 255, Depth Strider 255, Soul Speed 255",
                 () -> makeGodBoots(m));
         }
 
-        reg("op-turtle-helmet", "Turtle Shell — Respiration 255 + all Protection 255", this::makeGodTurtleShell);
+        reg("op-turtle-helmet", "Turtle Shell • Respiration 255 + all Protection 255", this::makeGodTurtleShell);
 
-        reg("god-elytra", "God Elytra — Unbreaking 255 + Mending", this::makeGodElytra);
-        reg("op-elytra", "OP Elytra — Unbreaking 255 + Mending + extra firework boost", this::makeOpElytra);
+        reg("god-elytra", "God Elytra • Unbreaking 255 + Mending", this::makeGodElytra);
+        reg("op-elytra", "OP Elytra • Unbreaking 255 + Mending + extra firework boost", this::makeOpElytra);
     }
 
     private void addGodArmorEnchants(ItemEnchantmentsComponent.Builder eb) {
@@ -371,7 +371,7 @@ public class GivePresetItemsCommand extends Command {
         addEnchant(eb, "aqua_affinity", 1);
         s.set(DataComponentTypes.ENCHANTMENTS, eb.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Respiration 255 + All Protection 255 — underwater god"),
+            line("Respiration 255 + All Protection 255 • underwater god"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -385,7 +385,7 @@ public class GivePresetItemsCommand extends Command {
         addEnchant(eb, "mending", 1);
         s.set(DataComponentTypes.ENCHANTMENTS, eb.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Unbreaking 255 + Mending — fly forever"),
+            line("Unbreaking 255 + Mending • fly forever"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -407,18 +407,18 @@ public class GivePresetItemsCommand extends Command {
     }
 
     private void registerWeapons() {
-        reg("op-bow", "Bow — Power 255, Flame 255, Punch 255, Infinity", this::makeOpBow);
-        reg("op-crossbow", "Crossbow — Multishot, Piercing 255, Quick Charge 255", this::makeOpCrossbow);
-        reg("op-trident", "Trident — Impaling 255, Loyalty 255, Channeling", this::makeOpTrident);
-        reg("op-mace", "Mace — Density 255, Breach 255, Wind Burst 255", this::makeOpMace);
-        reg("god-shield", "Shield — Unbreaking 255 + Mending", this::makeGodShield);
-        reg("void-star", "Void Star (Nether Star) — 10000 damage, 2048 attack speed", this::makeVoidStar);
-        reg("speed-ring", "Ring of Speed (Clock) — +1.0 Movement Speed", this::makeSpeedRing);
-        reg("reach-ring", "Ring of Reach (Stick) — +10 Block/Entity Range", this::makeReachRing);
-        reg("god-fishing-rod", "God Fishing Rod — Luck 255, Lure 255, Unbreaking 255", this::makeGodFishingRod);
-        reg("god-shears", "God Shears — Efficiency 255, Unbreaking 255, Mending", this::makeGodShears);
-        reg("god-flint-steel", "God Flint and Steel — Unbreaking 255, Mending", this::makeGodFlintSteel);
-        reg("god-lead", "Extended Lead — +50 Block Interaction Range", this::makeGodLead);
+        reg("op-bow", "Bow • Power 255, Flame 255, Punch 255, Infinity", this::makeOpBow);
+        reg("op-crossbow", "Crossbow • Multishot, Piercing 255, Quick Charge 255", this::makeOpCrossbow);
+        reg("op-trident", "Trident • Impaling 255, Loyalty 255, Channeling", this::makeOpTrident);
+        reg("op-mace", "Mace • Density 255, Breach 255, Wind Burst 255", this::makeOpMace);
+        reg("god-shield", "Shield • Unbreaking 255 + Mending", this::makeGodShield);
+        reg("void-star", "Void Star (Nether Star) • 10000 damage, 2048 attack speed", this::makeVoidStar);
+        reg("speed-ring", "Ring of Speed (Clock) • +1.0 Movement Speed", this::makeSpeedRing);
+        reg("reach-ring", "Ring of Reach (Stick) • +10 Block/Entity Range", this::makeReachRing);
+        reg("god-fishing-rod", "God Fishing Rod • Luck 255, Lure 255, Unbreaking 255", this::makeGodFishingRod);
+        reg("god-shears", "God Shears • Efficiency 255, Unbreaking 255, Mending", this::makeGodShears);
+        reg("god-flint-steel", "God Flint and Steel • Unbreaking 255, Mending", this::makeGodFlintSteel);
+        reg("god-lead", "Extended Lead • +50 Block Interaction Range", this::makeGodLead);
     }
 
     private ItemStack makeOpBow() {
@@ -506,7 +506,7 @@ public class GivePresetItemsCommand extends Command {
         addEnchant(eb, "mending", 1);
         s.set(DataComponentTypes.ENCHANTMENTS, eb.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Unbreaking 255 + Mending — never breaks"),
+            line("Unbreaking 255 + Mending • never breaks"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -519,7 +519,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.ATTACK_SPEED, mod("spd", 2048), AttributeModifierSlot.MAINHAND);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("10000 damage + 2048 attack speed — one hit anything"),
+            line("10000 damage + 2048 attack speed • one hit anything"),
             line("The power of the void in your hand"),
             gold("Orbiter Preset"))));
         return s;
@@ -532,7 +532,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.MOVEMENT_SPEED, mod("speed", 1.0), AttributeModifierSlot.ANY);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("+1.0 Movement Speed — hold in any slot for extreme speed"),
+            line("+1.0 Movement Speed • hold in any slot for extreme speed"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -561,7 +561,7 @@ public class GivePresetItemsCommand extends Command {
         addEnchant(eb, "mending", 1);
         s.set(DataComponentTypes.ENCHANTMENTS, eb.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Luck 255 + Lure 255 — instant rare catches"),
+            line("Luck 255 + Lure 255 • instant rare catches"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -576,7 +576,7 @@ public class GivePresetItemsCommand extends Command {
         addEnchant(eb, "mending", 1);
         s.set(DataComponentTypes.ENCHANTMENTS, eb.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Efficiency 255 — instant mine wool/leaves"),
+            line("Efficiency 255 • instant mine wool/leaves"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -590,7 +590,7 @@ public class GivePresetItemsCommand extends Command {
         addEnchant(eb, "mending", 1);
         s.set(DataComponentTypes.ENCHANTMENTS, eb.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Unbreaking 255 + Mending — never runs out"),
+            line("Unbreaking 255 + Mending • never runs out"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -602,7 +602,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.BLOCK_INTERACTION_RANGE, mod("reach", 50.0), AttributeModifierSlot.MAINHAND);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("+50 Block Interaction Range — leash anything from afar"),
+            line("+50 Block Interaction Range • leash anything from afar"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -612,15 +612,15 @@ public class GivePresetItemsCommand extends Command {
         int[] flights = {1, 2, 3, 5, 8, 10, 15, 20, 30, 50, 75, 100, 127};
         for (int f : flights) {
             final int flight = f;
-            reg("rocket-f" + f, "Firework Rocket — Flight " + f + " x64",
+            reg("rocket-f" + f, "Firework Rocket • Flight " + f + " x64",
                 () -> makeRocket(flight, 64, 1, false));
         }
 
-        reg("rocket-max", "Lag Rocket — Flight 127 + 256 explosions x64", this::makeMaxRocket);
+        reg("rocket-max", "Lag Rocket • Flight 127 + 256 explosions x64", this::makeMaxRocket);
 
-        reg("rocket-rainbow", "Rainbow Rocket — Flight 127, all colors x64", this::makeRainbowRocket);
-        reg("rocket-star", "Star Rocket — Flight 127, star burst x64", this::makeStarRocket);
-        reg("rocket-creeper", "Creeper Rocket — Flight 127, creeper shape x64", this::makeCreeperRocket);
+        reg("rocket-rainbow", "Rainbow Rocket • Flight 127, all colors x64", this::makeRainbowRocket);
+        reg("rocket-star", "Star Rocket • Flight 127, star burst x64", this::makeStarRocket);
+        reg("rocket-creeper", "Creeper Rocket • Flight 127, creeper shape x64", this::makeCreeperRocket);
     }
 
     private ItemStack makeRocket(int flight, int count, int explosionCount, boolean big) {
@@ -634,7 +634,7 @@ public class GivePresetItemsCommand extends Command {
         }
         s.set(DataComponentTypes.FIREWORKS, new FireworksComponent(flight, exps));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Flight Duration " + flight + " — massive elytra boost"),
+            line("Flight Duration " + flight + " • massive elytra boost"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -649,7 +649,7 @@ public class GivePresetItemsCommand extends Command {
         }
         s.set(DataComponentTypes.FIREWORKS, new FireworksComponent(127, exps));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Flight 127 + 256 explosions — max flight + max visual"),
+            line("Flight 127 + 256 explosions • max flight + max visual"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -665,7 +665,7 @@ public class GivePresetItemsCommand extends Command {
         }
         s.set(DataComponentTypes.FIREWORKS, new FireworksComponent(127, exps));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Flight 127 — rainbow trail across the sky"),
+            line("Flight 127 • rainbow trail across the sky"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -680,7 +680,7 @@ public class GivePresetItemsCommand extends Command {
         }
         s.set(DataComponentTypes.FIREWORKS, new FireworksComponent(127, exps));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Flight 127 — 10 golden star bursts"),
+            line("Flight 127 • 10 golden star bursts"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -695,7 +695,7 @@ public class GivePresetItemsCommand extends Command {
         }
         s.set(DataComponentTypes.FIREWORKS, new FireworksComponent(127, exps));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Flight 127 — creeper face fireworks"),
+            line("Flight 127 • creeper face fireworks"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -758,7 +758,7 @@ public class GivePresetItemsCommand extends Command {
             Optional.of(p.base), Optional.empty(), new ArrayList<>(p.effects), Optional.empty()));
         List<Text> lore = new ArrayList<>();
         for (StatusEffectInstance eff : p.effects) {
-            lore.add(line(eff.getTranslationKey().replace("potion.", "") + " " + (eff.getAmplifier() + 1) + " — " + (eff.getDuration() / 20) + "s"));
+            lore.add(line(eff.getTranslationKey().replace("potion.", "") + " " + (eff.getAmplifier() + 1) + " • " + (eff.getDuration() / 20) + "s"));
         }
         lore.add(gold("Orbiter Preset"));
         s.set(DataComponentTypes.LORE, new LoreComponent(lore));
@@ -906,7 +906,7 @@ public class GivePresetItemsCommand extends Command {
                 addEnchant(eb, enchantId, 255);
                 s.set(DataComponentTypes.ENCHANTMENTS, eb.build());
                 s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-                    line(displayName + " at level 255 — impossible in vanilla"),
+                    line(displayName + " at level 255 • impossible in vanilla"),
                     gold("Orbiter Preset"))));
                 return s;
             });
@@ -914,12 +914,12 @@ public class GivePresetItemsCommand extends Command {
     }
 
     private void registerKits() {
-        reg("kit-pvp", "PvP Kit — Full god armor + OP weapons + potions + totems", this::makePvpKit);
-        reg("kit-mining", "Mining Kit — OP tools + shulker boxes + torches", this::makeMiningKit);
-        reg("kit-building", "Building Kit — Every building block x64 + tools", this::makeBuildingKit);
-        reg("kit-explorer", "Explorer Kit — Elytra + rockets + potions + food + maps", this::makeExplorerKit);
-        reg("kit-god", "God Kit — Everything OP in one box", this::makeGodKit);
-        reg("kit-cleanup", "Cleanup Kit — TNT + bedrock + world edit tools", this::makeCleanupKit);
+        reg("kit-pvp", "PvP Kit • Full god armor + OP weapons + potions + totems", this::makePvpKit);
+        reg("kit-mining", "Mining Kit • OP tools + shulker boxes + torches", this::makeMiningKit);
+        reg("kit-building", "Building Kit • Every building block x64 + tools", this::makeBuildingKit);
+        reg("kit-explorer", "Explorer Kit • Elytra + rockets + potions + food + maps", this::makeExplorerKit);
+        reg("kit-god", "God Kit • Everything OP in one box", this::makeGodKit);
+        reg("kit-cleanup", "Cleanup Kit • TNT + bedrock + world edit tools", this::makeCleanupKit);
     }
 
     private ItemStack makePvpKit() {
@@ -944,7 +944,7 @@ public class GivePresetItemsCommand extends Command {
         }
         box.set(DataComponentTypes.CONTAINER, ContainerComponent.fromStacks(contents));
         box.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Full PvP loadout in a box — armor, weapons, potions, totems"),
+            line("Full PvP loadout in a box • armor, weapons, potions, totems"),
             gold("Orbiter Preset"))));
         return box;
     }
@@ -972,7 +972,7 @@ public class GivePresetItemsCommand extends Command {
         }
         box.set(DataComponentTypes.CONTAINER, ContainerComponent.fromStacks(contents));
         box.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Everything you need to mine — OP tools + torches + potions"),
+            line("Everything you need to mine • OP tools + torches + potions"),
             gold("Orbiter Preset"))));
         return box;
     }
@@ -1000,7 +1000,7 @@ public class GivePresetItemsCommand extends Command {
         contents.add(makeGodAxe(MATS[5]));
         box.set(DataComponentTypes.CONTAINER, ContainerComponent.fromStacks(contents));
         box.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("30 block types x64 + OP tools — complete building kit"),
+            line("30 block types x64 + OP tools • complete building kit"),
             gold("Orbiter Preset"))));
         return box;
     }
@@ -1072,7 +1072,7 @@ public class GivePresetItemsCommand extends Command {
         contents.add(makeRocket(127, 64, 1, false));
         box.set(DataComponentTypes.CONTAINER, ContainerComponent.fromStacks(contents));
         box.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("THE ultimate kit — every god item in one shulker box"),
+            line("THE ultimate kit • every god item in one shulker box"),
             gold("Orbiter Preset"))));
         return box;
     }
@@ -1102,7 +1102,7 @@ public class GivePresetItemsCommand extends Command {
         contents.add(obsidian);
         box.set(DataComponentTypes.CONTAINER, ContainerComponent.fromStacks(contents));
         box.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("TNT + Bedrock + Barriers + Flint & Steel — world cleanup"),
+            line("TNT + Bedrock + Barriers + Flint & Steel • world cleanup"),
             gold("Orbiter Preset"))));
         return box;
     }
@@ -1116,8 +1116,8 @@ public class GivePresetItemsCommand extends Command {
         reg("golden-carrots-64", "64x Golden Carrots", this::makeGoldenCarrots64);
         reg("cooked-beef-64", "64x Cooked Beef", this::makeCookedBeef64);
         reg("cake-stack", "64x Cakes", this::makeCakeStack);
-        reg("enchanted-bread", "Enchanted Bread x64 — Regeneration", this::makeEnchantedBread);
-        reg("enchanted-steak", "Enchanted Steak x64 — All buffs", this::makeEnchantedSteak);
+        reg("enchanted-bread", "Enchanted Bread x64 • Regeneration", this::makeEnchantedBread);
+        reg("enchanted-steak", "Enchanted Steak x64 • All buffs", this::makeEnchantedSteak);
 
         reg("arrows-harm-64", "64x Instant Damage II Arrows", () -> makeTippedArrow64(Potions.STRONG_HARMING, "Harming II"));
         reg("arrows-poison-64", "64x Poison II Arrows", () -> makeTippedArrow64(Potions.STRONG_POISON, "Poison II"));
@@ -1136,14 +1136,14 @@ public class GivePresetItemsCommand extends Command {
         reg("dragon-eggs", "64x Dragon Eggs", this::makeDragonEggs);
         reg("end-crystals-64", "64x End Crystals", this::makeEndCrystals64);
 
-        reg("speed-apple", "Speed Apple — Enchanted Golden Apple + Movement Speed", this::makeSpeedApple);
-        reg("speed-carrot", "Speed Carrot — Golden Carrot + Movement Speed", this::makeSpeedCarrot);
-        reg("reach-stick", "Reach Stick — +20 Block/Entity Interaction Range", this::makeReachStick);
-        reg("flight-stick", "Flight Stick — +100 Knockback Resistance + +50 Flying Speed", this::makeFlightStick);
+        reg("speed-apple", "Speed Apple • Enchanted Golden Apple + Movement Speed", this::makeSpeedApple);
+        reg("speed-carrot", "Speed Carrot • Golden Carrot + Movement Speed", this::makeSpeedCarrot);
+        reg("reach-stick", "Reach Stick • +20 Block/Entity Interaction Range", this::makeReachStick);
+        reg("flight-stick", "Flight Stick • +100 Knockback Resistance + +50 Flying Speed", this::makeFlightStick);
 
-        reg("health-band", "Health Band (Emerald) — +100 Max Health", this::makeHealthBand);
-        reg("damage-ring", "Damage Ring (Redstone) — +500 Attack Damage", this::makeDamageRing);
-        reg("knockback-gauntlet", "Knockback Gauntlet (Gold) — +10 Knockback", this::makeKnockbackGauntlet);
+        reg("health-band", "Health Band (Emerald) • +100 Max Health", this::makeHealthBand);
+        reg("damage-ring", "Damage Ring (Redstone) • +500 Attack Damage", this::makeDamageRing);
+        reg("knockback-gauntlet", "Knockback Gauntlet (Gold) • +10 Knockback", this::makeKnockbackGauntlet);
 
         reg("name-tag-red", "Red Name Tag", () -> makeNameTag("Red Tag", Formatting.RED));
         reg("name-tag-gold", "Gold Name Tag", () -> makeNameTag("Gold Tag", Formatting.GOLD));
@@ -1204,17 +1204,17 @@ public class GivePresetItemsCommand extends Command {
         reg("elytra-stack", "Elytra x64", () -> makeStackItem(Items.ELYTRA, 64, "Elytra x64", Formatting.AQUA));
         reg("trident-stack", "Trident x64", () -> makeStackItem(Items.TRIDENT, 64, "Trident x64", Formatting.DARK_AQUA));
         reg("totem-stack-64", "Totem x64", () -> makeStackItem(Items.TOTEM_OF_UNDYING, 64, "Totems x64", Formatting.GOLD));
-        reg("trident-far", "Trident — +50 Reach", this::makeReachTrident);
-        reg("fishing-far", "Fishing Rod — +30 Reach", this::makeReachFishingRod);
-        reg("crossbow-fire", "Fire Crossbow — Flame + Multishot + Quick Charge", this::makeFireCrossbow);
-        reg("bow-fire", "Fire Bow — Flame 255 + Punch 255", this::makeFireBow);
+        reg("trident-far", "Trident • +50 Reach", this::makeReachTrident);
+        reg("fishing-far", "Fishing Rod • +30 Reach", this::makeReachFishingRod);
+        reg("crossbow-fire", "Fire Crossbow • Flame + Multishot + Quick Charge", this::makeFireCrossbow);
+        reg("bow-fire", "Fire Bow • Flame 255 + Punch 255", this::makeFireBow);
     }
 
     private ItemStack makeTotems64() {
         ItemStack s = new ItemStack(Items.TOTEM_OF_UNDYING, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Infinity Totems x64", Formatting.GOLD));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64 lives in your pocket — never die again"),
+            line("64 lives in your pocket • never die again"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1223,7 +1223,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.TOTEM_OF_UNDYING, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("God Totem Stack", Formatting.GOLD));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x Totem of Undying — max death protection"),
+            line("64x Totem of Undying • max death protection"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1232,7 +1232,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("God Apple Stack x64", Formatting.GOLD));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64 Notch Apples — infinite Absorption + Regen + Resistance"),
+            line("64 Notch Apples • infinite Absorption + Regen + Resistance"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1241,7 +1241,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.GOLDEN_CARROT, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Golden Carrots x64", Formatting.GOLD));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x best food in the game — max saturation"),
+            line("64x best food in the game • max saturation"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1250,7 +1250,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.COOKED_BEEF, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Steak Stack x64", Formatting.GOLD));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x steak — instant hunger fill"),
+            line("64x steak • instant hunger fill"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1259,7 +1259,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.CAKE, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Cake Stack x64", Formatting.YELLOW));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64 cakes — place and eat everywhere"),
+            line("64 cakes • place and eat everywhere"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1269,7 +1269,7 @@ public class GivePresetItemsCommand extends Command {
         s.set(DataComponentTypes.CUSTOM_NAME, name("Enchanted Bread x64", Formatting.GREEN));
         s.set(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true);
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Glowing bread — looks magical, feeds well"),
+            line("Glowing bread • looks magical, feeds well"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1279,7 +1279,7 @@ public class GivePresetItemsCommand extends Command {
         s.set(DataComponentTypes.CUSTOM_NAME, name("Enchanted Steak x64", Formatting.RED));
         s.set(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true);
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Glowing steak — the fanciest food"),
+            line("Glowing steak • the fanciest food"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1298,7 +1298,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.ENDER_PEARL, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Ender Pearls x64", Formatting.DARK_PURPLE));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x ender pearls — teleport at will"),
+            line("64x ender pearls • teleport at will"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1307,7 +1307,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.ENDER_EYE, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Eyes of Ender x64", Formatting.DARK_PURPLE));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x eyes of ender — find the stronghold instantly"),
+            line("64x eyes of ender • find the stronghold instantly"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1316,7 +1316,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.SPONGE, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Sponges x64", Formatting.YELLOW));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x sponges — drain entire ocean monuments"),
+            line("64x sponges • drain entire ocean monuments"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1325,7 +1325,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.WET_SPONGE, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Wet Sponges x64", Formatting.AQUA));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x wet sponges — decorative or drain in the nether"),
+            line("64x wet sponges • decorative or drain in the nether"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1334,7 +1334,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.SHULKER_SHELL, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Shulker Shells x64", Formatting.LIGHT_PURPLE));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x shulker shells — craft 32 shulker boxes"),
+            line("64x shulker shells • craft 32 shulker boxes"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1343,7 +1343,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.ECHO_SHARD, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Echo Shards x64", Formatting.DARK_PURPLE));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x echo shards — craft 16 recovery compasses"),
+            line("64x echo shards • craft 16 recovery compasses"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1352,7 +1352,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.NETHER_STAR, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Nether Stars x64", Formatting.GOLD));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x nether stars — craft 64 beacons"),
+            line("64x nether stars • craft 64 beacons"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1361,7 +1361,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.DRAGON_EGG, 1);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Dragon Egg", Formatting.DARK_PURPLE));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("The rarest block in vanilla — unobtainable in survival"),
+            line("The rarest block in vanilla • unobtainable in survival"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1370,7 +1370,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.END_CRYSTAL, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("End Crystals x64", Formatting.RED));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x end crystals — respawn the dragon or use as weapon"),
+            line("64x end crystals • respawn the dragon or use as weapon"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1382,7 +1382,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.MOVEMENT_SPEED, mod("speed", 0.4), AttributeModifierSlot.ANY);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("+0.4 Movement Speed — always active when in inventory"),
+            line("+0.4 Movement Speed • always active when in inventory"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1394,7 +1394,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.MOVEMENT_SPEED, mod("speed", 0.3), AttributeModifierSlot.ANY);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("+0.3 Movement Speed — eat and run fast"),
+            line("+0.3 Movement Speed • eat and run fast"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1407,7 +1407,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.ENTITY_INTERACTION_RANGE, mod("entity", 20.0), AttributeModifierSlot.ANY);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("+20 Block/Entity Range — reach anything from 25 blocks away"),
+            line("+20 Block/Entity Range • reach anything from 25 blocks away"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1432,7 +1432,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.MAX_HEALTH, mod("hp", 100.0), AttributeModifierSlot.ANY);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("+100 Max Health — hold for 120 HP total"),
+            line("+100 Max Health • hold for 120 HP total"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1458,7 +1458,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.KNOCKBACK_RESISTANCE, mod("kbr", 1.0), AttributeModifierSlot.ANY);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("+10 Attack Knockback — send them flying"),
+            line("+10 Attack Knockback • send them flying"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1467,7 +1467,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.NAME_TAG, 1);
         s.set(DataComponentTypes.CUSTOM_NAME, name(text, color));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Custom name tag — rename anything"),
+            line("Custom name tag • rename anything"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1476,7 +1476,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.MUSIC_DISC_13, 1);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Music Disc: 13", Formatting.WHITE));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Classic disc — first ever Minecraft music disc"),
+            line("Classic disc • first ever Minecraft music disc"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1485,7 +1485,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.JUKEBOX, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Jukeboxes x64", Formatting.GOLD));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x jukeboxes — play music everywhere"),
+            line("64x jukeboxes • play music everywhere"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1494,7 +1494,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.COMPASS, 1);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Lodestone Compass", Formatting.GOLD));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Points to lodestone — never get lost"),
+            line("Points to lodestone • never get lost"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1503,7 +1503,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.RECOVERY_COMPASS, 1);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Recovery Compass", Formatting.AQUA));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Points to your last death — find your stuff"),
+            line("Points to your last death • find your stuff"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1512,7 +1512,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.OAK_BOAT, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Oak Boats x64", Formatting.YELLOW));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x boats — travel by water fast"),
+            line("64x boats • travel by water fast"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1521,7 +1521,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.OAK_CHEST_BOAT, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Oak Chest Boats x64", Formatting.YELLOW));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x chest boats — mobile storage on water"),
+            line("64x chest boats • mobile storage on water"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1537,16 +1537,16 @@ public class GivePresetItemsCommand extends Command {
 
     private void registerMisc() {
 
-        reg("ender-pearl-far", "Ender Pearl — +20 Entity Reach", this::makeFarPearl);
-        reg("op-snowball", "OP Snowball — 64x with Knockback", this::makeOpSnowball);
-        reg("op-egg", "OP Egg — 64x with Extreme Knockback", this::makeOpEgg);
-        reg("op-lead", "OP Lead — 64x with Extended Range", this::makeOpLead64);
+        reg("ender-pearl-far", "Ender Pearl • +20 Entity Reach", this::makeFarPearl);
+        reg("op-snowball", "OP Snowball • 64x with Knockback", this::makeOpSnowball);
+        reg("op-egg", "OP Egg • 64x with Extreme Knockback", this::makeOpEgg);
+        reg("op-lead", "OP Lead • 64x with Extended Range", this::makeOpLead64);
         reg("saddle-stack", "64x Saddles", this::makeSaddleStack);
         reg("name-tag-anvil", "64x Anvils", this::makeAnvilStack);
 
-        reg("knockback-stick", "Knockback Stick — Knockback 255", this::makeKnockbackStick);
-        reg("fire-stick", "Fire Stick — Fire Aspect 255", this::makeFireStick);
-        reg("silk-stick", "Silk Touch Stick — Mine anything", this::makeSilkStick);
+        reg("knockback-stick", "Knockback Stick • Knockback 255", this::makeKnockbackStick);
+        reg("fire-stick", "Fire Stick • Fire Aspect 255", this::makeFireStick);
+        reg("silk-stick", "Silk Touch Stick • Mine anything", this::makeSilkStick);
 
         reg("banner-white", "White Banner x64", () -> makeBanner(Items.WHITE_BANNER, "White", Formatting.WHITE));
         reg("banner-red", "Red Banner x64", () -> makeBanner(Items.RED_BANNER, "Red", Formatting.RED));
@@ -1582,7 +1582,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.ENTITY_INTERACTION_RANGE, mod("range", 20.0), AttributeModifierSlot.MAINHAND);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("+20 Entity Range — throw pearls farther"),
+            line("+20 Entity Range • throw pearls farther"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1594,7 +1594,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.ATTACK_KNOCKBACK, mod("kb", 255.0), AttributeModifierSlot.MAINHAND);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x snowballs with extreme knockback — PvP trolling"),
+            line("64x snowballs with extreme knockback • PvP trolling"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1606,7 +1606,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.ATTACK_KNOCKBACK, mod("kb", 255.0), AttributeModifierSlot.MAINHAND);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x eggs with extreme knockback — launch mobs"),
+            line("64x eggs with extreme knockback • launch mobs"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1618,7 +1618,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.BLOCK_INTERACTION_RANGE, mod("range", 50.0), AttributeModifierSlot.ANY);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("+50 Block Range — leash anything from far away"),
+            line("+50 Block Range • leash anything from far away"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1627,7 +1627,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.SADDLE, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Saddles x64", Formatting.GOLD));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x saddles — ride everything"),
+            line("64x saddles • ride everything"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1636,7 +1636,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(Items.ANVIL, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name("Anvils x64", Formatting.GRAY));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x anvils — rename and enchant anything"),
+            line("64x anvils • rename and enchant anything"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1653,7 +1653,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.ATTACK_KNOCKBACK, mod("kb", 100.0), AttributeModifierSlot.MAINHAND);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Knockback 255 + 100 Knockback attribute — send them to the void"),
+            line("Knockback 255 + 100 Knockback attribute • send them to the void"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1667,7 +1667,7 @@ public class GivePresetItemsCommand extends Command {
         addEnchant(eb, "unbreaking", 255);
         s.set(DataComponentTypes.ENCHANTMENTS, eb.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Fire Aspect 255 — set anything on fire"),
+            line("Fire Aspect 255 • set anything on fire"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1682,7 +1682,7 @@ public class GivePresetItemsCommand extends Command {
         addEnchant(eb, "unbreaking", 255);
         s.set(DataComponentTypes.ENCHANTMENTS, eb.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Silk Touch + Efficiency 255 — mine anything with a stick"),
+            line("Silk Touch + Efficiency 255 • mine anything with a stick"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1700,7 +1700,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(bedItem, 64);
         s.set(DataComponentTypes.CUSTOM_NAME, name(colorName + " Bed x64", color));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("64x " + colorName.toLowerCase() + " beds — set spawn anywhere"),
+            line("64x " + colorName.toLowerCase() + " beds • set spawn anywhere"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1718,7 +1718,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(shulkerItem, 1);
         s.set(DataComponentTypes.CUSTOM_NAME, name(colorName + " Shulker Box", color));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line(colorName + " shulker box — portable storage"),
+            line(colorName + " shulker box • portable storage"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1729,18 +1729,18 @@ public class GivePresetItemsCommand extends Command {
         List<RawFilteredPair<Text>> pages = new ArrayList<>();
         pages.add(RawFilteredPair.of(Text.literal("Orbiter Commands\n\n")
             .append(Text.literal("/gpi").setStyle(Style.EMPTY.withBold(true).withColor(Formatting.AQUA)))
-            .append(Text.literal(" — Give Preset Items\n"))
+            .append(Text.literal(" • Give Preset Items\n"))
             .append(Text.literal("/gpi list").setStyle(Style.EMPTY.withColor(Formatting.YELLOW)))
-            .append(Text.literal(" — List all presets\n"))
+            .append(Text.literal(" • List all presets\n"))
             .append(Text.literal("/gpi all").setStyle(Style.EMPTY.withColor(Formatting.RED)))
-            .append(Text.literal(" — Give ALL presets"))));
+            .append(Text.literal(" • Give ALL presets"))));
         pages.add(RawFilteredPair.of(Text.literal("Useful Presets:\n")
             .append(Text.literal("/gpi kit-god").setStyle(Style.EMPTY.withColor(Formatting.GOLD)))
-            .append(Text.literal(" — Ultimate kit\n"))
+            .append(Text.literal(" • Ultimate kit\n"))
             .append(Text.literal("/gpi flight127-rocket").setStyle(Style.EMPTY.withColor(Formatting.AQUA)))
-            .append(Text.literal(" — Max flight\n"))
+            .append(Text.literal(" • Max flight\n"))
             .append(Text.literal("/gpi god-elytra").setStyle(Style.EMPTY.withColor(Formatting.AQUA)))
-            .append(Text.literal(" — OP elytra\n"))));
+            .append(Text.literal(" • OP elytra\n"))));
         WrittenBookContentComponent content = new WrittenBookContentComponent(
             RawFilteredPair.of("Orbiter Commands"), "Orbiter", 0, pages, true);
         s.set(DataComponentTypes.WRITTEN_BOOK_CONTENT, content);
@@ -1877,7 +1877,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack s = new ItemStack(item, count);
         s.set(DataComponentTypes.CUSTOM_NAME, name(displayName, color));
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Stack of " + count + " — available only via creative write"),
+            line("Stack of " + count + " • available only via creative write"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1897,7 +1897,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.ATTACK_DAMAGE, mod("dmg", 10000), AttributeModifierSlot.MAINHAND);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("+50 Entity Range — hit anything from 55 blocks away"),
+            line("+50 Entity Range • hit anything from 55 blocks away"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1915,7 +1915,7 @@ public class GivePresetItemsCommand extends Command {
         ab.add(EntityAttributes.ENTITY_INTERACTION_RANGE, mod("range", 30.0), AttributeModifierSlot.MAINHAND);
         s.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, ab.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("+30 Entity Range — fish from 35 blocks away"),
+            line("+30 Entity Range • fish from 35 blocks away"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1949,7 +1949,7 @@ public class GivePresetItemsCommand extends Command {
         addEnchant(eb, "mending", 1);
         s.set(DataComponentTypes.ENCHANTMENTS, eb.build());
         s.set(DataComponentTypes.LORE, new LoreComponent(List.of(
-            line("Power 255 + Flame 255 + Punch 255 — fire everywhere"),
+            line("Power 255 + Flame 255 + Punch 255 • fire everywhere"),
             gold("Orbiter Preset"))));
         return s;
     }

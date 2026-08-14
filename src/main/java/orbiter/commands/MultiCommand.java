@@ -23,19 +23,19 @@ public class MultiCommand extends Command {
         §7Usage: §r.multicommand {selector} command [; {selector} command ...]
 
         §7Selectors:
-        §r  {all}           — every player on the server
-        §r  {team:name}     — players in a specific scoreboard team
-        §r  {near:blocks}   — players within X blocks
-        §r  {random}        — 1 random player from the group
-        §r  {random:N}      — N random players from the group
-        §r  {nearest}       — single nearest player
-        §r  {furthest}      — single furthest player
-        §r  {team:Red,near:20} — AND-chaining (comma separated)
+        §r  {all}           • every player on the server
+        §r  {team:name}     • players in a specific scoreboard team
+        §r  {near:blocks}   • players within X blocks
+        §r  {random}        • 1 random player from the group
+        §r  {random:N}      • N random players from the group
+        §r  {nearest}       • single nearest player
+        §r  {furthest}      • single furthest player
+        §r  {team:Red,near:20} • AND-chaining (comma separated)
 
         §7Player placeholder §3(required)§7:
         §r  Use §b{player}§r in the command template at the exact position
         §r  where a player name would normally appear in the vanilla command.
-        §r  The selector target is substituted at that position — not elsewhere.
+        §r  The selector target is substituted at that position • not elsewhere.
 
         §7Examples (correct placement):
         §r  .multicommand {all} give {player} diamond
@@ -46,7 +46,7 @@ public class MultiCommand extends Command {
         §r  .multicommand {nearest} tp {player} 0 64 0
 
         §7§cError: §rIf no §b{player}§r placeholder is found, the command is
-        §r  skipped with a warning — the placeholder is required so the
+        §r  skipped with a warning • the placeholder is required so the
         §r  player name is always injected at the correct argument position.
         """;
 

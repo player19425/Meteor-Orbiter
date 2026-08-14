@@ -118,7 +118,7 @@ public class SpamPlus extends Module {
 
     private final Setting<Boolean> ladder = sgLadder.add(new BoolSetting.Builder()
         .name("ladder")
-        .description("Enable letter ladder mode — progressively appends a character.")
+        .description("Enable letter ladder mode • progressively appends a character.")
         .defaultValue(false)
         .build()
     );
@@ -151,7 +151,7 @@ public class SpamPlus extends Module {
 
     private final Setting<Boolean> stupid = sgLadder.add(new BoolSetting.Builder()
         .name("stupid")
-        .description("Enable stupid mode — repeats each message inline many times.")
+        .description("Enable stupid mode • repeats each message inline many times.")
         .defaultValue(false)
         .build()
     );

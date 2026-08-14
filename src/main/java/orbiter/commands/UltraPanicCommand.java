@@ -76,15 +76,15 @@ public class UltraPanicCommand extends Command {
     private void showHelp() {
         info("§6[.ultrapanic] §fReversibly hide ALL mod evidence by swapping .minecraft folders.");
         info("§7Usage:");
-        info("  §e.ultrapanic confirm  §7— Swap to clean vanilla .minecraft");
-        info("  §e.ultrapanic restore §7— Swap back to your real modded .minecraft");
-        info("  §e.ultrapanic status  §7— Check if currently in panic/clean state");
-        info("  §e.ultrapanic prepare-clean §7— Instructions for setting up clean copy");
+        info("  §e.ultrapanic confirm  §7• Swap to clean vanilla .minecraft");
+        info("  §e.ultrapanic restore §7• Swap back to your real modded .minecraft");
+        info("  §e.ultrapanic status  §7• Check if currently in panic/clean state");
+        info("  §e.ultrapanic prepare-clean §7• Instructions for setting up clean copy");
         info("");
         info("§c⚠ WARNING: You MUST have a clean vanilla .minecraft_clean folder ready!");
-        info("§7The clean folder should contain ONLY default vanilla files —");
+        info("§7The clean folder should contain ONLY default vanilla files •");
         info("§7no mods/, no meteor-client/, no crash reports, no modded profiles.");
-        info("§7No files are ever deleted — only renamed/moved.");
+        info("§7No files are ever deleted • only renamed/moved.");
         info("§7A restore script is generated at .minecraft/restore_orbiter.bat/.sh");
     }
 
@@ -115,13 +115,13 @@ public class UltraPanicCommand extends Command {
         boolean hasClean = cleanDir.exists();
 
         if (inPanic) {
-            info("§c⚠ PANIC MODE ACTIVE — You are running on the clean vanilla copy.");
+            info("§c⚠ PANIC MODE ACTIVE • You are running on the clean vanilla copy.");
             info("§7Run §e.ultrapanic restore §7to swap back to your real .minecraft");
         } else {
-            info("§a✓ Normal mode — You are running on your real .minecraft");
+            info("§a✓ Normal mode • You are running on your real .minecraft");
         }
 
-        info("§7Clean copy available: " + (hasClean ? "§aYes" : "§cNo — run .ultrapanic prepare-clean"));
+        info("§7Clean copy available: " + (hasClean ? "§aYes" : "§cNo • run .ultrapanic prepare-clean"));
         info("§7Real folder backup: " + (realDir.exists() ? "§a" + realDir.getName() : "§cNot found"));
         info("§7Current .minecraft: " + mcDir.getAbsolutePath());
     }
@@ -181,7 +181,7 @@ public class UltraPanicCommand extends Command {
         File cleanDir = new File(parentDir, getCleanFolderName());
 
         if (!realDir.exists()) {
-            error("Not in panic mode — real .minecraft backup not found at: " + realDir.getAbsolutePath());
+            error("Not in panic mode • real .minecraft backup not found at: " + realDir.getAbsolutePath());
             return;
         }
 

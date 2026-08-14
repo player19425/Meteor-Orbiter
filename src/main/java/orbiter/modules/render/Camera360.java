@@ -64,7 +64,7 @@ public class Camera360 extends Module {
         if (mc.player == null) return;
 
         if (!ConfigModifier.get().stupidModules.get()) {
-            info("Stupid Modules was disabled — 360 Camera auto-disabled.");
+            info("Stupid Modules was disabled • 360 Camera auto-disabled.");
             toggle();
             return;
         }

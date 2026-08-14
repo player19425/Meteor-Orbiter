@@ -61,7 +61,7 @@ public class AutoFind extends Module {
         }
 
         public String toDisplayString() {
-            return String.format("[%s] %s at %d, %d, %d (%d blocks) — %s",
+            return String.format("[%s] %s at %d, %d, %d (%d blocks) • %s",
                 category, criteria, pos.getX(), pos.getY(), pos.getZ(), blockCount, criteria);
         }
     }
@@ -873,11 +873,11 @@ public class AutoFind extends Module {
 
         String msg;
         if (showCoordinates.get()) {
-            msg = String.format("§6[AutoFind] §e%s §fdetected at §a%d, %d, %d §7(%d blocks) §f— %s",
+            msg = String.format("§6[AutoFind] §e%s §fdetected at §a%d, %d, %d §7(%d blocks) §f• %s",
                 result.category, result.pos.getX(), result.pos.getY(), result.pos.getZ(),
                 result.blockCount, result.criteria);
         } else {
-            msg = String.format("§6[AutoFind] §e%s §fdetected nearby §7(%d blocks) §f— %s",
+            msg = String.format("§6[AutoFind] §e%s §fdetected nearby §7(%d blocks) §f• %s",
                 result.category, result.blockCount, result.criteria);
         }
 

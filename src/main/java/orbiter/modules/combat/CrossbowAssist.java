@@ -630,7 +630,7 @@ public class CrossbowAssist extends Module {
         if (mc.player == null) return "Off";
         boolean loaded = isCrossbowLoaded();
         if (!loaded) return "Not loaded";
-        if (currentTarget == null) return "Loaded — no target";
+        if (currentTarget == null) return "Loaded • no target";
 
         String name = currentTarget instanceof PlayerEntity p
             ? p.getName().getString()

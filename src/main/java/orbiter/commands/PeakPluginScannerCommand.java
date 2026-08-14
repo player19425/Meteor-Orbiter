@@ -11,7 +11,7 @@ import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 public class PeakPluginScannerCommand extends Command {
 
     public PeakPluginScannerCommand() {
-        super("peakscan", "Plugin scanner — detect server plugins.");
+        super("peakscan", "Plugin scanner • detect server plugins.");
     }
 
     @Override

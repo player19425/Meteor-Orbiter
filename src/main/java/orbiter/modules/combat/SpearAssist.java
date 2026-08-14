@@ -109,7 +109,7 @@ public class SpearAssist extends Module {
 
     private final Setting<Double> minAttackRange = sgTarget.add(new DoubleSetting.Builder()
         .name("min-attack-range")
-        .description("Minimum distance — spears can't hit targets closer than 2 blocks.")
+        .description("Minimum distance • spears can't hit targets closer than 2 blocks.")
         .defaultValue(2.0)
         .min(0.5)
         .sliderRange(0.5, 4.0)
