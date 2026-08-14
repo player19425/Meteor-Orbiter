@@ -6,7 +6,7 @@
   "description": "An addon for Meteor Client that adds many features.",
   "icon": "assets/orbiter/icon.png",
   "authors": [
-    "Joseitoxx2"
+    "player19425"
   ],
   "environment": "client",
   "entrypoints": {
