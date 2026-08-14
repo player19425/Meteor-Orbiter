@@ -1,0 +1,94 @@
+package orbiter.modules.misc;
+
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EntityType;
+import net.minecraft.text.PlainTextContent;
+import net.minecraft.text.Style;
+import net.minecraft.text.Text;
+import net.minecraft.text.TextContent;
+import net.minecraft.util.Identifier;
+
+import java.util.ArrayDeque;
+import java.util.List;
+
+public final class EntityNameSanitizer {
+
+    private EntityNameSanitizer() {}
+
+    public static boolean shouldSimplify(Text component, int maxChars, int maxNodes, int maxDepth,
+                                         int maxStyleScore, int maxObfuscatedChars, int maxComplexNodes) {
+        NameCost cost = analyze(component, Math.max(1, maxDepth));
+        return cost.tooDeep
+            || cost.nodeCount > Math.max(1, maxNodes)
+            || cost.totalChars > Math.max(1, maxChars)
+            || cost.styleScore > Math.max(1, maxStyleScore)
+            || cost.obfuscatedChars > Math.max(1, maxObfuscatedChars)
+            || cost.complexNodeCount > Math.max(1, maxComplexNodes);
+    }
+
+    public static Text simplify(Entity entity) {
+        Identifier entityId = EntityType.getId(entity.getType());
+        String label = entityId == null ? "entity" : entityId.getPath().replace('_', ' ');
+        return Text.literal(label + " [name hidden]");
+    }
+
+    private static NameCost analyze(Text root, int maxDepth) {
+        NameCost cost = new NameCost();
+        ArrayDeque<VisitNode> stack = new ArrayDeque<>();
+        stack.push(new VisitNode(root, 0));
+        while (!stack.isEmpty()) {
+            VisitNode node = stack.removeLast();
+            if (node.depth > maxDepth) {
+                cost.tooDeep = true;
+                return cost;
+            }
+            Text component = node.component;
+            cost.nodeCount++;
+            int directChars = estimateDirectChars(component);
+            cost.totalChars += directChars;
+            cost.styleScore += estimateStyleScore(component.getStyle(), directChars);
+            if (component.getStyle().isObfuscated()) {
+                cost.obfuscatedChars += Math.max(directChars, 8);
+            }
+            if (!(component.getContent() instanceof PlainTextContent)) {
+                cost.complexNodeCount++;
+            }
+            List<Text> siblings = component.getSiblings();
+            for (int index = siblings.size() - 1; index >= 0; index--) {
+                stack.addLast(new VisitNode(siblings.get(index), node.depth + 1));
+            }
+        }
+        return cost;
+    }
+
+    private static int estimateDirectChars(Text component) {
+        String collapsed = component.getLiteralString();
+        if (collapsed != null) return collapsed.length();
+        TextContent contents = component.getContent();
+        if (contents instanceof PlainTextContent plain) return plain.string().length();
+        return 8;
+    }
+
+    private static int estimateStyleScore(Style style, int directChars) {
+        if (style.isEmpty()) return 0;
+        int score = 1;
+        if (style.getColor() != null) score++;
+        if (style.isBold()) score++;
+        if (style.isItalic()) score++;
+        if (style.isUnderlined()) score++;
+        if (style.isStrikethrough()) score++;
+        if (style.isObfuscated()) score += 4 + Math.min(4, Math.max(1, directChars / 16));
+        if (style.getClickEvent() != null) score += 2;
+        if (style.getHoverEvent() != null) score += 2;
+        if (style.getInsertion() != null) score++;
+        if (!style.getFont().toString().equals("minecraft:default")) score++;
+        return score;
+    }
+
+    private static final class NameCost {
+        int totalChars, nodeCount, styleScore, obfuscatedChars, complexNodeCount;
+        boolean tooDeep;
+    }
+
+    private record VisitNode(Text component, int depth) {}
+}
