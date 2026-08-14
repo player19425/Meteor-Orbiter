@@ -84,7 +84,6 @@ Everything is organized into four in-game categories:
 |---|---|
 | **Auto Build** | Litematica Printer: automatically places blocks from loaded schematics with full rotation support. Requires Litematica. |
 | **Auto Farming** | Harvests crops/cactus/sugarcane/bamboo, breeds animals, applies bonemeal and replants with delay. |
-| **Bonemeal Painter** | Paints the world with bonemeal. Creative/OP only. |
 | **Command Block Placer** | Places command blocks with set commands. Requires Creative + OP. |
 | **Control Player** | Uses owner-authorized OP commands to rotate selected players around you. |
 | **Destroy Now** | Toggle 4 times within 20s to execute: inspect → arm → preview → execute. |
