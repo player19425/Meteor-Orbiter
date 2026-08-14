@@ -48,99 +48,99 @@ Everything is organized into four in-game categories:
 
 | Module | Description |
 |---|---|
-| **aim-assist-plus** | Smooth aim assist with separate yaw/pitch speeds and filters. |
-| **anti-knockback** | Handles knockback only. |
-| **bow-assist** | Aims the bow with accurate projectile physics, movement prediction, and auto-fire support. |
-| **crossbow-assist** | Aims a loaded crossbow with projectile physics, movement prediction, and auto-fire. |
-| **mace-assist** | Auto-aim and strike with the Mace, including Elytra swapping for critical hits on landing. |
-| **no-friend-hit** | Prevents attacking Meteor friends. |
-| **out-of-reach** | Aggressively teleports you outside player reach using gamemode detection and movement prediction. |
-| **precision-shot** | Predicts projectile trajectories and supports silent packet aiming. |
-| **shield-assist** | Auto-blocks with a shield against projectiles, melee, and special attacks, with smart release for counter-attacks. |
-| **spear-assist** | Jab and charge attack control with smart mode switching. |
-| **trident-assist** | Manual or automatic trident throwing and melee combat. |
+| **Aim Assist Plus** | Smooth aim assist with separate yaw/pitch speeds and filters. |
+| **Anti Knockback** | Handles knockback only. |
+| **Bow Assist** | Aims the bow with accurate projectile physics, movement prediction, and auto-fire support. |
+| **Crossbow Assist** | Aims a loaded crossbow with projectile physics, movement prediction, and auto-fire. |
+| **Mace Assist** | Auto-aim and strike with the Mace, including Elytra swapping for critical hits on landing. |
+| **No Friend Hit** | Prevents attacking Meteor friends. |
+| **Out Of Reach** | Aggressively teleports you outside player reach using gamemode detection and movement prediction. |
+| **Precision Shot** | Predicts projectile trajectories and supports silent packet aiming. |
+| **Shield Assist** | Auto-blocks with a shield against projectiles, melee, and special attacks, with smart release for counter-attacks. |
+| **Spear Assist** | Jab and charge attack control with smart mode switching. |
+| **Trident Assist** | Manual or automatic trident throwing and melee combat. |
 
 ## Movement
 
 | Module | Description |
 |---|---|
-| **anti-push** | Stops fluid and entity push only. |
-| **auto-clutch** | Automatically clutches to prevent fall damage using blocks, boats, water, or any fall-canceling item. |
-| **force-invisibility** | Spoofs server Y and only drops to real Y when needed. |
-| **jump-a** | Jump over walls or reach blocks you're looking at with calculated velocity. |
-| **slime-jump** | Automatically bounce when standing on slime, with configurable timing. |
+| **Anti Push** | Stops fluid and entity push only. |
+| **Auto Clutch** | Automatically clutches to prevent fall damage using blocks, boats, water, or any fall-canceling item. |
+| **Force Invisibility** | Spoofs server Y and only drops to real Y when needed. |
+| **Jump A** | Jump over walls or reach blocks you're looking at with calculated velocity. |
+| **Slime Jump** | Automatically bounce when standing on slime, with configurable timing. |
 
 ## Player
 
 | Module | Description |
 |---|---|
-| **auto-craft-plus** | Automatically crafts items at max speed. Configure the recipe, enable, and watch it go. |
-| **client-side-mine** | Instantly breaks blocks client-side with anti-rubber-band to stay in the hole you dug. |
-| **restock** | Fast hotbar restocking from inventory first, then open storage GUIs. |
+| **Auto Craft Plus** | Automatically crafts items at max speed. Configure the recipe, enable, and watch it go. |
+| **Client Side Mine** | Instantly breaks blocks client-side with anti-rubber-band to stay in the hole you dug. |
+| **Restock** | Fast hotbar restocking from inventory first, then open storage GUIs. |
 
 ## World
 
 | Module | Description |
 |---|---|
-| **auto-build** | Litematica Printer: automatically places blocks from loaded schematics with full rotation support. Requires Litematica. |
-| **auto-farming** | Harvests crops/cactus/sugarcane/bamboo, breeds animals, applies bonemeal and replants with delay. |
-| **bonemeal-painter** | Paints the world with bonemeal. Creative/OP only. |
-| **command-block-placer** | Places command blocks with set commands. Requires Creative + OP. |
-| **control-player** | Uses owner-authorized OP commands to rotate selected players around you. |
-| **destroy-now** | Toggle 4 times within 20s to execute: inspect → arm → preview → execute. |
-| **entity-spammer** | Mega entity manipulation module: spawn, fill, animate, and dominate entities. OP required. |
-| **item-creator** | Create custom items with names, enchants, attributes, and entity NBT. Creative only. |
-| **item-generator** | Spawns random or specific items with optional random enchants/attributes. Requires Creative mode. |
-| **nbt-lectern-crasher** | Places lecterns with malicious books. |
-| **operator-nuker** | Nuke blocks using /fill or /setblock commands. Requires OP permissions. |
-| **rng-spammer** | Spawns valid loot tables around selected players. OP required. |
-| **tnt-rain** | Spawns TNT falling from the sky in a radius. OP required. |
-| **uuid-ban** | Ban a player by summoning a UUID-named entity. |
-| **world-downloader** | Downloads the world around you while moving. |
-| **world-edit** | Expanded client-side WorldEdit using vanilla commands. Chat: `.we <command>` |
-| **world-eraser** | Erases blocks in a radius. Enable TWICE within 10s to trigger. OP permissions required. |
+| **Auto Build** | Litematica Printer: automatically places blocks from loaded schematics with full rotation support. Requires Litematica. |
+| **Auto Farming** | Harvests crops/cactus/sugarcane/bamboo, breeds animals, applies bonemeal and replants with delay. |
+| **Bonemeal Painter** | Paints the world with bonemeal. Creative/OP only. |
+| **Command Block Placer** | Places command blocks with set commands. Requires Creative + OP. |
+| **Control Player** | Uses owner-authorized OP commands to rotate selected players around you. |
+| **Destroy Now** | Toggle 4 times within 20s to execute: inspect → arm → preview → execute. |
+| **Entity Spammer** | Mega entity manipulation module: spawn, fill, animate, and dominate entities. OP required. |
+| **Item Creator** | Create custom items with names, enchants, attributes, and entity NBT. Creative only. |
+| **Item Generator** | Spawns random or specific items with optional random enchants/attributes. Requires Creative mode. |
+| **NBT Lectern Crasher** | Places lecterns with malicious books. |
+| **Operator Nuker** | Nuke blocks using /fill or /setblock commands. Requires OP permissions. |
+| **RNG Spammer** | Spawns valid loot tables around selected players. OP required. |
+| **TNT Rain** | Spawns TNT falling from the sky in a radius. OP required. |
+| **UUID Ban** | Ban a player by summoning a UUID-named entity. |
+| **World Downloader** | Downloads the world around you while moving. |
+| **World Edit** | Expanded client-side WorldEdit using vanilla commands. Chat: `.we <command>` |
+| **World Eraser** | Erases blocks in a radius. Enable TWICE within 10s to trigger. OP permissions required. |
 
 ## Render
 
 | Module | Description |
 |---|---|
-| **beacon-optimizer** | Reduces beacon animation-state churn without hiding visible beacon beams. |
-| **block-spoof** | Replace block textures/models client-side for visual deception. |
-| **bossbar-flash** | Rapidly creates/updates boss bars with random colors and titles. OP required. |
-| **camera-360** | Removes camera rotation limits for full 360°+ movement. |
-| **firework-show** | Launch choreographed firework shows with customizable shapes, colors, and patterns. |
-| **particle-control** | Creates optimized rotating particle shapes around selected players with OP /particle commands. |
-| **particle-spam** | Spams /particle commands in a radius. OP required. |
-| **playsound-spam** | Spams every sound in the game via /playsound. OP required. |
-| **view-blocks** | ESP for invisible and custom blocks with chunk-based scanning. |
+| **Beacon Optimizer** | Reduces beacon animation-state churn without hiding visible beacon beams. |
+| **Block Spoof** | Replace block textures/models client-side for visual deception. |
+| **Bossbar Flash** | Rapidly creates/updates boss bars with random colors and titles. OP required. |
+| **Camera 360** | Removes camera rotation limits for full 360°+ movement. |
+| **Firework Show** | Launch choreographed firework shows with customizable shapes, colors, and patterns. |
+| **Particle Control** | Creates optimized rotating particle shapes around selected players with OP /particle commands. |
+| **Particle Spam** | Spams /particle commands in a radius. OP required. |
+| **Playsound Spam** | Spams every sound in the game via /playsound. OP required. |
+| **View Blocks** | ESP for invisible and custom blocks with chunk-based scanning. |
 
 ## Misc
 
 | Module | Description |
 |---|---|
-| **actions** | Reactive trigger/action system with module toggles, commands, chat, disconnect, and conditional logic. |
-| **anti-staff** | Detects staff, watched players, and spectators via tab, chat, proximity. Auto-leaves, sends commands, toggles modules. |
-| **auto-find** | Scan for stashes, bases, and storage. World-wrapping flight scanner. |
-| **auto-shop** | Runs the server shop sequence and deposits purchased items into nearby chests. |
-| **client-side-things** | Local visual spoof system for HUD, inventory, weather, equipment, overlays, fog, crosshair, and bossbar. |
-| **exploit-preventer** | Prevents common server-side exploits: brand fingerprinting, resource pack SSRF, and channel fingerprinting. |
-| **i-sell-wand** | Automates selling by equipping a sell wand and right-clicking recorded/nearby chests. |
-| **infini-reach** | Extended reach via OP attributes or an invisible offhand item. |
-| **item-info** | Adds client-side-only lore to item tooltips: durability, enchantments, components, and full NBT. |
-| **item-stealer** | Clone items with pick-block (no server packet), bypass trades, auto-steal GUIs, and persist items to disk. |
-| **leave-message** | Intercepts close events, sends leave chat, waits, then disconnects gracefully. |
-| **message-formatter** | Formats outgoing chat with color codes, gradients, font presets, Zalgo, and character injection. |
-| **peak-plugin-scanner** | Detects server plugins via command tree analysis, systematic probing, namespace/help probing, and channel fingerprinting. |
-| **ping-spoof** | Advanced ping/movement spoof with bypass, spoof, adaptive, competitive, and dynamic adaptive modes. |
-| **server-protect** | Comprehensive anti-abuse module. Blocks crash packets, entity spam, malicious items, and more. |
-| **spam-plus** | Spam module with letter-ladder and auto-split features. |
-| **stupid-modules** | Master toggle for joke / experimental / stupid modules. |
+| **Actions** | Reactive trigger/action system with module toggles, commands, chat, disconnect, and conditional logic. |
+| **Anti Staff** | Detects staff, watched players, and spectators via tab, chat, proximity. Auto-leaves, sends commands, toggles modules. |
+| **Auto Find** | Scan for stashes, bases, and storage. World-wrapping flight scanner. |
+| **Auto Shop** | Runs the server shop sequence and deposits purchased items into nearby chests. |
+| **Client Side Things** | Local visual spoof system for HUD, inventory, weather, equipment, overlays, fog, crosshair, and bossbar. |
+| **Exploit Preventer** | Prevents common server-side exploits: brand fingerprinting, resource pack SSRF, and channel fingerprinting. |
+| **I Sell Wand** | Automates selling by equipping a sell wand and right-clicking recorded/nearby chests. |
+| **Infini Reach** | Extended reach via OP attributes or an invisible offhand item. |
+| **Item Info** | Adds client-side-only lore to item tooltips: durability, enchantments, components, and full NBT. |
+| **Item Stealer** | Clone items with pick-block (no server packet), bypass trades, auto-steal GUIs, and persist items to disk. |
+| **Leave Message** | Intercepts close events, sends leave chat, waits, then disconnects gracefully. |
+| **Message Formatter** | Formats outgoing chat with color codes, gradients, font presets, Zalgo, and character injection. |
+| **Peak Plugin Scanner** | Detects server plugins via command tree analysis, systematic probing, namespace/help probing, and channel fingerprinting. |
+| **Ping Spoof** | Advanced ping/movement spoof with bypass, spoof, adaptive, competitive, and dynamic adaptive modes. |
+| **Server Protect** | Comprehensive anti-abuse module. Blocks crash packets, entity spam, malicious items, and more. |
+| **Spam Plus** | Spam module with letter-ladder and auto-split features. |
+| **Stupid Modules** | Master toggle for joke / experimental / stupid modules. |
 
 ## Exploit
 
 | Module | Description |
 |---|---|
-| **fastload-exploit** | Forces chunk loading via rapid teleportation. |
+| **Fastload Exploit** | Forces chunk loading via rapid teleportation. |
 
 # Commands
 
