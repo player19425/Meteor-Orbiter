@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "meteor-orbiter",
+  "version": "${version}",
+  "name": "Meteor Orbiter",
+  "description": "An addon for Meteor Client that adds many features.",
+  "icon": "assets/orbiter/icon.png",
+  "authors": [
+    "Joseitoxx2"
+  ],
+  "environment": "client",
+  "entrypoints": {
+    "meteor": [
+      "orbiter.Orbiter"
+    ]
+  },
+  "mixins": [
+    "orbiter.mixins.json"
+  ],
+  "custom": {
+    "meteor-client:color": "100,200,255",
+    "modmenu": {
+      "parent": {
+        "id": "meteor-client"
+      }
+    }
+  },
+  "depends": {
+    "java": ">=${jdk_version}",
+    "minecraft": "${minecraft_version}",
+    "meteor-client": "*"
+  }
+}
