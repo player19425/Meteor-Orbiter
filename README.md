@@ -39,11 +39,10 @@ Everything is organized into four in-game categories:
 1. Download the latest [release](https://github.com/player19425/Meteor-Orbiter/releases) of the mod.
 2. Put the `.jar` in your `.minecraft/mods` folder.
 3. Launch the game with Fabric and Meteor Client installed.
-*
 
-# Modules
+# Modules:
 
-## Combat
+## Combat:
 
 | Module | Description |
 |---|---|
@@ -59,7 +58,7 @@ Everything is organized into four in-game categories:
 | **Spear Assist** | Jab and charge attack control with smart mode switching. |
 | **Trident Assist** | Manual or automatic trident throwing and melee combat. |
 
-## Movement
+## Movement:
 
 | Module | Description |
 |---|---|
@@ -69,7 +68,7 @@ Everything is organized into four in-game categories:
 | **Jump A** | Jump over walls or reach blocks you're looking at with calculated velocity. |
 | **Slime Jump** | Automatically bounce when standing on slime, with configurable timing. |
 
-## Player
+## Player:
 
 | Module | Description |
 |---|---|
@@ -77,7 +76,7 @@ Everything is organized into four in-game categories:
 | **Client Side Mine** | Instantly breaks blocks client-side with anti-rubber-band to stay in the hole you dug. |
 | **Restock** | Fast hotbar restocking from inventory first, then open storage GUIs. |
 
-## World
+## World:
 
 | Module | Description |
 |---|---|
@@ -112,7 +111,7 @@ Everything is organized into four in-game categories:
 | **Playsound Spam** | Spams every sound in the game via /playsound. OP required. |
 | **View Blocks** | ESP for invisible and custom blocks with chunk-based scanning. |
 
-## Misc
+## Misc:
 
 | Module | Description |
 |---|---|
@@ -134,7 +133,7 @@ Everything is organized into four in-game categories:
 | **Spam Plus** | Spam module with letter-ladder and auto-split features. |
 | **Stupid Modules** | Master toggle for joke / experimental / stupid modules. |
 
-# Commands
+# Commands:
 
 | Command | Description | Aliases |
 |---|---|---|
@@ -161,14 +160,13 @@ Everything is organized into four in-game categories:
 | `.verify-protect` | Tests ServerProtect crash-item detection against known payloads. | |
 | `.we` | Expanded WorldEdit commands with dynamic autocomplete. | `worldedit` |
 
-# HUD
+# HUD:
 
 | Element | Description |
 |---|---|
 | **Custom Text** | Displays custom text on the HUD with placeholders. |
 | **Nearest Player** | Shows the nearest player and their distance. |
 | **Render Distance** | Shows current render distance. |
-| **Server Info** | Shows server info: brand, version, IP, difficulty, time, anticheats, plugins. |
 | **Weapon Cooldown** | Shows current weapon attack cooldown in seconds. |
 
 # Building from Source
