@@ -37,7 +37,8 @@ Everything is organized into four in-game categories:
 # Installation
 
 1. Download the latest [release](https://github.com/player19425/Meteor-Orbiter/releases) of the mod.
-2. Put the `.jar` in your `.minecraft/mods` folder.3. Launch the game with Fabric and Meteor Client installed.
+2. Put the `.jar` in your `.minecraft/mods` folder.
+3. Launch the game with Fabric and Meteor Client installed.
 *
 
 # Modules
