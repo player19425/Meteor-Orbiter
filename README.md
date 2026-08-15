@@ -37,10 +37,8 @@ Everything is organized into four in-game categories:
 # Installation
 
 1. Download the latest [release](https://github.com/player19425/Meteor-Orbiter/releases) of the mod.
-2. Put the `.jar` in your `.minecraft/mods` folder.
-3. Launch the game with Fabric and Meteor Client installed.
-
-*Note: features that send commands require the server to support them and never imply that a client-only setting can override server validation.*
+2. Put the `.jar` in your `.minecraft/mods` folder.3. Launch the game with Fabric and Meteor Client installed.
+*
 
 # Modules
 
@@ -135,12 +133,6 @@ Everything is organized into four in-game categories:
 | **Spam Plus** | Spam module with letter-ladder and auto-split features. |
 | **Stupid Modules** | Master toggle for joke / experimental / stupid modules. |
 
-## Exploit
-
-| Module | Description |
-|---|---|
-| **Fastload Exploit** | Forces chunk loading via rapid teleportation. |
-
 # Commands
 
 | Command | Description | Aliases |
@@ -196,8 +188,6 @@ The compiled JAR will be in `build/libs/`.
 # Safety
 
 - Destructive features require explicit confirmation and should only be tested on disposable local servers with backups.
-- WorldEraser rejects invalid coordinates and excessive estimated work before iterating.
-- ServerProtect preserves valid item components and blocks crash packets, entity spam, and malicious items.
 - Command-producing modules use capability detection and bounded queues where supported. Command availability does not prove permission.
 
 # Credits
