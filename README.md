@@ -2,15 +2,15 @@
   <!-- Logo and Title -->
   <img src="src/main/resources/assets/orbiter/icon.png" alt="Orbiter logo" width="20%"/>
   <h1>Meteor Orbiter</h1>
-  <p>An addon for <a href="https://meteorclient.com/">Meteor Client</a> that adds 65+ modules, custom commands, and HUD elements for anarchy, griefing, and quality of life.</p>
+  <p>An addon for <a href="https://meteorclient.com/">Meteor Client</a> that adds 60+ modules, custom commands, and HUD elements for anarchy, griefing, and quality of life.</p>
 
   <!-- Badges -->
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.0-orange" alt="Version"></a>
-  <img src="https://img.shields.io/badge/Minecraft-1.21.11-blue" alt="Minecraft version">
-  <img src="https://img.shields.io/badge/Java-21-green" alt="Java version">
+  <img src="https://img.shields.io/badge/Minecraft-26.2-blue" alt="Minecraft version">
+  <img src="https://img.shields.io/badge/Java-25-green" alt="Java version">
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/github/downloads/player19425/Meteor-Orbiter/total" alt="Downloads"></a>
   <a href="https://github.com/player19425/Meteor-Orbiter/stargazers"><img src="https://img.shields.io/github/stars/player19425/Meteor-Orbiter" alt="Stars"></a>
-  <a href="https://github.com/player19425/Meteor-Orbiter/commits/1.21.11"><img src="https://img.shields.io/github/last-commit/player19425/Meteor-Orbiter" alt="Last commit"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/commits/26.2"><img src="https://img.shields.io/github/last-commit/player19425/Meteor-Orbiter" alt="Last commit"></a>
   <img src="https://img.shields.io/github/languages/code-size/player19425/Meteor-Orbiter" alt="Code size">
   <img src="https://img.shields.io/github/issues/player19425/Meteor-Orbiter" alt="Issues">
 </div>
@@ -19,7 +19,7 @@
 
 # About
 
-Orbiter is a collection of modules and tools for [Meteor Client](https://meteorclient.com/), originally built for survival, anarchy, and creative/OP play on 1.21.11 servers.
+Orbiter is a collection of modules and tools for [Meteor Client](https://meteorclient.com/), originally built for survival, anarchy, and creative/OP play.
 
 Everything is organized into four in-game categories:
 
@@ -30,17 +30,15 @@ Everything is organized into four in-game categories:
 
 # Requirements
 
-- [Java](https://adoptium.net/temurin/releases) 21 or higher
-- [Fabric Loader](https://fabricmc.net/use/installer/) 0.18.2+
-- [Meteor Client](https://meteorclient.com/) for 1.21.11
+- [Java](https://adoptium.net/temurin/releases) 25 or higher
+- [Fabric Loader](https://fabricmc.net/use/installer/) 0.19.3+
+- [Meteor Client](https://meteorclient.com/) for 26.2
 
 # Installation
 
 1. Download the latest [release](https://github.com/player19425/Meteor-Orbiter/releases) of the mod.
-2. Put the `.jar` in your `.minecraft/mods` folder.
-3. Launch the game with Fabric and Meteor Client installed.
-
-*Note: features that send commands require the server to support them and never imply that a client-only setting can override server validation.*
+2. Put the `.jar` in your `.minecraft/mods` folder.3. Launch the game with Fabric and Meteor Client installed.
+*
 
 # Modules
 
@@ -135,12 +133,6 @@ Everything is organized into four in-game categories:
 | **Spam Plus** | Spam module with letter-ladder and auto-split features. |
 | **Stupid Modules** | Master toggle for joke / experimental / stupid modules. |
 
-## Exploit
-
-| Module | Description |
-|---|---|
-| **Fastload Exploit** | Forces chunk loading via rapid teleportation. |
-
 # Commands
 
 | Command | Description | Aliases |
@@ -181,7 +173,7 @@ Everything is organized into four in-game categories:
 # Building from Source
 
 ### Prerequisites
-- [JDK](https://adoptium.net/temurin/releases) 21 or higher
+- [JDK](https://adoptium.net/temurin/releases) 25 or higher
 
 ### Steps
 ```bash
@@ -196,8 +188,6 @@ The compiled JAR will be in `build/libs/`.
 # Safety
 
 - Destructive features require explicit confirmation and should only be tested on disposable local servers with backups.
-- WorldEraser rejects invalid coordinates and excessive estimated work before iterating.
-- ServerProtect preserves valid item components and blocks crash packets, entity spam, and malicious items.
 - Command-producing modules use capability detection and bounded queues where supported. Command availability does not prove permission.
 
 # Credits
