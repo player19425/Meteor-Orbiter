@@ -8,18 +8,18 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.enchantment.Enchantments;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.TridentItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.TridentItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
 import orbiter.Orbiter;
 import orbiter.util.ComboTracker;
 
@@ -257,7 +257,7 @@ public class TridentAssist extends Module {
 
     private LivingEntity currentTarget;
     private long lastTargetSwitchTime;
-    private final List<Vec3d> trajectoryPoints = new ArrayList<>();
+    private final List<Vec3> trajectoryPoints = new ArrayList<>();
     private int tickCounter = 0;
     private int attackCooldown = 0;
     private float currentCharge;
@@ -293,11 +293,11 @@ public class TridentAssist extends Module {
 
     @EventHandler(priority = EventPriority.HIGH)
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         tickCounter++;
         if (attackCooldown > 0) attackCooldown--;
 
-        if (!(mc.player.getMainHandStack().getItem() instanceof TridentItem)) {
+        if (!(mc.player.getMainHandItem().getItem() instanceof TridentItem)) {
             currentTarget = null;
             trajectoryPoints.clear();
             return;
@@ -312,9 +312,9 @@ public class TridentAssist extends Module {
         }
 
         if (preventThrowAtLowDurability.get()) {
-            ItemStack trident = mc.player.getMainHandStack();
+            ItemStack trident = mc.player.getMainHandItem();
             int maxDamage = trident.getMaxDamage();
-            int damage = trident.getDamage();
+            int damage = trident.getDamageValue();
             int remaining = maxDamage - damage;
             if (remaining <= 1) {
                 canThrow = false;
@@ -334,7 +334,7 @@ public class TridentAssist extends Module {
             return;
         }
 
-        double distToTarget = mc.player.getEyePos().distanceTo(currentTarget.getBoundingBox().getCenter());
+        double distToTarget = mc.player.getEyePosition().distanceTo(currentTarget.getBoundingBox().getCenter());
 
         if (meleeWhenClose.get() && distToTarget <= meleeRange.get()) {
             handleMeleeAttack(currentTarget);
@@ -348,8 +348,8 @@ public class TridentAssist extends Module {
             return;
         }
 
-        int maxUseTime = mc.player.getMainHandStack().getMaxUseTime(mc.player);
-        int elapsedTicks = isDrawing ? (maxUseTime - mc.player.getItemUseTimeLeft()) : 0;
+        int maxUseTime = mc.player.getMainHandItem().getUseDuration(mc.player);
+        int elapsedTicks = isDrawing ? (maxUseTime - mc.player.getUseItemRemainingTicks()) : 0;
         currentCharge = (float) elapsedTicks / 10.0f;
         currentCharge = Math.min(currentCharge, 1.0f);
 
@@ -358,8 +358,8 @@ public class TridentAssist extends Module {
             return;
         }
 
-        Vec3d targetPos = getTargetPosition(currentTarget);
-        Vec3d origin = mc.player.getEyePos();
+        Vec3 targetPos = getTargetPosition(currentTarget);
+        Vec3 origin = mc.player.getEyePosition();
 
         if (predictMovement.get()) {
             targetPos = predictTargetPosition(currentTarget, targetPos, origin);
@@ -381,11 +381,11 @@ public class TridentAssist extends Module {
             switch (throwMode.get()) {
                 case Auto -> {
                     if (currentCharge >= 0.95f) {
-                        float yawDiff = Math.abs(MathHelper.wrapDegrees(solution.yaw - mc.player.getYaw()));
-                        float pitchDiff = Math.abs(solution.pitch - mc.player.getPitch());
+                        float yawDiff = Math.abs(Mth.wrapDegrees(solution.yaw - mc.player.getYRot()));
+                        float pitchDiff = Math.abs(solution.pitch - mc.player.getXRot());
                         if (yawDiff < 8.0f && pitchDiff < 8.0f) {
                             mc.player.stopUsingItem();
-                            ComboTracker.registerHit(currentTarget.getUuid());
+                            ComboTracker.registerHit(currentTarget.getUUID());
                         }
                     }
                 }
@@ -401,15 +401,15 @@ public class TridentAssist extends Module {
 
     private void handleMeleeAttack(LivingEntity target) {
         if (attackCooldown > 0) return;
-        if (!ignoreCooldown.get() && mc.player.getAttackCooldownProgress(0.5f) < 1.0f) return;
+        if (!ignoreCooldown.get() && mc.player.getAttackStrengthScale(0.5f) < 1.0f) return;
 
-        boolean canCrit = !mc.player.isOnGround() && mc.player.getVelocity().y < -0.08;
+        boolean canCrit = !mc.player.onGround() && mc.player.getDeltaMovement().y < -0.08;
         if (critOnly.get() && !canCrit) return;
 
-        if (mc.interactionManager != null) {
-            mc.interactionManager.attackEntity(mc.player, target);
-            mc.player.swingHand(net.minecraft.util.Hand.MAIN_HAND);
-            ComboTracker.registerHit(target.getUuid());
+        if (mc.gameMode != null) {
+            mc.gameMode.attack(mc.player, target);
+            mc.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            ComboTracker.registerHit(target.getUUID());
             attackCooldown = 12;
         }
     }
@@ -422,13 +422,13 @@ public class TridentAssist extends Module {
 
         if (enchantMode.get() == EnchantMode.Off) return;
 
-        ItemStack trident = mc.player.getMainHandStack();
-        var enchantments = trident.get(DataComponentTypes.ENCHANTMENTS);
+        ItemStack trident = mc.player.getMainHandItem();
+        var enchantments = trident.get(DataComponents.ENCHANTMENTS);
         if (enchantments == null) return;
 
-        for (var entry : enchantments.getEnchantments()) {
-            String id = entry.getKey().orElseThrow().getValue().getPath();
-            int level = enchantments.getLevel(entry);
+        for (var entry : enchantments.entrySet()) {
+            String id = entry.getKey().unwrapKey().orElseThrow().identifier().getPath();
+            int level = enchantments.getLevel(entry.getKey());
             switch (id) {
                 case "riptide" -> hasRiptide = true;
                 case "loyalty" -> hasLoyalty = true;
@@ -452,9 +452,9 @@ public class TridentAssist extends Module {
     }
 
     private LivingEntity findBestTarget() {
-        Vec3d eyes = mc.player.getEyePos();
+        Vec3 eyes = mc.player.getEyePosition();
         List<LivingEntity> candidates = new ArrayList<>();
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (!isValidTarget(living)) continue;
             if (!isInRange(living)) continue;
@@ -475,52 +475,52 @@ public class TridentAssist extends Module {
         if (entity == null || !entity.isAlive() || entity.isSpectator()) return false;
         if (entity == mc.player) return false;
         if (!entity.isAttackable()) return false;
-        if (entity instanceof PlayerEntity p) {
+        if (entity instanceof Player p) {
             if (ignoreFriends.get() && Friends.get().isFriend(p)) return false;
-            if (ignoreCreative.get() && p.getAbilities().creativeMode) return false;
+            if (ignoreCreative.get() && p.getAbilities().instabuild) return false;
         }
-        if (playersOnly.get() && !(entity instanceof PlayerEntity)) return false;
+        if (playersOnly.get() && !(entity instanceof Player)) return false;
         if (ignoreInvisibles.get() && entity.isInvisible()) return false;
         return true;
     }
 
     private boolean isInRange(LivingEntity entity) {
-        return mc.player.getEyePos().distanceTo(entity.getBoundingBox().getCenter()) <= range.get();
+        return mc.player.getEyePosition().distanceTo(entity.getBoundingBox().getCenter()) <= range.get();
     }
 
     private double getAngleToEntity(LivingEntity entity) {
-        Vec3d playerEyes = mc.player.getEyePos();
-        Vec3d targetCenter = entity.getBoundingBox().getCenter();
-        Vec3d diff = targetCenter.subtract(playerEyes).normalize();
-        float yaw = mc.player.getYaw() * ((float) Math.PI / 180f);
-        float pitch = mc.player.getPitch() * ((float) Math.PI / 180f);
-        Vec3d look = new Vec3d(
-            -MathHelper.sin(yaw) * MathHelper.cos(pitch),
-            -MathHelper.sin(pitch),
-            MathHelper.cos(yaw) * MathHelper.cos(pitch)
+        Vec3 playerEyes = mc.player.getEyePosition();
+        Vec3 targetCenter = entity.getBoundingBox().getCenter();
+        Vec3 diff = targetCenter.subtract(playerEyes).normalize();
+        float yaw = mc.player.getYRot() * ((float) Math.PI / 180f);
+        float pitch = mc.player.getXRot() * ((float) Math.PI / 180f);
+        Vec3 look = new Vec3(
+            -Mth.sin(yaw) * Mth.cos(pitch),
+            -Mth.sin(pitch),
+            Mth.cos(yaw) * Mth.cos(pitch)
         ).normalize();
-        double dot = look.dotProduct(diff);
-        return Math.toDegrees(Math.acos(MathHelper.clamp(dot, -1.0, 1.0)));
+        double dot = look.dot(diff);
+        return Math.toDegrees(Math.acos(Mth.clamp(dot, -1.0, 1.0)));
     }
 
-    private boolean hasLineOfSight(Vec3d from, LivingEntity target) {
-        Vec3d to = target.getBoundingBox().getCenter();
-        if (mc.world == null) return true;
-        var result = mc.world.raycast(new RaycastContext(
-            from, to, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
+    private boolean hasLineOfSight(Vec3 from, LivingEntity target) {
+        Vec3 to = target.getBoundingBox().getCenter();
+        if (mc.level == null) return true;
+        var result = mc.level.clip(new ClipContext(
+            from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
         return result.getType() == HitResult.Type.MISS;
     }
 
-    private Vec3d getTargetPosition(LivingEntity target) {
+    private Vec3 getTargetPosition(LivingEntity target) {
         if (aimAtHead.get()) {
-            return new Vec3d(target.getX(), target.getEyeY(), target.getZ());
+            return new Vec3(target.getX(), target.getEyeY(), target.getZ());
         }
         return target.getBoundingBox().getCenter();
     }
 
-    private Vec3d predictTargetPosition(LivingEntity target, Vec3d currentPos, Vec3d origin) {
-        Vec3d targetVel = target.getVelocity();
-        if (targetVel.lengthSquared() < 0.001) return currentPos;
+    private Vec3 predictTargetPosition(LivingEntity target, Vec3 currentPos, Vec3 origin) {
+        Vec3 targetVel = target.getDeltaMovement();
+        if (targetVel.lengthSqr() < 0.001) return currentPos;
 
         double dist = origin.distanceTo(currentPos);
         double speed = tridentSpeed.get() * currentCharge;
@@ -529,15 +529,15 @@ public class TridentAssist extends Module {
         double flightTime = dist / speed;
         flightTime = Math.min(flightTime, predictionSteps.get());
 
-        Vec3d predicted = currentPos.add(targetVel.multiply(flightTime));
-        if (mc.world != null && predicted.y < mc.world.getBottomY()) {
-            predicted = new Vec3d(predicted.x, mc.world.getBottomY(), predicted.z);
+        Vec3 predicted = currentPos.add(targetVel.scale(flightTime));
+        if (mc.level != null && predicted.y < mc.level.getMinY()) {
+            predicted = new Vec3(predicted.x, mc.level.getMinY(), predicted.z);
         }
         return predicted;
     }
 
-    private AimSolution solveAim(Vec3d origin, Vec3d target) {
-        Vec3d delta = target.subtract(origin);
+    private AimSolution solveAim(Vec3 origin, Vec3 target) {
+        Vec3 delta = target.subtract(origin);
         double dx = delta.x;
         double dy = delta.y;
         double dz = delta.z;
@@ -564,7 +564,7 @@ public class TridentAssist extends Module {
         return new AimSolution(yaw, pitch);
     }
 
-    private float refinePitchWithSimulation(Vec3d origin, Vec3d target, float initialPitch, double speed, double g) {
+    private float refinePitchWithSimulation(Vec3 origin, Vec3 target, float initialPitch, double speed, double g) {
         float bestPitch = initialPitch;
         double bestError = simulateError(origin, target, bestPitch, speed, g);
 
@@ -579,65 +579,65 @@ public class TridentAssist extends Module {
         return bestPitch;
     }
 
-    private double simulateError(Vec3d origin, Vec3d target, float pitch, double speed, double g) {
-        Vec3d pos = origin;
-        Vec3d vel = Vec3d.fromPolar(pitch, lastCalculatedYaw).multiply(speed);
-        double bestDist = pos.squaredDistanceTo(target);
+    private double simulateError(Vec3 origin, Vec3 target, float pitch, double speed, double g) {
+        Vec3 pos = origin;
+        Vec3 vel = Vec3.directionFromRotation(pitch, lastCalculatedYaw).scale(speed);
+        double bestDist = pos.distanceToSqr(target);
         int maxSteps = Math.min(simSteps.get(), 100);
 
         for (int i = 0; i < maxSteps; i++) {
-            Vec3d next = pos.add(vel);
-            double d = next.squaredDistanceTo(target);
+            Vec3 next = pos.add(vel);
+            double d = next.distanceToSqr(target);
             if (d < bestDist) bestDist = d;
             pos = next;
-            vel = vel.multiply(tridentDrag.get());
+            vel = vel.scale(tridentDrag.get());
             vel = vel.add(0, -g, 0);
-            if (pos.y < mc.world.getBottomY() - 4) break;
+            if (pos.y < mc.level.getMinY() - 4) break;
         }
         return bestDist;
     }
 
-    private void simulateTrajectory(Vec3d origin, float yaw, float pitch, List<Vec3d> out) {
+    private void simulateTrajectory(Vec3 origin, float yaw, float pitch, List<Vec3> out) {
         out.clear();
         double speed = tridentSpeed.get() * currentCharge;
         double g = tridentGravity.get();
-        Vec3d pos = origin;
-        Vec3d vel = Vec3d.fromPolar(pitch, yaw).multiply(speed);
+        Vec3 pos = origin;
+        Vec3 vel = Vec3.directionFromRotation(pitch, yaw).scale(speed);
 
         out.add(pos);
 
         int maxSteps = Math.min(simSteps.get(), 120);
         for (int i = 0; i < maxSteps; i++) {
-            Vec3d next = pos.add(vel);
+            Vec3 next = pos.add(vel);
 
-            if (mc.world != null) {
-                var result = mc.world.raycast(new RaycastContext(
-                    pos, next, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
+            if (mc.level != null) {
+                var result = mc.level.clip(new ClipContext(
+                    pos, next, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
                 if (result.getType() == HitResult.Type.BLOCK) {
-                    out.add(result.getPos());
+                    out.add(result.getLocation());
                     break;
                 }
             }
 
             out.add(next);
             pos = next;
-            vel = vel.multiply(tridentDrag.get());
+            vel = vel.scale(tridentDrag.get());
             vel = vel.add(0, -g, 0);
-            if (pos.y < mc.world.getBottomY() - 4) break;
+            if (pos.y < mc.level.getMinY() - 4) break;
         }
     }
 
     private void applyAim(float targetYaw, float targetPitch) {
         double speed = aimSpeed.get();
         if (aimMode.get() == AimMode.Visible) {
-            float currentYaw = mc.player.getYaw();
-            float currentPitch = mc.player.getPitch();
-            float yawDelta = MathHelper.wrapDegrees(targetYaw - currentYaw);
+            float currentYaw = mc.player.getYRot();
+            float currentPitch = mc.player.getXRot();
+            float yawDelta = Mth.wrapDegrees(targetYaw - currentYaw);
             float pitchDelta = targetPitch - currentPitch;
             float newYaw = currentYaw + (float) (yawDelta * speed);
             float newPitch = currentPitch + (float) (pitchDelta * speed);
-            mc.player.setYaw(newYaw);
-            mc.player.setPitch(newPitch);
+            mc.player.setYRot(newYaw);
+            mc.player.setXRot(newPitch);
         } else {
             Rotations.rotate(targetYaw, targetPitch, (int) (20 / speed), false, () -> {});
         }
@@ -648,8 +648,8 @@ public class TridentAssist extends Module {
         if (renderMode.get() == RenderMode.Off || trajectoryPoints.isEmpty()) return;
 
         for (int i = 0; i < trajectoryPoints.size() - 1; i++) {
-            Vec3d from = trajectoryPoints.get(i);
-            Vec3d to = trajectoryPoints.get(i + 1);
+            Vec3 from = trajectoryPoints.get(i);
+            Vec3 to = trajectoryPoints.get(i + 1);
 
             float t = (float) i / Math.max(1, trajectoryPoints.size() - 1);
             meteordevelopment.meteorclient.utils.render.color.Color c =
@@ -671,11 +671,11 @@ public class TridentAssist extends Module {
 
     @Override
     public String getInfoString() {
-        if (mc.player == null || !(mc.player.getMainHandStack().getItem() instanceof TridentItem)) return "Off";
+        if (mc.player == null || !(mc.player.getMainHandItem().getItem() instanceof TridentItem)) return "Off";
         if (currentTarget == null) return "No target";
 
         StringBuilder sb = new StringBuilder();
-        String name = currentTarget instanceof PlayerEntity p
+        String name = currentTarget instanceof Player p
             ? p.getName().getString() : currentTarget.getName().getString();
         sb.append("\u2192 ").append(name);
 
@@ -684,7 +684,7 @@ public class TridentAssist extends Module {
         if (hasChanneling) sb.append(" | Channeling");
         if (impalingLevel > 0) sb.append(" | Impaling ").append(impalingLevel);
 
-        int combo = ComboTracker.getCombo(currentTarget.getUuid());
+        int combo = ComboTracker.getCombo(currentTarget.getUUID());
         if (combo > 0) sb.append(" | combo: ").append(combo);
 
         return sb.toString();

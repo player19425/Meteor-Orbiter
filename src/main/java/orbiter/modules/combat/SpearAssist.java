@@ -7,19 +7,19 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.item.MaceItem;
-import net.minecraft.item.TridentItem;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.MaceItem;
+import net.minecraft.world.item.TridentItem;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
 import orbiter.Orbiter;
 import orbiter.util.ComboTracker;
 
@@ -229,7 +229,7 @@ public class SpearAssist extends Module {
 
     @EventHandler(priority = EventPriority.HIGH)
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         tickCounter++;
         if (jabCooldown > 0) jabCooldown--;
 
@@ -244,8 +244,8 @@ public class SpearAssist extends Module {
             return;
         }
 
-        Vec3d eyes = mc.player.getEyePos();
-        Vec3d targetCenter = currentTarget.getBoundingBox().getCenter();
+        Vec3 eyes = mc.player.getEyePosition();
+        Vec3 targetCenter = currentTarget.getBoundingBox().getCenter();
         double dist = eyes.distanceTo(targetCenter);
 
         if (dist < minAttackRange.get()) {
@@ -256,21 +256,21 @@ public class SpearAssist extends Module {
             return;
         }
 
-        Vec3d aimPos = aimAtCenter.get() ? targetCenter : new Vec3d(currentTarget.getX(), currentTarget.getEyeY(), currentTarget.getZ());
+        Vec3 aimPos = aimAtCenter.get() ? targetCenter : new Vec3(currentTarget.getX(), currentTarget.getEyeY(), currentTarget.getZ());
         float targetYaw = (float) (Math.toDegrees(Math.atan2(aimPos.z - eyes.z, aimPos.x - eyes.x)) - 90.0f);
         float targetPitch = (float) -Math.toDegrees(Math.atan2(aimPos.y - eyes.y, Math.sqrt(
             (aimPos.x - eyes.x) * (aimPos.x - eyes.x) + (aimPos.z - eyes.z) * (aimPos.z - eyes.z))));
 
-        float angleDiff = Math.abs(MathHelper.wrapDegrees(targetYaw - mc.player.getYaw()));
+        float angleDiff = Math.abs(Mth.wrapDegrees(targetYaw - mc.player.getYRot()));
         if (angleDiff > maxAimAngle.get().floatValue()) return;
 
         double speed = aimSpeed.get();
-        float newYaw = (float) (mc.player.getYaw() + MathHelper.wrapDegrees(targetYaw - mc.player.getYaw()) * speed);
-        float newPitch = (float) (mc.player.getPitch() + (targetPitch - mc.player.getPitch()) * speed);
+        float newYaw = (float) (mc.player.getYRot() + Mth.wrapDegrees(targetYaw - mc.player.getYRot()) * speed);
+        float newPitch = (float) (mc.player.getXRot() + (targetPitch - mc.player.getXRot()) * speed);
 
         if (aimMode.get() == AimMode.Visible) {
-            mc.player.setYaw(newYaw);
-            mc.player.setPitch(newPitch);
+            mc.player.setYRot(newYaw);
+            mc.player.setXRot(newPitch);
         }
 
         if (!autoAttack.get()) return;
@@ -278,7 +278,7 @@ public class SpearAssist extends Module {
         AttackMode effectiveMode = attackMode.get();
         if (effectiveMode == AttackMode.Auto) {
 
-            double playerSpeed = new Vec3d(mc.player.getVelocity().x, 0, mc.player.getVelocity().z).length() * 20;
+            double playerSpeed = new Vec3(mc.player.getDeltaMovement().x, 0, mc.player.getDeltaMovement().z).length() * 20;
             if (enableChargeAttack.get() && playerSpeed >= minChargeSpeed.get()) {
                 effectiveMode = AttackMode.ChargeOnly;
             } else {
@@ -309,20 +309,20 @@ public class SpearAssist extends Module {
     private void tryJabAttack(LivingEntity target, double dist, float angleDiff) {
         if (jabCooldown > 0) return;
 
-        if (!ignoreJabCooldown.get() && mc.player.getAttackCooldownProgress(0.5f) < 1.0f) return;
+        if (!ignoreJabCooldown.get() && mc.player.getAttackStrengthScale(0.5f) < 1.0f) return;
 
         if (critOnly.get()) {
-            boolean canCrit = !mc.player.isOnGround() && mc.player.getVelocity().y < -0.08;
+            boolean canCrit = !mc.player.onGround() && mc.player.getDeltaMovement().y < -0.08;
             if (!canCrit) return;
         }
 
         if (dist > range.get()) return;
         if (angleDiff > 15.0f) return;
 
-        if (mc.interactionManager != null) {
-            mc.interactionManager.attackEntity(mc.player, target);
-            mc.player.swingHand(Hand.MAIN_HAND);
-            if (trackCombo.get()) ComboTracker.registerHit(target.getUuid());
+        if (mc.gameMode != null) {
+            mc.gameMode.attack(mc.player, target);
+            mc.player.swing(InteractionHand.MAIN_HAND);
+            if (trackCombo.get()) ComboTracker.registerHit(target.getUUID());
             jabCooldown = jabCooldownTicks.get();
         }
     }
@@ -330,18 +330,18 @@ public class SpearAssist extends Module {
     private void tryChargeAttack(LivingEntity target, double dist) {
         if (!enableChargeAttack.get()) return;
 
-        double playerSpeed = new Vec3d(mc.player.getVelocity().x, 0, mc.player.getVelocity().z).length() * 20;
-        double targetSpeed = new Vec3d(target.getVelocity().x, 0, target.getVelocity().z).length() * 20;
+        double playerSpeed = new Vec3(mc.player.getDeltaMovement().x, 0, mc.player.getDeltaMovement().z).length() * 20;
+        double targetSpeed = new Vec3(target.getDeltaMovement().x, 0, target.getDeltaMovement().z).length() * 20;
         double relativeSpeed = Math.abs(playerSpeed - targetSpeed);
 
         if (relativeSpeed < minChargeSpeed.get()) {
 
             if (autoChargeWhenMoving.get() && mc.player.isSprinting() && !isCharging) {
-                Vec3d toTarget = target.getBoundingBox().getCenter().subtract(mc.player.getEyePos()).normalize();
-                Vec3d moveDir = mc.player.getVelocity().normalize();
-                if (toTarget.dotProduct(moveDir) > 0.5) {
+                Vec3 toTarget = target.getBoundingBox().getCenter().subtract(mc.player.getEyePosition()).normalize();
+                Vec3 moveDir = mc.player.getDeltaMovement().normalize();
+                if (toTarget.dot(moveDir) > 0.5) {
 
-                    mc.options.useKey.setPressed(true);
+                    mc.options.keyUse.setDown(true);
                     isCharging = true;
                 }
             }
@@ -351,7 +351,7 @@ public class SpearAssist extends Module {
         if (isCharging) {
 
             if (target == null || !target.isAlive() || dist > range.get() + 2) {
-                mc.options.useKey.setPressed(false);
+                mc.options.keyUse.setDown(false);
                 isCharging = false;
             }
         }
@@ -359,7 +359,7 @@ public class SpearAssist extends Module {
 
     private boolean isHoldingMeleeWeapon() {
         if (mc.player == null) return false;
-        Item item = mc.player.getMainHandStack().getItem();
+        Item item = mc.player.getMainHandItem().getItem();
 
         return item instanceof MaceItem
             || item instanceof TridentItem
@@ -380,10 +380,10 @@ public class SpearAssist extends Module {
     }
 
     private LivingEntity findBestTarget() {
-        Vec3d eyes = mc.player.getEyePos();
+        Vec3 eyes = mc.player.getEyePosition();
         List<LivingEntity> candidates = new ArrayList<>();
 
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (!isValidTarget(living)) continue;
 
@@ -410,35 +410,35 @@ public class SpearAssist extends Module {
         if (entity == null || !entity.isAlive() || entity.isSpectator()) return false;
         if (entity == mc.player) return false;
         if (!entity.isAttackable()) return false;
-        if (entity instanceof PlayerEntity p) {
+        if (entity instanceof Player p) {
             if (ignoreFriends.get() && Friends.get().isFriend(p)) return false;
-            if (ignoreCreative.get() && p.getAbilities().creativeMode) return false;
+            if (ignoreCreative.get() && p.getAbilities().instabuild) return false;
         }
-        if (playersOnly.get() && !(entity instanceof PlayerEntity)) return false;
+        if (playersOnly.get() && !(entity instanceof Player)) return false;
         if (ignoreInvisibles.get() && entity.isInvisible()) return false;
         return true;
     }
 
     private double getAngleToEntity(LivingEntity entity) {
-        Vec3d playerEyes = mc.player.getEyePos();
-        Vec3d targetCenter = entity.getBoundingBox().getCenter();
-        Vec3d diff = targetCenter.subtract(playerEyes).normalize();
-        float yaw = mc.player.getYaw() * ((float) Math.PI / 180f);
-        float pitch = mc.player.getPitch() * ((float) Math.PI / 180f);
-        Vec3d look = new Vec3d(
-            -MathHelper.sin(yaw) * MathHelper.cos(pitch),
-            -MathHelper.sin(pitch),
-            MathHelper.cos(yaw) * MathHelper.cos(pitch)
+        Vec3 playerEyes = mc.player.getEyePosition();
+        Vec3 targetCenter = entity.getBoundingBox().getCenter();
+        Vec3 diff = targetCenter.subtract(playerEyes).normalize();
+        float yaw = mc.player.getYRot() * ((float) Math.PI / 180f);
+        float pitch = mc.player.getXRot() * ((float) Math.PI / 180f);
+        Vec3 look = new Vec3(
+            -Mth.sin(yaw) * Mth.cos(pitch),
+            -Mth.sin(pitch),
+            Mth.cos(yaw) * Mth.cos(pitch)
         ).normalize();
-        double dot = look.dotProduct(diff);
-        return Math.toDegrees(Math.acos(MathHelper.clamp(dot, -1.0, 1.0)));
+        double dot = look.dot(diff);
+        return Math.toDegrees(Math.acos(Mth.clamp(dot, -1.0, 1.0)));
     }
 
-    private boolean hasLineOfSight(Vec3d from, LivingEntity target) {
-        Vec3d to = target.getBoundingBox().getCenter();
-        if (mc.world == null) return true;
-        var result = mc.world.raycast(new RaycastContext(
-            from, to, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
+    private boolean hasLineOfSight(Vec3 from, LivingEntity target) {
+        Vec3 to = target.getBoundingBox().getCenter();
+        if (mc.level == null) return true;
+        var result = mc.level.clip(new ClipContext(
+            from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
         return result.getType() == HitResult.Type.MISS;
     }
 
@@ -447,7 +447,7 @@ public class SpearAssist extends Module {
         if (currentTarget == null) return "No target";
 
         StringBuilder sb = new StringBuilder();
-        String name = currentTarget instanceof PlayerEntity p
+        String name = currentTarget instanceof Player p
             ? p.getName().getString() : currentTarget.getName().getString();
         sb.append("\u2192 ").append(name);
 
@@ -455,7 +455,7 @@ public class SpearAssist extends Module {
         if (jabCooldown > 0) sb.append(" | cd: ").append(jabCooldown);
 
         if (trackCombo.get()) {
-            int combo = ComboTracker.getCombo(currentTarget.getUuid());
+            int combo = ComboTracker.getCombo(currentTarget.getUUID());
             if (combo > 0) sb.append(" | combo: ").append(combo);
         }
 

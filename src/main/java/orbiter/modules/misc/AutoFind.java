@@ -9,16 +9,16 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.entity.*;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.chunk.ChunkSection;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.*;
+import net.minecraft.network.chat.Component;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -53,7 +53,7 @@ public class AutoFind extends Module {
         public final int blockCount;
 
         public FindResult(BlockPos pos, String category, String criteria, int blockCount) {
-            this.pos = pos.toImmutable();
+            this.pos = pos.immutable();
             this.category = category;
             this.criteria = criteria;
             this.timestamp = System.currentTimeMillis();
@@ -73,7 +73,7 @@ public class AutoFind extends Module {
     private static final int MAX_CHUNK_Z = (WORLD_BOUNDARY - 1) >> 4;
 
     private final SettingGroup sgGeneral    = settings.getDefaultGroup();
-    private final SettingGroup sgFlight     = settings.createGroup("World Sweep Flight");
+    private final SettingGroup sgFlight     = settings.createGroup("Level Sweep Flight");
     private final SettingGroup sgStash      = settings.createGroup("Stash Finder");
     private final SettingGroup sgBase       = settings.createGroup("Base Finder");
     private final SettingGroup sgStorage    = settings.createGroup("Storage Finder");
@@ -405,7 +405,7 @@ public class AutoFind extends Module {
     private static final Color STORAGE_OTHER_LINE = new Color(150, 150, 150, 200);
 
     public AutoFind() {
-        super(Orbiter.CATEGORY, "auto-find", "Scan for stashes, bases, and storage. World-wrapping flight scanner.");
+        super(Orbiter.CATEGORY, "auto-find", "Scan for stashes, bases, and storage. Level-wrapping flight scanner.");
     }
 
     @Override
@@ -427,7 +427,7 @@ public class AutoFind extends Module {
     public boolean isPaused() { return paused; }
 
     private void scanEnvironment() {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         if (scanMode.get() == ScanMode.LocalRadius) {
             scanLoadedChunks();
         }
@@ -436,13 +436,13 @@ public class AutoFind extends Module {
     @Override
     public void onDeactivate() {
         if (logResults.get() && !results.isEmpty()) {
-            ChatUtils.sendMsg(Text.literal("§6[AutoFind] §fSession summary: §a" + results.size() + " §ffindings logged."));
+            ChatUtils.sendMsg(Component.literal("§6[AutoFind] §fSession summary: §a" + results.size() + " §ffindings logged."));
             for (FindResult r : results) {
-                ChatUtils.sendMsg(Text.literal("§7 - " + r.toDisplayString()));
+                ChatUtils.sendMsg(Component.literal("§7 - " + r.toDisplayString()));
             }
         }
         if (scanMode.get() == ScanMode.WorldSweep) {
-            info("World sweep stopped. §a" + totalSweepChunksScanned + "§r chunks scanned, §e" + results.size() + "§r findings.");
+            info("Level sweep stopped. §a" + totalSweepChunksScanned + "§r chunks scanned, §e" + results.size() + "§r findings.");
         }
     }
 
@@ -456,7 +456,7 @@ public class AutoFind extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         if (paused) return;
 
         tickCounter++;
@@ -470,10 +470,10 @@ public class AutoFind extends Module {
     }
 
     private void scanLoadedChunks() {
-        if (mc.world == null || mc.player == null || mc.world.getChunkManager() == null) return;
+        if (mc.level == null || mc.player == null || mc.level.getChunkSource() == null) return;
 
-        int playerChunkX = mc.player.getBlockPos().getX() >> 4;
-        int playerChunkZ = mc.player.getBlockPos().getZ() >> 4;
+        int playerChunkX = mc.player.blockPosition().getX() >> 4;
+        int playerChunkZ = mc.player.blockPosition().getZ() >> 4;
         int r = scanRadius.get();
 
         int budget = 2;
@@ -488,7 +488,7 @@ public class AutoFind extends Module {
                 ChunkPos cp = new ChunkPos(cx, cz);
                 if (scannedChunks.contains(cp)) continue;
 
-                WorldChunk chunk = mc.world.getChunkManager().getWorldChunk(cx, cz);
+                LevelChunk chunk = mc.level.getChunk(cx, cz);
                 if (chunk == null) continue;
 
                 scannedChunks.add(cp);
@@ -524,7 +524,7 @@ public class AutoFind extends Module {
 
         sweepInitialized = true;
         sweepComplete = false;
-        info("World sweep started at §a" + (int) flightX + ", " + (int) flightZ + "§r with pattern §e" + flightPattern.get());
+        info("Level sweep started at §a" + (int) flightX + ", " + (int) flightZ + "§r with pattern §e" + flightPattern.get());
     }
 
     private void tickWorldSweep() {
@@ -544,7 +544,7 @@ public class AutoFind extends Module {
             ChunkPos cp = new ChunkPos(cx, cz);
             if (!scannedChunks.contains(cp)) {
 
-                WorldChunk chunk = mc.world.getChunkManager().getWorldChunk(cx, cz);
+                LevelChunk chunk = mc.level.getChunk(cx, cz);
                 if (chunk != null) {
                     scannedChunks.add(cp);
                     scanChunk(chunk, cp);
@@ -560,17 +560,17 @@ public class AutoFind extends Module {
 
             if (totalSweepChunksScanned > 500_000) {
                 sweepComplete = true;
-                info("World sweep completed. §a" + totalSweepChunksScanned + "§r chunks scanned, §e" + results.size() + "§r findings.");
+                info("Level sweep completed. §a" + totalSweepChunksScanned + "§r chunks scanned, §e" + results.size() + "§r findings.");
                 break;
             }
         }
 
-        if (autoTp.get() && mc.player != null && mc.getNetworkHandler() != null && !sweepComplete
-            && mc.player.getAbilities().creativeMode
+        if (autoTp.get() && mc.player != null && mc.getConnection() != null && !sweepComplete
+            && mc.player.getAbilities().instabuild
             && (tickCounter - lastTpTick) >= tpInterval.get()) {
             int bx = wrapBlockX((int) flightX);
             int bz = wrapBlockZ((int) flightZ);
-            mc.getNetworkHandler().sendChatCommand("tp " + bx + " " + flightY.get() + " " + bz);
+            mc.getConnection().sendCommand("tp " + bx + " " + flightY.get() + " " + bz);
             lastTpTick = tickCounter;
         }
     }
@@ -704,9 +704,9 @@ public class AutoFind extends Module {
         return cz;
     }
 
-    private void scanChunk(WorldChunk chunk, ChunkPos cp) {
-        int startX = cp.getStartX();
-        int startZ = cp.getStartZ();
+    private void scanChunk(LevelChunk chunk, ChunkPos cp) {
+        int startX = cp.getMinBlockX();
+        int startZ = cp.getMinBlockZ();
         BlockPos centerOfChunk = new BlockPos(startX + 8, 64, startZ + 8);
 
         if (isExcluded(centerOfChunk)) return;
@@ -727,77 +727,77 @@ public class AutoFind extends Module {
 
             if (be instanceof ChestBlockEntity) {
                 if (stashChests.get() || (findStorage.get() && storageChests.get())) {
-                    storageCount++; storagePositions.add(pos.toImmutable()); storageTypes.add("Chest"); addRenderStorage(pos, STORAGE_CHEST_LINE);
+                    storageCount++; storagePositions.add(pos.immutable()); storageTypes.add("Chest"); addRenderStorage(pos, STORAGE_CHEST_LINE);
                 }
             } else if (be instanceof TrappedChestBlockEntity) {
                 if (stashTrappedChests.get() || (findStorage.get() && storageTrappedChests.get())) {
-                    storageCount++; storagePositions.add(pos.toImmutable()); storageTypes.add("Trapped Chest"); addRenderStorage(pos, STORAGE_CHEST_LINE);
+                    storageCount++; storagePositions.add(pos.immutable()); storageTypes.add("Trapped Chest"); addRenderStorage(pos, STORAGE_CHEST_LINE);
                 }
             } else if (be instanceof BarrelBlockEntity) {
                 if (stashBarrels.get() || (findStorage.get() && storageBarrels.get())) {
-                    storageCount++; storagePositions.add(pos.toImmutable()); storageTypes.add("Barrel"); addRenderStorage(pos, STORAGE_BARREL_LINE);
+                    storageCount++; storagePositions.add(pos.immutable()); storageTypes.add("Barrel"); addRenderStorage(pos, STORAGE_BARREL_LINE);
                 }
             } else if (be instanceof ShulkerBoxBlockEntity) {
                 if (stashShulkers.get() || (findStorage.get() && storageShulkers.get())) {
-                    storageCount++; storagePositions.add(pos.toImmutable()); storageTypes.add("Shulker Box"); addRenderStorage(pos, STORAGE_SHULKER_LINE);
+                    storageCount++; storagePositions.add(pos.immutable()); storageTypes.add("Shulker AABB"); addRenderStorage(pos, STORAGE_SHULKER_LINE);
                 }
             } else if (be instanceof HopperBlockEntity) {
                 if (stashHoppers.get() || (findStorage.get() && storageHoppers.get())) {
-                    storageCount++; storagePositions.add(pos.toImmutable()); storageTypes.add("Hopper"); addRenderStorage(pos, STORAGE_HOPPER_LINE);
+                    storageCount++; storagePositions.add(pos.immutable()); storageTypes.add("Hopper"); addRenderStorage(pos, STORAGE_HOPPER_LINE);
                 }
             } else if (be instanceof DropperBlockEntity) {
                 if (stashDroppers.get() || (findStorage.get() && storageDroppers.get())) {
-                    storageCount++; storagePositions.add(pos.toImmutable()); storageTypes.add("Dropper"); addRenderStorage(pos, STORAGE_OTHER_LINE);
+                    storageCount++; storagePositions.add(pos.immutable()); storageTypes.add("Dropper"); addRenderStorage(pos, STORAGE_OTHER_LINE);
                 }
             } else if (be instanceof DispenserBlockEntity && !(be instanceof DropperBlockEntity)) {
                 if (stashDispensers.get() || (findStorage.get() && storageDispensers.get())) {
-                    storageCount++; storagePositions.add(pos.toImmutable()); storageTypes.add("Dispenser"); addRenderStorage(pos, STORAGE_OTHER_LINE);
+                    storageCount++; storagePositions.add(pos.immutable()); storageTypes.add("Dispenser"); addRenderStorage(pos, STORAGE_OTHER_LINE);
                 }
             }
 
             if (findBases.get()) {
-                if (be instanceof FurnaceBlockEntity && baseFurnaces.get()) { baseIndicatorCount++; basePositions.add(pos.toImmutable()); baseTypes.add("Furnace"); }
-                else if (be instanceof BrewingStandBlockEntity && baseBrewingStands.get()) { baseIndicatorCount++; basePositions.add(pos.toImmutable()); baseTypes.add("Brewing Stand"); }
-                else if (be instanceof BeaconBlockEntity && baseBeacons.get()) { baseIndicatorCount++; basePositions.add(pos.toImmutable()); baseTypes.add("Beacon"); }
-                else if (be instanceof LecternBlockEntity && baseLecterns.get()) { baseIndicatorCount++; basePositions.add(pos.toImmutable()); baseTypes.add("Lectern"); }
-                else if (be instanceof EnchantingTableBlockEntity && baseEnchantTables.get()) { baseIndicatorCount++; basePositions.add(pos.toImmutable()); baseTypes.add("Enchanting Table"); }
+                if (be instanceof FurnaceBlockEntity && baseFurnaces.get()) { baseIndicatorCount++; basePositions.add(pos.immutable()); baseTypes.add("Furnace"); }
+                else if (be instanceof BrewingStandBlockEntity && baseBrewingStands.get()) { baseIndicatorCount++; basePositions.add(pos.immutable()); baseTypes.add("Brewing Stand"); }
+                else if (be instanceof BeaconBlockEntity && baseBeacons.get()) { baseIndicatorCount++; basePositions.add(pos.immutable()); baseTypes.add("Beacon"); }
+                else if (be instanceof LecternBlockEntity && baseLecterns.get()) { baseIndicatorCount++; basePositions.add(pos.immutable()); baseTypes.add("Lectern"); }
+                else if (be instanceof EnchantingTableBlockEntity && baseEnchantTables.get()) { baseIndicatorCount++; basePositions.add(pos.immutable()); baseTypes.add("Enchanting Table"); }
             }
         }
 
         if (findBases.get()) {
-            int minY = mc.world.getBottomY();
-            int maxY = mc.world.getTopYInclusive();
+            int minY = mc.level.getMinY();
+            int maxY = mc.level.getMaxY();
 
             for (int x = startX; x < startX + 16; x++) {
                 for (int z = startZ; z < startZ + 16; z++) {
                     for (int y = minY; y <= maxY; y++) {
-                        BlockPos.Mutable mpos = new BlockPos.Mutable(x, y, z);
+                        BlockPos.MutableBlockPos mpos = new BlockPos.MutableBlockPos(x, y, z);
                         BlockState state = chunk.getBlockState(mpos);
                         Block block = state.getBlock();
 
                         if (basePistons.get() && (block == Blocks.PISTON || block == Blocks.STICKY_PISTON || block == Blocks.PISTON_HEAD || block == Blocks.MOVING_PISTON)) {
-                            baseIndicatorCount++; basePositions.add(mpos.toImmutable()); baseTypes.add("Piston");
+                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Piston");
                         } else if (baseRedstone.get() && block == Blocks.REDSTONE_WIRE) {
-                            baseIndicatorCount++; basePositions.add(mpos.toImmutable()); baseTypes.add("Redstone Wire");
+                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Redstone Wire");
                         } else if (baseRepeaters.get() && block == Blocks.REPEATER) {
-                            baseIndicatorCount++; basePositions.add(mpos.toImmutable()); baseTypes.add("Repeater");
+                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Repeater");
                         } else if (baseComparators.get() && block == Blocks.COMPARATOR) {
-                            baseIndicatorCount++; basePositions.add(mpos.toImmutable()); baseTypes.add("Comparator");
+                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Comparator");
                         } else if (baseObservers.get() && block == Blocks.OBSERVER) {
-                            baseIndicatorCount++; basePositions.add(mpos.toImmutable()); baseTypes.add("Observer");
+                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Observer");
                         } else if (baseCraftingTables.get() && block == Blocks.CRAFTING_TABLE) {
-                            baseIndicatorCount++; basePositions.add(mpos.toImmutable()); baseTypes.add("Crafting Table");
+                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Crafting Table");
                         } else if (baseAnvils.get() && (block == Blocks.ANVIL || block == Blocks.CHIPPED_ANVIL || block == Blocks.DAMAGED_ANVIL)) {
-                            baseIndicatorCount++; basePositions.add(mpos.toImmutable()); baseTypes.add("Anvil");
+                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Anvil");
                         } else if (baseBeds.get() && translationKeyContains(state.getBlock(), "bed")) {
-                            baseIndicatorCount++; basePositions.add(mpos.toImmutable()); baseTypes.add("Bed");
+                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Bed");
                         } else if (baseLogStripping.get() && translationKeyContains(block, "stripped")) {
-                            baseIndicatorCount++; basePositions.add(mpos.toImmutable()); baseTypes.add("Stripped Log");
+                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Stripped Log");
                         }
 
                         if (block == Blocks.ENDER_CHEST) {
                             if (stashEnderChests.get() || (findStorage.get() && storageEnderChests.get())) {
-                                storageCount++; storagePositions.add(mpos.toImmutable()); storageTypes.add("Ender Chest"); addRenderStorage(mpos.toImmutable(), STORAGE_ENDER_LINE);
+                                storageCount++; storagePositions.add(mpos.immutable()); storageTypes.add("Ender Chest"); addRenderStorage(mpos.immutable(), STORAGE_ENDER_LINE);
                             }
                         }
 
@@ -855,12 +855,12 @@ public class AutoFind extends Module {
 
     private boolean translationKeyContains(Block block, String substring) {
         if (block == null) return false;
-        String tk = block.getTranslationKey();
+        String tk = block.getDescriptionId();
         return tk != null && tk.contains(substring);
     }
 
     private BlockPos averagePos(List<BlockPos> positions) {
-        if (positions.isEmpty()) return BlockPos.ORIGIN;
+        if (positions.isEmpty()) return BlockPos.ZERO;
         long x = 0, y = 0, z = 0;
         for (BlockPos p : positions) { x += p.getX(); y += p.getY(); z += p.getZ(); }
         int size = positions.size();
@@ -882,11 +882,11 @@ public class AutoFind extends Module {
         }
 
         switch (notifyMode.get()) {
-            case Chat -> ChatUtils.sendMsg(Text.literal(msg));
-            case ActionBar -> { if (mc.player != null) mc.player.sendMessage(Text.literal(msg), true); }
-            case Both -> { ChatUtils.sendMsg(Text.literal(msg)); if (mc.player != null) mc.player.sendMessage(Text.literal(msg), true); }
-            case Toast -> { if (mc.getToastManager() != null) mc.getToastManager().add(new net.minecraft.client.toast.SystemToast(net.minecraft.client.toast.SystemToast.Type.PERIODIC_NOTIFICATION, Text.literal("§6AutoFind " + result.category), Text.literal(result.criteria))); }
-            case All -> { ChatUtils.sendMsg(Text.literal(msg)); if (mc.player != null) mc.player.sendMessage(Text.literal(msg), true); if (mc.getToastManager() != null) mc.getToastManager().add(new net.minecraft.client.toast.SystemToast(net.minecraft.client.toast.SystemToast.Type.PERIODIC_NOTIFICATION, Text.literal("§6AutoFind " + result.category), Text.literal(result.criteria))); }
+            case Chat -> ChatUtils.sendMsg(Component.literal(msg));
+            case ActionBar -> { if (mc.player != null) mc.player.sendOverlayMessage(Component.literal(msg)); }
+            case Both -> { ChatUtils.sendMsg(Component.literal(msg)); if (mc.player != null) mc.player.sendOverlayMessage(Component.literal(msg)); }
+            case Toast -> { if (mc.gui.toastManager() != null) mc.gui.toastManager().addToast(new net.minecraft.client.gui.components.toasts.SystemToast(net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION, Component.literal("§6AutoFind " + result.category), Component.literal(result.criteria))); }
+            case All -> { ChatUtils.sendMsg(Component.literal(msg)); if (mc.player != null) mc.player.sendOverlayMessage(Component.literal(msg)); if (mc.gui.toastManager() != null) mc.gui.toastManager().addToast(new net.minecraft.client.gui.components.toasts.SystemToast(net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION, Component.literal("§6AutoFind " + result.category), Component.literal(result.criteria))); }
             case None -> {}
         }
 
@@ -897,7 +897,7 @@ public class AutoFind extends Module {
                 wp.getClass().getField("name").set(wp, result.category + " " + result.blockCount);
                 Object mutablePos = wp.getClass().getField("pos").get(wp);
                 mutablePos.getClass().getMethod("set", double.class, double.class, double.class).invoke(mutablePos, result.pos.getX(), result.pos.getY(), result.pos.getZ());
-                wp.getClass().getField("dimension").set(wp, mc.world.getRegistryKey());
+                wp.getClass().getField("dimension").set(wp, mc.level.dimension());
                 waypointsObj.getClass().getMethod("add", Class.forName("meteordevelopment.meteorclient.systems.waypoints.Waypoint")).invoke(waypointsObj, wp);
             } catch (Exception ignored) {}
         }
@@ -918,7 +918,7 @@ public class AutoFind extends Module {
     }
 
     private void addRenderStorage(BlockPos pos, Color color) {
-        BlockPos immutable = pos.toImmutable();
+        BlockPos immutable = pos.immutable();
         if (!renderStoragePositions.contains(immutable)) {
             renderStoragePositions.add(immutable);
             renderStorageColors.put(immutable, new Color(color.r, color.g, color.b, lineOpacity.get()));
@@ -943,11 +943,11 @@ public class AutoFind extends Module {
 
             BlockPos p = result.pos;
             renderEsp(event, p, fill, line);
-            renderEsp(event, p.up(), fill, line);
-            renderEsp(event, p.down(), fill, line);
+            renderEsp(event, p.above(), fill, line);
+            renderEsp(event, p.below(), fill, line);
 
             if (tracers.get() && mc.player != null) {
-                Vec3d cam = mc.player.getEyePos();
+                Vec3 cam = mc.player.getEyePosition();
                 event.renderer.line(cam.x, cam.y, cam.z, p.getX() + 0.5, p.getY() + 0.5, p.getZ() + 0.5, line);
             }
         }

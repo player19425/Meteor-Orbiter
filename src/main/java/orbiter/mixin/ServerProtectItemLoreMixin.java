@@ -1,14 +1,14 @@
 package orbiter.mixin;
 
 import orbiter.modules.misc.ServerProtect;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.WrittenBookContentComponent;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.tooltip.TooltipType;
-import net.minecraft.text.RawFilteredPair;
-import net.minecraft.text.Text;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.component.WrittenBookContent;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.server.network.Filterable;
+import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -20,8 +20,8 @@ import java.util.List;
 @Mixin(ItemStack.class)
 public abstract class ServerProtectItemLoreMixin {
 
-    @Inject(method = "getTooltip", at = @At("RETURN"), cancellable = true)
-    private void orbiter$sanitizeLore(Item.TooltipContext context, PlayerEntity player, TooltipType type, CallbackInfoReturnable<List<Text>> cir) {
+    @Inject(method = "getTooltipLines", at = @At("RETURN"), cancellable = true)
+    private void orbiter$sanitizeLore(Item.TooltipContext context, Player player, TooltipFlag type, CallbackInfoReturnable<List<Component>> cir) {
         ServerProtect module = ServerProtect.get();
 
         if (module == null || !module.isActive()) return;
@@ -30,7 +30,7 @@ public abstract class ServerProtectItemLoreMixin {
         if (self.isEmpty()) return;
 
         if (module.shouldSanitizeCopyForTooltip()) {
-            List<Text> safeView = ServerProtect.createSafeItemTooltip(self);
+            List<Component> safeView = ServerProtect.createSafeItemTooltip(self);
             if (!safeView.isEmpty()) {
                 cir.setReturnValue(safeView);
                 return;
@@ -40,42 +40,42 @@ public abstract class ServerProtectItemLoreMixin {
         if (module.shouldValidateEntityData() && module.shouldSanitizeCopyForTooltip()) {
             if (ServerProtect.isMaliciousEntityDataOnly(self)) {
                 cir.setReturnValue(List.of(
-                    Text.literal("\u00a7c[ServerProtect] Malicious entity data detected"),
-                    Text.literal("\u00a77Tooltip hidden; the live item was not modified.")
+                    Component.literal("\u00a7c[ServerProtect] Malicious entity data detected"),
+                    Component.literal("\u00a77Tooltip hidden; the live item was not modified.")
                 ));
                 return;
             }
         }
 
-        WrittenBookContentComponent bookContent = self.get(DataComponentTypes.WRITTEN_BOOK_CONTENT);
+        WrittenBookContent bookContent = self.get(DataComponents.WRITTEN_BOOK_CONTENT);
         if (bookContent != null && bookContent.pages() != null) {
-            List<RawFilteredPair<Text>> pages = bookContent.pages();
+            List<Filterable<Component>> pages = bookContent.pages();
             int totalLen = 0;
             boolean abusivePage = false;
-            for (RawFilteredPair<Text> page : pages) {
-                Text raw = page.raw();
+            for (Filterable<Component> page : pages) {
+                Component raw = page.raw();
                 totalLen += raw.getString().length();
                 if (ServerProtect.isAbusiveText(raw)) { abusivePage = true; break; }
             }
             if (abusivePage || totalLen > 1800 || pages.size() > 50) {
                 cir.setReturnValue(List.of(
-                    Text.literal("\u00a7c[ServerProtect] Book content stripped"),
-                    Text.literal("\u00a77Total: " + totalLen + " chars, " + pages.size() + " pages")
+                    Component.literal("\u00a7c[ServerProtect] Book content stripped"),
+                    Component.literal("\u00a77Total: " + totalLen + " chars, " + pages.size() + " pages")
                 ));
                 return;
             }
         }
 
-        Text customName = self.get(DataComponentTypes.CUSTOM_NAME);
+        Component customName = self.get(DataComponents.CUSTOM_NAME);
         if (module.shouldSanitizeNames() && customName != null) {
             if (ServerProtect.isAbusiveText(customName)
                 || customName.getString().length() > module.getMaxNameLength()) {
 
-                List<Text> original = cir.getReturnValue();
-                List<Text> sanitized = new ArrayList<>();
-                sanitized.add(Text.literal("\u00a7c[ServerProtect] Abusive custom name hidden"));
+                List<Component> original = cir.getReturnValue();
+                List<Component> sanitized = new ArrayList<>();
+                sanitized.add(Component.literal("\u00a7c[ServerProtect] Abusive custom name hidden"));
                 if (original != null) {
-                    for (Text line : original) {
+                    for (Component line : original) {
                         if (ServerProtect.isAbusiveText(line)) continue;
                         String raw = line.getString();
                         if (raw.length() > 100) continue;
@@ -89,14 +89,14 @@ public abstract class ServerProtectItemLoreMixin {
             }
         }
 
-        List<Text> original = cir.getReturnValue();
+        List<Component> original = cir.getReturnValue();
         if (original == null || original.isEmpty()) return;
 
         int maxLen = module.getMaxLoreLength();
         boolean needsFilter = false;
         int totalLen = 0;
 
-        for (Text line : original) {
+        for (Component line : original) {
 
             if (ServerProtect.isAbusiveText(line)) { needsFilter = true; break; }
             String raw = line.getString();
@@ -108,9 +108,9 @@ public abstract class ServerProtectItemLoreMixin {
 
         if (!needsFilter) return;
 
-        List<Text> sanitized = new ArrayList<>();
-        sanitized.add(Text.literal("\u00a7c[ServerProtect] Lore stripped - too large/abusive"));
-        for (Text line : original) {
+        List<Component> sanitized = new ArrayList<>();
+        sanitized.add(Component.literal("\u00a7c[ServerProtect] ItemLore stripped - too large/abusive"));
+        for (Component line : original) {
             if (ServerProtect.isAbusiveText(line)) continue;
             String raw = line.getString();
             if (raw.length() > 100) continue;

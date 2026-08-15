@@ -2,7 +2,7 @@ package orbiter.util;
 
 import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.RootCommandNode;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -20,9 +20,9 @@ public final class ServerCapabilities {
         this.capturedAt = System.currentTimeMillis();
     }
 
-    public static ServerCapabilities capture(ClientPlayNetworkHandler handler) {
-        if (handler == null || handler.getCommandDispatcher() == null) return new ServerCapabilities(Set.of());
-        RootCommandNode<?> root = handler.getCommandDispatcher().getRoot();
+    public static ServerCapabilities capture(ClientPacketListener handler) {
+        if (handler == null || handler.getCommands() == null) return new ServerCapabilities(Set.of());
+        RootCommandNode<?> root = handler.getCommands().getRoot();
         Set<String> names = new HashSet<>();
         for (CommandNode<?> child : root.getChildren()) names.add(child.getName().toLowerCase(Locale.ROOT));
         return new ServerCapabilities(names);

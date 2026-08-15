@@ -1,10 +1,10 @@
 package orbiter.mixin;
 
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.client.sound.SoundInstance;
-import net.minecraft.client.sound.SoundSystem;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.resources.sounds.SoundInstance;
+import net.minecraft.client.sounds.SoundEngine;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.resources.Identifier;
 import orbiter.modules.misc.ServerProtect;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -18,7 +18,7 @@ import java.util.Deque;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Mixin(SoundSystem.class)
+@Mixin(SoundEngine.class)
 public class CrashFixerSoundSystemMixin {
 
     @Unique
@@ -36,14 +36,14 @@ public class CrashFixerSoundSystemMixin {
         this.blockSoundsThisTick = 0;
     }
 
-    @Inject(method = "play(Lnet/minecraft/client/sound/SoundInstance;)Lnet/minecraft/client/sound/SoundSystem$PlayResult;",
+    @Inject(method = "play(Lnet/minecraft/client/resources/sounds/SoundInstance;)Lnet/minecraft/client/sounds/SoundEngine$PlayResult;",
             at = @At("HEAD"), cancellable = true)
-    private void orbiter$throttleSoundPlays(SoundInstance sound, CallbackInfoReturnable<SoundSystem.PlayResult> cir) {
+    private void orbiter$throttleSoundPlays(SoundInstance sound, CallbackInfoReturnable<SoundEngine.PlayResult> cir) {
         ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);
         if (mod == null || !mod.isActive() || !mod.shouldThrottleSounds()) return;
         if (sound == null) return;
 
-        if (sound.getCategory() == SoundCategory.BLOCKS) {
+        if (sound.getSource() == SoundSource.BLOCKS) {
             if (this.blockSoundsThisTick >= mod.getMaxBlockSoundsPerTick()) {
                 cir.cancel();
                 return;
@@ -70,7 +70,7 @@ public class CrashFixerSoundSystemMixin {
             recentGlobalPlays.addLast(now);
         }
 
-        Identifier id = sound.getId();
+        Identifier id = sound.getIdentifier();
         if (id == null) return;
         Deque<Long> queue = recentById.computeIfAbsent(id, k -> new ArrayDeque<>());
         synchronized (queue) {

@@ -8,15 +8,15 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.BowItem;
-import net.minecraft.item.Items;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
 import orbiter.Orbiter;
 import orbiter.util.ComboTracker;
 
@@ -267,7 +267,7 @@ public class BowAssist extends Module {
     private LivingEntity currentTarget;
     private LivingEntity lastTarget;
     private long lastTargetSwitchTime;
-    private final List<Vec3d> trajectoryPoints = new ArrayList<>();
+    private final List<Vec3> trajectoryPoints = new ArrayList<>();
     private final ComboTracker comboTracker = new ComboTracker();
     private int tickCounter = 0;
 
@@ -300,10 +300,10 @@ public class BowAssist extends Module {
 
     @EventHandler(priority = EventPriority.HIGH)
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         tickCounter++;
 
-        if (!(mc.player.getMainHandStack().getItem() instanceof BowItem)) {
+        if (!(mc.player.getMainHandItem().getItem() instanceof BowItem)) {
             currentTarget = null;
             trajectoryPoints.clear();
             return;
@@ -321,9 +321,9 @@ public class BowAssist extends Module {
             return;
         }
 
-        int maxUseTime = mc.player.getMainHandStack().getMaxUseTime(mc.player);
-        int elapsedTicks = isDrawing ? (maxUseTime - mc.player.getItemUseTimeLeft()) : 0;
-        currentCharge = BowItem.getPullProgress(elapsedTicks);
+        int maxUseTime = mc.player.getMainHandItem().getUseDuration(mc.player);
+        int elapsedTicks = isDrawing ? (maxUseTime - mc.player.getUseItemRemainingTicks()) : 0;
+        currentCharge = BowItem.getPowerForTime(elapsedTicks);
 
         if (currentCharge < minChargePercent.get().floatValue()) {
 
@@ -339,8 +339,8 @@ public class BowAssist extends Module {
             return;
         }
 
-        Vec3d targetPos = getTargetPosition(currentTarget);
-        Vec3d origin = mc.player.getEyePos();
+        Vec3 targetPos = getTargetPosition(currentTarget);
+        Vec3 origin = mc.player.getEyePosition();
 
         if (predictMovement.get()) {
             targetPos = predictTargetPosition(currentTarget, targetPos, origin);
@@ -361,8 +361,8 @@ public class BowAssist extends Module {
 
         if (autoFire.get() && isDrawing && currentCharge >= 0.99f) {
 
-            float yawDiff = Math.abs(MathHelper.wrapDegrees(solution.yaw - mc.player.getYaw()));
-            float pitchDiff = Math.abs(solution.pitch - mc.player.getPitch());
+            float yawDiff = Math.abs(Mth.wrapDegrees(solution.yaw - mc.player.getYRot()));
+            float pitchDiff = Math.abs(solution.pitch - mc.player.getXRot());
             if (yawDiff < 5.0f && pitchDiff < 5.0f) {
                 mc.player.stopUsingItem();
             }
@@ -372,7 +372,7 @@ public class BowAssist extends Module {
     @EventHandler
     private void onRender3D(Render3DEvent event) {
         if (renderMode.get() == RenderMode.Off || trajectoryPoints.isEmpty()) return;
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         renderTrajectory(event);
     }
@@ -398,10 +398,10 @@ public class BowAssist extends Module {
     }
 
     private LivingEntity findBestTarget() {
-        Vec3d eyes = mc.player.getEyePos();
+        Vec3 eyes = mc.player.getEyePosition();
         List<LivingEntity> candidates = new ArrayList<>();
 
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (!isValidTarget(living)) continue;
             if (!isInRange(living)) continue;
@@ -430,66 +430,66 @@ public class BowAssist extends Module {
         if (entity == mc.player) return false;
         if (!entity.isAttackable()) return false;
 
-        if (entity instanceof PlayerEntity player) {
+        if (entity instanceof Player player) {
             if (ignoreFriends.get() && Friends.get().isFriend(player)) return false;
-            if (ignoreCreative.get() && player.getAbilities().creativeMode) return false;
+            if (ignoreCreative.get() && player.getAbilities().instabuild) return false;
             if (player.isSpectator()) return false;
         }
 
-        if (playersOnly.get() && !(entity instanceof PlayerEntity)) return false;
+        if (playersOnly.get() && !(entity instanceof Player)) return false;
         if (ignoreInvisibles.get() && entity.isInvisible()) return false;
 
         return true;
     }
 
     private boolean isInRange(LivingEntity entity) {
-        double dist = mc.player.getEyePos().distanceTo(entity.getBoundingBox().getCenter());
+        double dist = mc.player.getEyePosition().distanceTo(entity.getBoundingBox().getCenter());
         return dist <= range.get();
     }
 
     private double getAngleToEntity(LivingEntity entity) {
-        Vec3d playerEyes = mc.player.getEyePos();
-        Vec3d targetCenter = entity.getBoundingBox().getCenter();
-        Vec3d diff = targetCenter.subtract(playerEyes).normalize();
+        Vec3 playerEyes = mc.player.getEyePosition();
+        Vec3 targetCenter = entity.getBoundingBox().getCenter();
+        Vec3 diff = targetCenter.subtract(playerEyes).normalize();
 
-        float yaw = mc.player.getYaw() * ((float) Math.PI / 180f);
-        float pitch = mc.player.getPitch() * ((float) Math.PI / 180f);
+        float yaw = mc.player.getYRot() * ((float) Math.PI / 180f);
+        float pitch = mc.player.getXRot() * ((float) Math.PI / 180f);
 
-        Vec3d look = new Vec3d(
-            -MathHelper.sin(yaw) * MathHelper.cos(pitch),
-            -MathHelper.sin(pitch),
-            MathHelper.cos(yaw) * MathHelper.cos(pitch)
+        Vec3 look = new Vec3(
+            -Mth.sin(yaw) * Mth.cos(pitch),
+            -Mth.sin(pitch),
+            Mth.cos(yaw) * Mth.cos(pitch)
         ).normalize();
 
-        double dot = look.dotProduct(diff);
-        return Math.toDegrees(Math.acos(MathHelper.clamp(dot, -1.0, 1.0)));
+        double dot = look.dot(diff);
+        return Math.toDegrees(Math.acos(Mth.clamp(dot, -1.0, 1.0)));
     }
 
-    private boolean hasLineOfSight(Vec3d from, LivingEntity target) {
-        Vec3d to = target.getBoundingBox().getCenter();
-        if (mc.world == null) return true;
-        var result = mc.world.raycast(new RaycastContext(
+    private boolean hasLineOfSight(Vec3 from, LivingEntity target) {
+        Vec3 to = target.getBoundingBox().getCenter();
+        if (mc.level == null) return true;
+        var result = mc.level.clip(new ClipContext(
             from, to,
-            RaycastContext.ShapeType.COLLIDER,
-            RaycastContext.FluidHandling.NONE,
+            ClipContext.Block.COLLIDER,
+            ClipContext.Fluid.NONE,
             mc.player
         ));
         return result.getType() == HitResult.Type.MISS;
     }
 
-    private Vec3d getTargetPosition(LivingEntity target) {
+    private Vec3 getTargetPosition(LivingEntity target) {
         if (aimAtHead.get()) {
 
-            return new Vec3d(target.getX(), target.getEyeY(), target.getZ());
+            return new Vec3(target.getX(), target.getEyeY(), target.getZ());
         } else {
 
             return target.getBoundingBox().getCenter();
         }
     }
 
-    private Vec3d predictTargetPosition(LivingEntity target, Vec3d currentPos, Vec3d origin) {
-        Vec3d targetVel = target.getVelocity();
-        if (targetVel.lengthSquared() < 0.001) return currentPos;
+    private Vec3 predictTargetPosition(LivingEntity target, Vec3 currentPos, Vec3 origin) {
+        Vec3 targetVel = target.getDeltaMovement();
+        if (targetVel.lengthSqr() < 0.001) return currentPos;
 
         double dist = origin.distanceTo(currentPos);
         double arrowSpeed = arrowSpeedMult.get() * currentCharge;
@@ -499,17 +499,17 @@ public class BowAssist extends Module {
 
         flightTime = Math.min(flightTime, predictionSteps.get());
 
-        Vec3d predicted = currentPos.add(targetVel.multiply(flightTime));
+        Vec3 predicted = currentPos.add(targetVel.scale(flightTime));
 
-        if (mc.world != null && predicted.y < mc.world.getBottomY()) {
-            predicted = new Vec3d(predicted.x, mc.world.getBottomY(), predicted.z);
+        if (mc.level != null && predicted.y < mc.level.getMinY()) {
+            predicted = new Vec3(predicted.x, mc.level.getMinY(), predicted.z);
         }
 
         return predicted;
     }
 
-    private AimSolution solveAim(Vec3d origin, Vec3d target, float charge) {
-        Vec3d delta = target.subtract(origin);
+    private AimSolution solveAim(Vec3 origin, Vec3 target, float charge) {
+        Vec3 delta = target.subtract(origin);
         double dx = delta.x;
         double dy = delta.y;
         double dz = delta.z;
@@ -539,7 +539,7 @@ public class BowAssist extends Module {
         return new AimSolution(yaw, pitch);
     }
 
-    private float solveBallisticPitch(Vec3d origin, Vec3d target, float charge, double horizontalDist, double dy) {
+    private float solveBallisticPitch(Vec3 origin, Vec3 target, float charge, double horizontalDist, double dy) {
         double speed = arrowSpeedMult.get() * charge;
         double g = arrowGravity.get();
         double drag = arrowDrag.get();
@@ -558,7 +558,7 @@ public class BowAssist extends Module {
         return bruteForcePitch(origin, target, charge);
     }
 
-    private float refinePitchWithSimulation(Vec3d origin, Vec3d target, float charge, float initialPitch) {
+    private float refinePitchWithSimulation(Vec3 origin, Vec3 target, float charge, float initialPitch) {
 
         float bestPitch = initialPitch;
         double bestError = simulateError(origin, target, charge, bestPitch);
@@ -586,7 +586,7 @@ public class BowAssist extends Module {
         return bestPitch;
     }
 
-    private float bruteForcePitch(Vec3d origin, Vec3d target, float charge) {
+    private float bruteForcePitch(Vec3 origin, Vec3 target, float charge) {
         float bestPitch = -45.0f;
         double bestError = Double.MAX_VALUE;
 
@@ -609,77 +609,77 @@ public class BowAssist extends Module {
         return bestPitch;
     }
 
-    private double simulateError(Vec3d origin, Vec3d target, float charge, float pitch) {
+    private double simulateError(Vec3 origin, Vec3 target, float charge, float pitch) {
 
         double speed = arrowSpeedMult.get() * charge;
-        Vec3d pos = origin;
-        Vec3d vel = Vec3d.fromPolar(pitch, lastCalculatedYaw).multiply(speed);
+        Vec3 pos = origin;
+        Vec3 vel = Vec3.directionFromRotation(pitch, lastCalculatedYaw).scale(speed);
 
-        double bestDist = pos.squaredDistanceTo(target);
+        double bestDist = pos.distanceToSqr(target);
         int maxSteps = Math.min(simSteps.get(), 120);
         int raycastInterval = simRaycastInterval.get();
 
         for (int i = 0; i < maxSteps; i++) {
-            Vec3d next = pos.add(vel);
+            Vec3 next = pos.add(vel);
 
-            if (raycastInterval > 0 && i % raycastInterval == 0 && mc.world != null) {
-                var result = mc.world.raycast(new RaycastContext(
+            if (raycastInterval > 0 && i % raycastInterval == 0 && mc.level != null) {
+                var result = mc.level.clip(new ClipContext(
                     pos, next,
-                    RaycastContext.ShapeType.COLLIDER,
-                    RaycastContext.FluidHandling.NONE,
+                    ClipContext.Block.COLLIDER,
+                    ClipContext.Fluid.NONE,
                     mc.player
                 ));
                 if (result.getType() == HitResult.Type.BLOCK) {
-                    double d = result.getPos().squaredDistanceTo(target);
+                    double d = result.getLocation().distanceToSqr(target);
                     if (d < bestDist) bestDist = d;
                     break;
                 }
             }
 
-            double d = next.squaredDistanceTo(target);
+            double d = next.distanceToSqr(target);
             if (d < bestDist) bestDist = d;
 
             pos = next;
-            vel = vel.multiply(arrowDrag.get());
+            vel = vel.scale(arrowDrag.get());
             vel = vel.add(0, -arrowGravity.get(), 0);
 
-            if (pos.y < mc.world.getBottomY() - 4) break;
+            if (pos.y < mc.level.getMinY() - 4) break;
         }
 
         return bestDist;
     }
 
-    private void simulateTrajectory(Vec3d origin, float yaw, float pitch, float charge, List<Vec3d> out) {
+    private void simulateTrajectory(Vec3 origin, float yaw, float pitch, float charge, List<Vec3> out) {
         out.clear();
         double speed = arrowSpeedMult.get() * charge;
-        Vec3d pos = origin;
-        Vec3d vel = Vec3d.fromPolar(pitch, yaw).multiply(speed);
+        Vec3 pos = origin;
+        Vec3 vel = Vec3.directionFromRotation(pitch, yaw).scale(speed);
 
         out.add(pos);
 
         int maxSteps = Math.min(simSteps.get(), 150);
         for (int i = 0; i < maxSteps; i++) {
-            Vec3d next = pos.add(vel);
+            Vec3 next = pos.add(vel);
 
-            if (mc.world != null) {
-                var result = mc.world.raycast(new RaycastContext(
+            if (mc.level != null) {
+                var result = mc.level.clip(new ClipContext(
                     pos, next,
-                    RaycastContext.ShapeType.COLLIDER,
-                    RaycastContext.FluidHandling.NONE,
+                    ClipContext.Block.COLLIDER,
+                    ClipContext.Fluid.NONE,
                     mc.player
                 ));
                 if (result.getType() == HitResult.Type.BLOCK) {
-                    out.add(result.getPos());
+                    out.add(result.getLocation());
                     break;
                 }
             }
 
             out.add(next);
             pos = next;
-            vel = vel.multiply(arrowDrag.get());
+            vel = vel.scale(arrowDrag.get());
             vel = vel.add(0, -arrowGravity.get(), 0);
 
-            if (pos.y < mc.world.getBottomY() - 4) break;
+            if (pos.y < mc.level.getMinY() - 4) break;
         }
     }
 
@@ -688,17 +688,17 @@ public class BowAssist extends Module {
         double speed = charge >= 0.99f ? aimSpeedCharged.get() : aimSpeed.get();
 
         if (aimMode.get() == AimMode.Visible) {
-            float currentYaw = mc.player.getYaw();
-            float currentPitch = mc.player.getPitch();
+            float currentYaw = mc.player.getYRot();
+            float currentPitch = mc.player.getXRot();
 
-            float yawDelta = MathHelper.wrapDegrees(targetYaw - currentYaw);
+            float yawDelta = Mth.wrapDegrees(targetYaw - currentYaw);
             float pitchDelta = targetPitch - currentPitch;
 
             float newYaw = currentYaw + (float) (yawDelta * speed);
             float newPitch = currentPitch + (float) (pitchDelta * speed);
 
-            mc.player.setYaw(newYaw);
-            mc.player.setPitch(newPitch);
+            mc.player.setYRot(newYaw);
+            mc.player.setXRot(newPitch);
         } else {
 
             Rotations.rotate(targetYaw, targetPitch, (int) (20 / speed), false, () -> {});
@@ -709,8 +709,8 @@ public class BowAssist extends Module {
         if (trajectoryPoints.size() < 2) return;
 
         for (int i = 0; i < trajectoryPoints.size() - 1; i++) {
-            Vec3d from = trajectoryPoints.get(i);
-            Vec3d to = trajectoryPoints.get(i + 1);
+            Vec3 from = trajectoryPoints.get(i);
+            Vec3 to = trajectoryPoints.get(i + 1);
 
             float[] color = getTrajectoryColor(i, trajectoryPoints.size());
             meteordevelopment.meteorclient.utils.render.color.Color c =
@@ -731,7 +731,7 @@ public class BowAssist extends Module {
         }
 
         if (!trajectoryPoints.isEmpty()) {
-            Vec3d end = trajectoryPoints.get(trajectoryPoints.size() - 1);
+            Vec3 end = trajectoryPoints.get(trajectoryPoints.size() - 1);
             meteordevelopment.meteorclient.utils.render.color.Color red =
                 new meteordevelopment.meteorclient.utils.render.color.Color(255, 0, 0, 255);
             event.renderer.line(end.x - 0.3, end.y, end.z, end.x + 0.3, end.y, end.z, red);
@@ -752,20 +752,20 @@ public class BowAssist extends Module {
     private boolean hasArrows() {
         if (mc.player == null) return false;
 
-        for (int i = 0; i < mc.player.getInventory().size(); i++) {
-            if (mc.player.getInventory().getStack(i).getItem() == Items.ARROW) return true;
-            if (mc.player.getInventory().getStack(i).getItem() == Items.TIPPED_ARROW) return true;
-            if (mc.player.getInventory().getStack(i).getItem() == Items.SPECTRAL_ARROW) return true;
+        for (int i = 0; i < mc.player.getInventory().getContainerSize(); i++) {
+            if (mc.player.getInventory().getItem(i).getItem() == Items.ARROW) return true;
+            if (mc.player.getInventory().getItem(i).getItem() == Items.TIPPED_ARROW) return true;
+            if (mc.player.getInventory().getItem(i).getItem() == Items.SPECTRAL_ARROW) return true;
         }
 
-        if (mc.player.getOffHandStack().getItem() == Items.ARROW) return true;
-        if (mc.player.getOffHandStack().getItem() == Items.TIPPED_ARROW) return true;
-        if (mc.player.getOffHandStack().getItem() == Items.SPECTRAL_ARROW) return true;
+        if (mc.player.getOffhandItem().getItem() == Items.ARROW) return true;
+        if (mc.player.getOffhandItem().getItem() == Items.TIPPED_ARROW) return true;
+        if (mc.player.getOffhandItem().getItem() == Items.SPECTRAL_ARROW) return true;
 
-        var enchantments = mc.player.getMainHandStack().get(net.minecraft.component.DataComponentTypes.ENCHANTMENTS);
+        var enchantments = mc.player.getMainHandItem().get(net.minecraft.core.component.DataComponents.ENCHANTMENTS);
         if (enchantments != null) {
-            for (var entry : enchantments.getEnchantments()) {
-                if (entry.getKey().orElseThrow().getValue().getPath().equals("infinity")) {
+            for (var entry : enchantments.entrySet()) {
+                if (entry.getKey().unwrapKey().orElseThrow().identifier().getPath().equals("infinity")) {
                     return true;
                 }
             }
@@ -776,12 +776,12 @@ public class BowAssist extends Module {
 
     public void onHitEntity(LivingEntity target) {
         if (!trackCombo.get()) return;
-        ComboTracker.registerHit(target.getUuid());
+        ComboTracker.registerHit(target.getUUID());
     }
 
     public int getCurrentCombo() {
         if (!trackCombo.get() || currentTarget == null) return 0;
-        return ComboTracker.getCombo(currentTarget.getUuid());
+        return ComboTracker.getCombo(currentTarget.getUUID());
     }
 
     private record AimSolution(float yaw, float pitch) {}
@@ -791,7 +791,7 @@ public class BowAssist extends Module {
         if (currentTarget == null) return "No target";
 
         StringBuilder sb = new StringBuilder();
-        String name = currentTarget instanceof PlayerEntity p
+        String name = currentTarget instanceof Player p
             ? p.getName().getString()
             : currentTarget.getName().getString();
         sb.append("\u2192 ").append(name);
@@ -800,7 +800,7 @@ public class BowAssist extends Module {
             sb.append(String.format(" | %d%%", (int)(currentCharge * 100)));
         }
 
-        if (trackCombo.get() && currentTarget != null && ComboTracker.getCombo(currentTarget.getUuid()) > 0) {
+        if (trackCombo.get() && currentTarget != null && ComboTracker.getCombo(currentTarget.getUUID()) > 0) {
             sb.append(" | combo: ").append(getCurrentCombo());
         }
 

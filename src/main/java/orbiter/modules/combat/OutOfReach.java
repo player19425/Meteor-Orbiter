@@ -13,13 +13,13 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.systems.modules.world.Timer;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.GameMode;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.GameType;
 
 import java.util.UUID;
 
@@ -249,7 +249,7 @@ public class OutOfReach extends Module {
         .build());
 
     private int cooldownLeft = 0;
-    private PlayerEntity lastThreat;
+    private Player lastThreat;
 
     private UUID selectedTargetUuid;
     private String selectedTargetName;
@@ -259,12 +259,12 @@ public class OutOfReach extends Module {
     private static final double[] SAFE_HEADING_OFFSETS = {0.0, 20.0, -20.0, 40.0, -40.0, 65.0, -65.0, 90.0, -90.0};
 
     private static final class ThreatData {
-        private final PlayerEntity player;
+        private final Player player;
         private final double distance;
         private final double triggerDistance;
         private final double safeDistance;
 
-        private ThreatData(PlayerEntity player, double distance, double triggerDistance, double safeDistance) {
+        private ThreatData(Player player, double distance, double triggerDistance, double safeDistance) {
             this.player = player;
             this.distance = distance;
             this.triggerDistance = triggerDistance;
@@ -304,7 +304,7 @@ public class OutOfReach extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (targetMode.get() == TargetMode.Selected && autoSelectFromCrosshair.get()) {
             updateSelectionFromCrosshair();
@@ -332,16 +332,16 @@ public class OutOfReach extends Module {
     }
 
     private ThreatData findMostDangerousThreat() {
-        if (mc.player == null || mc.world == null) return null;
+        if (mc.player == null || mc.level == null) return null;
 
         double maxSq = scanRange.get() * scanRange.get();
         ThreatData best = null;
         double bestDanger = Double.POSITIVE_INFINITY;
 
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             if (!isValidCandidate(player)) continue;
 
-            double distSq = mc.player.squaredDistanceTo(player);
+            double distSq = mc.player.distanceToSqr(player);
             if (distSq > maxSq) continue;
 
             ThreatData data = buildThreatData(player);
@@ -358,7 +358,7 @@ public class OutOfReach extends Module {
     }
 
     private ThreatData findSelectedThreat() {
-        PlayerEntity selected = resolveSelectedTarget();
+        Player selected = resolveSelectedTarget();
         if (selected == null) return null;
 
         ThreatData data = buildThreatData(selected);
@@ -366,8 +366,8 @@ public class OutOfReach extends Module {
         return data;
     }
 
-    private ThreatData buildThreatData(PlayerEntity player) {
-        if (mc.player == null || mc.world == null || !isValidCandidate(player)) return null;
+    private ThreatData buildThreatData(Player player) {
+        if (mc.player == null || mc.level == null || !isValidCandidate(player)) return null;
 
         double distance = mc.player.distanceTo(player);
         double baseReach = getReachFor(player);
@@ -380,7 +380,7 @@ public class OutOfReach extends Module {
         return new ThreatData(player, distance, triggerDistance, safeDistance);
     }
 
-    private boolean isValidCandidate(PlayerEntity player) {
+    private boolean isValidCandidate(Player player) {
         if (mc.player == null || player == null) return false;
         if (player == mc.player) return false;
         if (!player.isAlive() || player.isSpectator()) return false;
@@ -389,19 +389,19 @@ public class OutOfReach extends Module {
 
     private void updateSelectionFromCrosshair() {
         if (mc.player == null) return;
-        Entity targeted = mc.targetedEntity;
-        if (!(targeted instanceof PlayerEntity player)) return;
+        Entity targeted = mc.crosshairPickEntity;
+        if (!(targeted instanceof Player player)) return;
         if (!isValidCandidate(player)) return;
 
-        selectedTargetUuid = player.getUuid();
+        selectedTargetUuid = player.getUUID();
         selectedTargetName = player.getName().getString();
     }
 
-    private PlayerEntity resolveSelectedTarget() {
-        if (mc.world == null || selectedTargetUuid == null) return null;
+    private Player resolveSelectedTarget() {
+        if (mc.level == null || selectedTargetUuid == null) return null;
 
-        for (PlayerEntity player : mc.world.getPlayers()) {
-            if (player.getUuid().equals(selectedTargetUuid)) {
+        for (Player player : mc.level.players()) {
+            if (player.getUUID().equals(selectedTargetUuid)) {
                 return isValidCandidate(player) ? player : null;
             }
         }
@@ -414,24 +414,24 @@ public class OutOfReach extends Module {
         selectedTargetName = null;
     }
 
-    private double getDynamicClosingBuffer(PlayerEntity threat) {
+    private double getDynamicClosingBuffer(Player threat) {
         if (mc.player == null || threat == null) return 0.0;
 
-        Vec3d playerPos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
-        Vec3d threatPos = new Vec3d(threat.getX(), threat.getY(), threat.getZ());
-        Vec3d delta = playerPos.subtract(threatPos);
+        Vec3 playerPos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 threatPos = new Vec3(threat.getX(), threat.getY(), threat.getZ());
+        Vec3 delta = playerPos.subtract(threatPos);
         double horizontal = Math.sqrt((delta.x * delta.x) + (delta.z * delta.z));
         if (horizontal < 1.0E-6) return Math.min(maxPredictBuffer.get(), latencyBuffer.get());
 
         double dirX = delta.x / horizontal;
         double dirZ = delta.z / horizontal;
 
-        Vec3d relVel = mc.player.getVelocity().subtract(threat.getVelocity());
+        Vec3 relVel = mc.player.getDeltaMovement().subtract(threat.getDeltaMovement());
         double radialSpeed = (relVel.x * dirX) + (relVel.z * dirZ);
         double closingSpeed = Math.max(0.0, -radialSpeed);
 
         double predicted = closingSpeed * Math.max(0, predictTicks.get());
-        Vec3d threatVel = threat.getVelocity();
+        Vec3 threatVel = threat.getDeltaMovement();
         double threatToward = (threatVel.x * dirX) + (threatVel.z * dirZ);
         double rushBonus = Math.max(0.0, threatToward) * Math.max(1.0, predictTicks.get() * 0.35);
         double sprintBonus = threat.isSprinting() ? sprintClosingBoost.get() : 0.0;
@@ -440,38 +440,38 @@ public class OutOfReach extends Module {
         return Math.min(maxPredictBuffer.get(), Math.max(0.0, total));
     }
 
-    private double getReachFor(PlayerEntity player) {
-        GameMode gameMode = resolveGameMode(player);
-        if (gameMode == GameMode.SPECTATOR) return 0.0;
-        if (gameMode == GameMode.CREATIVE) return creativeReach.get();
+    private double getReachFor(Player player) {
+        GameType gameMode = resolveGameMode(player);
+        if (gameMode == GameType.SPECTATOR) return 0.0;
+        if (gameMode == GameType.CREATIVE) return creativeReach.get();
         return survivalReach.get();
     }
 
-    private GameMode resolveGameMode(PlayerEntity player) {
-        if (mc.getNetworkHandler() == null || player == null) return GameMode.SURVIVAL;
+    private GameType resolveGameMode(Player player) {
+        if (mc.getConnection() == null || player == null) return GameType.SURVIVAL;
 
-        PlayerListEntry entry = mc.getNetworkHandler().getPlayerListEntry(player.getUuid());
+        PlayerInfo entry = mc.getConnection().getPlayerInfo(player.getUUID());
         if (entry != null && entry.getGameMode() != null) return entry.getGameMode();
 
-        if (player.isCreative()) return GameMode.CREATIVE;
-        if (player.isSpectator()) return GameMode.SPECTATOR;
-        return GameMode.SURVIVAL;
+        if (player.isCreative()) return GameType.CREATIVE;
+        if (player.isSpectator()) return GameType.SPECTATOR;
+        return GameType.SURVIVAL;
     }
 
-    private boolean teleportOutsideReach(PlayerEntity threat, double wantedDistance, double currentDistance) {
+    private boolean teleportOutsideReach(Player threat, double wantedDistance, double currentDistance) {
         if (mc.player == null || threat == null) return false;
 
-        Vec3d threatNow = new Vec3d(threat.getX(), threat.getY(), threat.getZ());
-        Vec3d ourNow = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
-        Vec3d threatPredicted = threatNow.add(threat.getVelocity().multiply(Math.max(0, predictTicks.get())));
-        Vec3d ourPredicted = ourNow.add(mc.player.getVelocity().multiply(Math.max(0, predictTicks.get())));
+        Vec3 threatNow = new Vec3(threat.getX(), threat.getY(), threat.getZ());
+        Vec3 ourNow = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+        Vec3 threatPredicted = threatNow.add(threat.getDeltaMovement().scale(Math.max(0, predictTicks.get())));
+        Vec3 ourPredicted = ourNow.add(mc.player.getDeltaMovement().scale(Math.max(0, predictTicks.get())));
 
         double dx = ourPredicted.x - threatPredicted.x;
         double dz = ourPredicted.z - threatPredicted.z;
         double horizontalSq = (dx * dx) + (dz * dz);
 
         if (horizontalSq < 1.0E-6) {
-            double yawRad = Math.toRadians(mc.player.getYaw());
+            double yawRad = Math.toRadians(mc.player.getYRot());
             dx = -Math.sin(yawRad);
             dz = Math.cos(yawRad);
             horizontalSq = (dx * dx) + (dz * dz);
@@ -487,9 +487,9 @@ public class OutOfReach extends Module {
         if (emergencyGap > 0.0) desiredDistance += emergencyDistanceBoost.get() + emergencyGap;
         desiredDistance = Math.min(desiredDistance, Math.max(2.0, maxTeleportDistance.get()));
 
-        Vec3d destination;
+        Vec3 destination;
         if (collisionAwareTeleport.get()) destination = findSafeTeleportDestination(threat, dirX, dirZ, desiredDistance);
-        else destination = new Vec3d(threat.getX() + (dirX * desiredDistance), mc.player.getY(), threat.getZ() + (dirZ * desiredDistance));
+        else destination = new Vec3(threat.getX() + (dirX * desiredDistance), mc.player.getY(), threat.getZ() + (dirZ * desiredDistance));
 
         if (destination == null) return false;
 
@@ -497,25 +497,25 @@ public class OutOfReach extends Module {
         double dstY = destination.y;
         double dstZ = destination.z;
 
-        if (mc.getNetworkHandler() != null) {
+        if (mc.getConnection() != null) {
             int packets = Math.max(1, burstPackets.get());
             for (int i = 1; i <= packets; i++) {
-                mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
+                mc.getConnection().send(new ServerboundMovePlayerPacket.Pos(
                     dstX,
                     dstY,
                     dstZ,
-                    mc.player.isOnGround(),
+                    mc.player.onGround(),
                     mc.player.horizontalCollision
                 ));
             }
         }
 
-        mc.player.setPosition(dstX, dstY, dstZ);
+        mc.player.setPos(dstX, dstY, dstZ);
         return true;
     }
 
-    private Vec3d findSafeTeleportDestination(PlayerEntity threat, double dirX, double dirZ, double preferredDistance) {
-        if (mc.player == null || mc.world == null || threat == null) return null;
+    private Vec3 findSafeTeleportDestination(Player threat, double dirX, double dirZ, double preferredDistance) {
+        if (mc.player == null || mc.level == null || threat == null) return null;
 
         double baseY = mc.player.getY();
         double maxDistance = Math.max(preferredDistance, Math.max(2.0, maxTeleportDistance.get()));
@@ -523,29 +523,29 @@ public class OutOfReach extends Module {
         boolean primaryBlocked = isPrimaryPathBlocked(threat, dirX, dirZ, preferredDistance, baseY);
 
         if (preferVerticalEscape.get() && primaryBlocked) {
-            Vec3d climbFirst = findVerticalEscapeDestination(threat, dirX, dirZ, preferredDistance, maxDistance, baseY);
+            Vec3 climbFirst = findVerticalEscapeDestination(threat, dirX, dirZ, preferredDistance, maxDistance, baseY);
             if (climbFirst != null) return climbFirst;
         }
 
         for (double distance = preferredDistance; distance <= maxDistance + 1.0E-6; distance += step) {
-            Vec3d candidate = findSafeForDistance(threat, dirX, dirZ, distance, baseY);
+            Vec3 candidate = findSafeForDistance(threat, dirX, dirZ, distance, baseY);
             if (candidate != null) return candidate;
         }
 
         for (double distance = preferredDistance - step; distance >= 2.0; distance -= step) {
-            Vec3d candidate = findSafeForDistance(threat, dirX, dirZ, distance, baseY);
+            Vec3 candidate = findSafeForDistance(threat, dirX, dirZ, distance, baseY);
             if (candidate != null) return candidate;
         }
 
         if (preferVerticalEscape.get()) {
-            Vec3d climbFallback = findVerticalEscapeDestination(threat, dirX, dirZ, preferredDistance, maxDistance, baseY);
+            Vec3 climbFallback = findVerticalEscapeDestination(threat, dirX, dirZ, preferredDistance, maxDistance, baseY);
             if (climbFallback != null) return climbFallback;
         }
 
         return null;
     }
 
-    private boolean isPrimaryPathBlocked(PlayerEntity threat, double dirX, double dirZ, double distance, double baseY) {
+    private boolean isPrimaryPathBlocked(Player threat, double dirX, double dirZ, double distance, double baseY) {
         if (mc.player == null || threat == null) return false;
 
         double endX = threat.getX() + (dirX * distance);
@@ -574,7 +574,7 @@ public class OutOfReach extends Module {
         return false;
     }
 
-    private Vec3d findVerticalEscapeDestination(PlayerEntity threat, double dirX, double dirZ, double preferredDistance, double maxDistance, double baseY) {
+    private Vec3 findVerticalEscapeDestination(Player threat, double dirX, double dirZ, double preferredDistance, double maxDistance, double baseY) {
         if (mc.player == null || threat == null) return null;
 
         int maxClimb = Math.max(1, obstacleClimbHeight.get());
@@ -594,7 +594,7 @@ public class OutOfReach extends Module {
 
                 double targetX = threat.getX() + (rotatedX * cappedDistance);
                 double targetZ = threat.getZ() + (rotatedZ * cappedDistance);
-                Vec3d direct = buildSafePosition(targetX, y, targetZ);
+                Vec3 direct = buildSafePosition(targetX, y, targetZ);
                 if (direct != null) return direct;
 
                 for (double back = probeStep; back <= Math.min(cappedDistance - 1.0, maxClimb * probeStep * 2.0); back += probeStep) {
@@ -603,21 +603,21 @@ public class OutOfReach extends Module {
 
                     double x = threat.getX() + (rotatedX * dist);
                     double z = threat.getZ() + (rotatedZ * dist);
-                    Vec3d stepped = buildSafePosition(x, y, z);
+                    Vec3 stepped = buildSafePosition(x, y, z);
                     if (stepped != null) return stepped;
                 }
             }
         }
 
         for (int up = 1; up <= maxClimb; up++) {
-            Vec3d straightUp = buildSafePosition(mc.player.getX(), baseY + up, mc.player.getZ());
+            Vec3 straightUp = buildSafePosition(mc.player.getX(), baseY + up, mc.player.getZ());
             if (straightUp != null) return straightUp;
         }
 
         return null;
     }
 
-    private Vec3d findSafeForDistance(PlayerEntity threat, double dirX, double dirZ, double distance, double baseY) {
+    private Vec3 findSafeForDistance(Player threat, double dirX, double dirZ, double distance, double baseY) {
         for (double offsetDegrees : SAFE_HEADING_OFFSETS) {
             double radians = Math.toRadians(offsetDegrees);
             double cos = Math.cos(radians);
@@ -629,49 +629,49 @@ public class OutOfReach extends Module {
             double targetX = threat.getX() + (rotatedX * distance);
             double targetZ = threat.getZ() + (rotatedZ * distance);
 
-            Vec3d safe = findSafeYForXZ(targetX, targetZ, baseY);
+            Vec3 safe = findSafeYForXZ(targetX, targetZ, baseY);
             if (safe != null) return safe;
         }
 
         return null;
     }
 
-    private Vec3d findSafeYForXZ(double x, double z, double baseY) {
+    private Vec3 findSafeYForXZ(double x, double z, double baseY) {
         int verticalSearch = Math.max(0, safeVerticalSearch.get());
 
-        Vec3d atBase = buildSafePosition(x, baseY, z);
+        Vec3 atBase = buildSafePosition(x, baseY, z);
         if (atBase != null) return atBase;
 
         for (int offset = 1; offset <= verticalSearch; offset++) {
-            Vec3d above = buildSafePosition(x, baseY + offset, z);
+            Vec3 above = buildSafePosition(x, baseY + offset, z);
             if (above != null) return above;
 
-            Vec3d below = buildSafePosition(x, baseY - offset, z);
+            Vec3 below = buildSafePosition(x, baseY - offset, z);
             if (below != null) return below;
         }
 
         return null;
     }
 
-    private Vec3d buildSafePosition(double x, double y, double z) {
-        if (isTeleportPositionSafe(x, y, z)) return new Vec3d(x, y, z);
+    private Vec3 buildSafePosition(double x, double y, double z) {
+        if (isTeleportPositionSafe(x, y, z)) return new Vec3(x, y, z);
         return null;
     }
 
     private boolean isTeleportPositionSafe(double x, double y, double z) {
-        if (mc.player == null || mc.world == null) return false;
+        if (mc.player == null || mc.level == null) return false;
 
-        double minY = mc.world.getBottomY() + 1.0;
-        double maxY = mc.world.getTopYInclusive() - 1.0;
+        double minY = mc.level.getMinY() + 1.0;
+        double maxY = mc.level.getMaxY() - 1.0;
         if (y < minY || y > maxY) return false;
 
-        Box movedBox = mc.player.getBoundingBox().offset(
+        AABB movedBox = mc.player.getBoundingBox().move(
             x - mc.player.getX(),
             y - mc.player.getY(),
             z - mc.player.getZ()
         );
 
-        return !mc.world.getBlockCollisions(mc.player, movedBox).iterator().hasNext();
+        return !mc.level.getBlockCollisions(mc.player, movedBox).iterator().hasNext();
     }
 
     private void ensureReachEnabled() {

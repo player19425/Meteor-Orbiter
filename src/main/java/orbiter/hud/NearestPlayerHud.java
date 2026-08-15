@@ -6,8 +6,8 @@ import meteordevelopment.meteorclient.systems.hud.HudElement;
 import meteordevelopment.meteorclient.systems.hud.HudElementInfo;
 import meteordevelopment.meteorclient.systems.hud.HudRenderer;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.player.Player;
 
 public class NearestPlayerHud extends HudElement {
     public static final HudElementInfo<NearestPlayerHud> INFO = new HudElementInfo<>(Orbiter.HUD_GROUP, "nearest-player", "Shows the nearest player and their distance.", NearestPlayerHud::new);
@@ -16,7 +16,7 @@ public class NearestPlayerHud extends HudElement {
 
     private final Setting<SettingColor> textColor = sgGeneral.add(new ColorSetting.Builder()
         .name("color")
-        .description("Text color.")
+        .description("Component color.")
         .defaultValue(new SettingColor(255, 255, 255, 255))
         .build()
     );
@@ -37,7 +37,7 @@ public class NearestPlayerHud extends HudElement {
 
     private final Setting<Double> scale = sgGeneral.add(new DoubleSetting.Builder()
         .name("scale")
-        .description("Text scale.")
+        .description("Component scale.")
         .defaultValue(1.0)
         .min(0.5)
         .sliderRange(0.5, 3.0)
@@ -50,8 +50,8 @@ public class NearestPlayerHud extends HudElement {
 
     @Override
     public void render(HudRenderer renderer) {
-        MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player == null || mc.world == null) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.level == null) {
             String none = "No players nearby";
             double s = scale.get();
             setSize(renderer.textWidth(none, shadow.get(), s), renderer.textHeight(shadow.get(), s));
@@ -59,11 +59,11 @@ public class NearestPlayerHud extends HudElement {
             return;
         }
 
-        PlayerEntity nearest = null;
+        Player nearest = null;
         double nearestDist = Double.MAX_VALUE;
-        for (PlayerEntity entity : mc.world.getPlayers()) {
+        for (Player entity : mc.level.players()) {
             if (entity == mc.player) continue;
-            double dist = mc.player.squaredDistanceTo(entity);
+            double dist = mc.player.distanceToSqr(entity);
             if (dist < nearestDist) {
                 nearestDist = dist;
                 nearest = entity;

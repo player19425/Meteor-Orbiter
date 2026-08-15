@@ -9,27 +9,30 @@ import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BambooBlock;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.CactusBlock;
-import net.minecraft.block.CropBlock;
-import net.minecraft.block.FarmlandBlock;
-import net.minecraft.block.SugarCaneBlock;
-import net.minecraft.entity.passive.AnimalEntity;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.HoeItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.state.property.Properties;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.BambooStalkBlock;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CactusBlock;
+import net.minecraft.world.level.block.CropBlock;
+import net.minecraft.world.level.block.FarmlandBlock;
+import net.minecraft.world.level.block.SugarCaneBlock;
+import net.minecraft.world.entity.animal.Animal;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.HoeItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.entity.EntityTypeTest;
+import net.minecraft.world.phys.EntityHitResult;
+
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -137,7 +140,7 @@ public class AutoFarming extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null || mc.getNetworkHandler() == null || mc.interactionManager == null) return;
+        if (mc.player == null || mc.level == null || mc.getConnection() == null || mc.gameMode == null) return;
 
         processReplants();
 
@@ -146,7 +149,7 @@ public class AutoFarming extends Module {
             return;
         }
 
-        BlockPos base = mc.player.getBlockPos();
+        BlockPos base = mc.player.blockPosition();
         int r = range.get();
         int done = 0;
 
@@ -156,7 +159,7 @@ public class AutoFarming extends Module {
             if (!acted && crops.get() && tryHarvestCrops(base, r)) acted = true;
             if (!acted && cactus.get() && tryHarvestColumn(base, r, CactusBlock.class)) acted = true;
             if (!acted && sugarcane.get() && tryHarvestColumn(base, r, SugarCaneBlock.class)) acted = true;
-            if (!acted && bamboo.get() && tryHarvestColumn(base, r, BambooBlock.class)) acted = true;
+            if (!acted && bamboo.get() && tryHarvestColumn(base, r, BambooStalkBlock.class)) acted = true;
             if (!acted && useHoe.get() && tryUseHoe(base, r)) acted = true;
             if (!acted && placeWater.get() && tryPlaceWater(base, r)) acted = true;
             if (!acted && useBonemeal.get() && tryBonemeal(base, r)) acted = true;
@@ -175,11 +178,11 @@ public class AutoFarming extends Module {
         for (int x = -r; x <= r; x++) {
             for (int y = -1; y <= 2; y++) {
                 for (int z = -r; z <= r; z++) {
-                    BlockPos pos = base.add(x, y, z);
-                    BlockState state = mc.world.getBlockState(pos);
+                    BlockPos pos = base.offset(x, y, z);
+                    BlockState state = mc.level.getBlockState(pos);
 
                     if (!(state.getBlock() instanceof CropBlock crop)) continue;
-                    if (!crop.isMature(state)) continue;
+                    if (!crop.isMaxAge(state)) continue;
 
                     sendBreakPackets(pos);
                     queueReplant(pos, crop);
@@ -195,14 +198,14 @@ public class AutoFarming extends Module {
         for (int x = -r; x <= r; x++) {
             for (int y = -1; y <= 4; y++) {
                 for (int z = -r; z <= r; z++) {
-                    BlockPos pos = base.add(x, y, z);
-                    BlockState state = mc.world.getBlockState(pos);
+                    BlockPos pos = base.offset(x, y, z);
+                    BlockState state = mc.level.getBlockState(pos);
 
                     if (!type.isInstance(state.getBlock())) continue;
 
-                    BlockPos below = pos.down();
-                    BlockPos above = pos.up();
-                    if (type.isInstance(mc.world.getBlockState(below).getBlock()) && type.isInstance(mc.world.getBlockState(above).getBlock())) {
+                    BlockPos below = pos.below();
+                    BlockPos above = pos.above();
+                    if (type.isInstance(mc.level.getBlockState(below).getBlock()) && type.isInstance(mc.level.getBlockState(above).getBlock())) {
                         sendBreakPackets(pos);
                         return true;
                     }
@@ -220,17 +223,17 @@ public class AutoFarming extends Module {
         for (int x = -r; x <= r; x++) {
             for (int y = -1; y <= 2; y++) {
                 for (int z = -r; z <= r; z++) {
-                    BlockPos pos = base.add(x, y, z);
-                    BlockState state = mc.world.getBlockState(pos);
+                    BlockPos pos = base.offset(x, y, z);
+                    BlockState state = mc.level.getBlockState(pos);
 
                     if (!(state.getBlock() instanceof CropBlock crop)) continue;
-                    if (crop.isMature(state)) continue;
+                    if (crop.isMaxAge(state)) continue;
 
                     int prev = mc.player.getInventory().getSelectedSlot();
                     InvUtils.swap(slot, false);
 
-                    BlockHitResult hit = new BlockHitResult(Vec3d.ofCenter(pos), Direction.UP, pos, false);
-                    mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
+                    BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false);
+                    mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
 
                     InvUtils.swap(prev, false);
                     return true;
@@ -244,8 +247,8 @@ public class AutoFarming extends Module {
     private boolean tryBreed(BlockPos base, int r) {
         double rangeSq = r * r;
 
-        for (AnimalEntity animal : mc.world.getEntitiesByClass(AnimalEntity.class, mc.player.getBoundingBox().expand(r), e -> true)) {
-            if (animal.squaredDistanceTo(mc.player) > rangeSq) continue;
+        for (Animal animal : mc.level.getEntities(EntityTypeTest.forClass(Animal.class), mc.player.getBoundingBox().inflate(r), e -> true)) {
+            if (animal.distanceToSqr(mc.player) > rangeSq) continue;
             if (animal.isBaby() || animal.isInLove()) continue;
 
             int slot = findBreedingSlot(animal);
@@ -254,7 +257,7 @@ public class AutoFarming extends Module {
             int prev = mc.player.getInventory().getSelectedSlot();
             InvUtils.swap(slot, false);
 
-            mc.interactionManager.interactEntity(mc.player, animal, Hand.MAIN_HAND);
+            mc.gameMode.interact(mc.player, animal, new EntityHitResult(animal), InteractionHand.MAIN_HAND);
 
             InvUtils.swap(prev, false);
             return true;
@@ -263,11 +266,11 @@ public class AutoFarming extends Module {
         return false;
     }
 
-    private int findBreedingSlot(AnimalEntity animal) {
+    private int findBreedingSlot(Animal animal) {
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (stack.isEmpty()) continue;
-            if (animal.isBreedingItem(stack)) return i;
+            if (animal.isFood(stack)) return i;
         }
 
         return -1;
@@ -275,21 +278,21 @@ public class AutoFarming extends Module {
 
     private int findHotbarItem(Item item) {
         for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getStack(i).isOf(item)) return i;
+            if (mc.player.getInventory().getItem(i).is(item)) return i;
         }
         return -1;
     }
 
     private void sendBreakPackets(BlockPos pos) {
-        if (mc.getNetworkHandler() == null) return;
-        mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
-            PlayerActionC2SPacket.Action.START_DESTROY_BLOCK,
+        if (mc.getConnection() == null) return;
+        mc.getConnection().send(new ServerboundPlayerActionPacket(
+            ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK,
             pos,
             Direction.UP
         ));
 
-        mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
-            PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK,
+        mc.getConnection().send(new ServerboundPlayerActionPacket(
+            ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK,
             pos,
             Direction.UP
         ));
@@ -304,7 +307,7 @@ public class AutoFarming extends Module {
     }
 
     private void processReplants() {
-        if (replantQueue.isEmpty() || mc.player == null || mc.world == null) return;
+        if (replantQueue.isEmpty() || mc.player == null || mc.level == null) return;
 
         PendingReplant pending = replantQueue.peekFirst();
         if (pending == null) return;
@@ -315,7 +318,7 @@ public class AutoFarming extends Module {
         }
 
         replantQueue.pollFirst();
-        if (!mc.world.getBlockState(pending.pos).isReplaceable()) return;
+        if (!mc.level.getBlockState(pending.pos).canBeReplaced()) return;
 
         int slot = findReplantSlot(pending.seedItem);
         if (slot == -1) return;
@@ -323,18 +326,18 @@ public class AutoFarming extends Module {
         int prev = mc.player.getInventory().getSelectedSlot();
         InvUtils.swap(slot, false);
 
-        BlockPos below = pending.pos.down();
-        BlockHitResult hit = new BlockHitResult(Vec3d.ofCenter(below), Direction.UP, below, false);
-        mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
+        BlockPos below = pending.pos.below();
+        BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(below), Direction.UP, below, false);
+        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
 
         InvUtils.swap(prev, false);
     }
 
     private int findReplantSlot(Item seedItem) {
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (stack.isEmpty()) continue;
-            if (stack.isOf(seedItem)) return i;
+            if (stack.is(seedItem)) return i;
 
             if (stack.getItem() instanceof BlockItem && stack.getItem() == seedItem) return i;
         }
@@ -349,7 +352,7 @@ public class AutoFarming extends Module {
 
         int invSlot = -1;
         for (int i = 9; i < 36; i++) {
-            if (mc.player.getInventory().getStack(i).isOf(item)) {
+            if (mc.player.getInventory().getItem(i).is(item)) {
                 invSlot = i;
                 break;
             }
@@ -358,7 +361,7 @@ public class AutoFarming extends Module {
 
         int target = -1;
         for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getStack(i).isEmpty()) {
+            if (mc.player.getInventory().getItem(i).isEmpty()) {
                 target = i;
                 break;
             }
@@ -372,7 +375,7 @@ public class AutoFarming extends Module {
     private int findHoeHotbarSlot() {
         if (mc.player == null) return -1;
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (!stack.isEmpty() && stack.getItem() instanceof HoeItem) return i;
         }
         return -1;
@@ -380,24 +383,24 @@ public class AutoFarming extends Module {
 
     private boolean tryUseHoe(BlockPos base, int r) {
         int hoeSlot = findHoeHotbarSlot();
-        if (hoeSlot == -1 || mc.player == null || mc.world == null) return false;
+        if (hoeSlot == -1 || mc.player == null || mc.level == null) return false;
 
         for (int x = -r; x <= r; x++) {
             for (int y = -1; y <= 1; y++) {
                 for (int z = -r; z <= r; z++) {
-                    BlockPos pos = base.add(x, y, z);
-                    BlockState state = mc.world.getBlockState(pos);
-                    BlockState above = mc.world.getBlockState(pos.up());
+                    BlockPos pos = base.offset(x, y, z);
+                    BlockState state = mc.level.getBlockState(pos);
+                    BlockState above = mc.level.getBlockState(pos.above());
 
-                    boolean tillable = state.isOf(Blocks.DIRT) || state.isOf(Blocks.GRASS_BLOCK) || state.isOf(Blocks.DIRT_PATH);
+                    boolean tillable = state.is(Blocks.DIRT) || state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.DIRT_PATH);
                     if (!tillable) continue;
                     if (!above.isAir()) continue;
 
                     int prev = mc.player.getInventory().getSelectedSlot();
                     InvUtils.swap(hoeSlot, false);
 
-                    BlockHitResult hit = new BlockHitResult(Vec3d.ofCenter(pos), Direction.UP, pos, false);
-                    mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
+                    BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false);
+                    mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
 
                     InvUtils.swap(prev, false);
                     return true;
@@ -410,28 +413,28 @@ public class AutoFarming extends Module {
 
     private boolean tryPlaceWater(BlockPos base, int r) {
         int waterBucketSlot = findOrMoveToHotbar(Items.WATER_BUCKET, true);
-        if (waterBucketSlot == -1 || mc.player == null || mc.world == null) return false;
+        if (waterBucketSlot == -1 || mc.player == null || mc.level == null) return false;
 
         for (int x = -r; x <= r; x++) {
             for (int y = -1; y <= 1; y++) {
                 for (int z = -r; z <= r; z++) {
-                    BlockPos farmlandPos = base.add(x, y, z);
-                    BlockState farmland = mc.world.getBlockState(farmlandPos);
+                    BlockPos farmlandPos = base.offset(x, y, z);
+                    BlockState farmland = mc.level.getBlockState(farmlandPos);
                     if (!(farmland.getBlock() instanceof FarmlandBlock)) continue;
-                    if (!farmland.contains(Properties.MOISTURE)) continue;
-                    if (farmland.get(Properties.MOISTURE) >= 7) continue;
+                    if (!farmland.hasProperty(BlockStateProperties.MOISTURE)) continue;
+                    if (farmland.getValue(BlockStateProperties.MOISTURE) >= 7) continue;
                     if (hasNearbyWater(farmlandPos, 4)) continue;
 
-                    BlockPos placePos = farmlandPos.up();
-                    if (!mc.world.getBlockState(placePos).isReplaceable()) continue;
-                    BlockPos support = placePos.down();
-                    if (!mc.world.getBlockState(support).isSolidBlock(mc.world, support)) continue;
+                    BlockPos placePos = farmlandPos.above();
+                    if (!mc.level.getBlockState(placePos).canBeReplaced()) continue;
+                    BlockPos support = placePos.below();
+                    if (!mc.level.getBlockState(support).isSolid()) continue;
 
                     int prev = mc.player.getInventory().getSelectedSlot();
                     InvUtils.swap(waterBucketSlot, false);
 
-                    BlockHitResult hit = new BlockHitResult(Vec3d.ofCenter(support), Direction.UP, support, false);
-                    mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
+                    BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(support), Direction.UP, support, false);
+                    mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
 
                     InvUtils.swap(prev, false);
                     return true;
@@ -443,12 +446,12 @@ public class AutoFarming extends Module {
     }
 
     private boolean hasNearbyWater(BlockPos pos, int radius) {
-        if (mc.world == null) return false;
+        if (mc.level == null) return false;
         for (int x = -radius; x <= radius; x++) {
             for (int z = -radius; z <= radius; z++) {
-                BlockPos check = pos.add(x, 0, z);
-                if (!mc.world.getFluidState(check).isEmpty() && mc.world.getFluidState(check).isStill()) {
-                    if (mc.world.getFluidState(check).isIn(net.minecraft.registry.tag.FluidTags.WATER)) return true;
+                BlockPos check = pos.offset(x, 0, z);
+                if (!mc.level.getFluidState(check).isEmpty() && mc.level.getFluidState(check).isSource()) {
+                    if (mc.level.getFluidState(check).is(net.minecraft.tags.FluidTags.WATER)) return true;
                 }
             }
         }

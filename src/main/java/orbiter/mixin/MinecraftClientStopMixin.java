@@ -2,15 +2,15 @@ package orbiter.mixin;
 
 import orbiter.modules.LeaveMessage;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(MinecraftClient.class)
+@Mixin(Minecraft.class)
 public abstract class MinecraftClientStopMixin {
-    @Inject(method = "scheduleStop", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "stop", at = @At("HEAD"), cancellable = true)
     private void orbiter$onScheduleStop(CallbackInfo ci) {
         if (Modules.get() == null) return;
 

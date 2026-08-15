@@ -9,15 +9,15 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.network.packet.BrandCustomPayload;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.network.packet.UnknownCustomPayload;
-import net.minecraft.network.packet.s2c.common.CustomPayloadS2CPacket;
-import net.minecraft.network.packet.s2c.play.CommandSuggestionsS2CPacket;
-import net.minecraft.network.packet.s2c.play.GameMessageS2CPacket;
-import net.minecraft.network.packet.c2s.play.RequestCommandCompletionsC2SPacket;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import net.minecraft.network.protocol.common.custom.BrandPayload;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.network.protocol.common.custom.DiscardedPayload;
+import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
+import net.minecraft.network.protocol.game.ClientboundCommandSuggestionsPacket;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.network.protocol.game.ServerboundCommandSuggestionPacket;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -596,20 +596,20 @@ public class PeakPluginScanner extends Module {
     private void onPacketReceive(PacketEvent.Receive event) {
         if (!isActive()) return;
 
-        if (event.packet instanceof CustomPayloadS2CPacket pkt) {
+        if (event.packet instanceof ClientboundCustomPayloadPacket pkt) {
             handlePayload(pkt.payload());
         }
-        if (event.packet instanceof CommandSuggestionsS2CPacket pkt) {
+        if (event.packet instanceof ClientboundCommandSuggestionsPacket pkt) {
             onCommandSuggestions(pkt.id(), pkt);
         }
-        if (waitingForPluginList && event.packet instanceof GameMessageS2CPacket pkt) {
+        if (waitingForPluginList && event.packet instanceof ClientboundSystemChatPacket pkt) {
             handlePluginListResponse(pkt.content().getString());
         }
     }
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (!isActive() || mc.player == null || mc.world == null) return;
+        if (!isActive() || mc.player == null || mc.level == null) return;
 
         if (scanScheduled) {
             scanTickCounter++;
@@ -638,7 +638,7 @@ public class PeakPluginScanner extends Module {
 
         if (scanChannels.get()) processRawBytes();
 
-        if (totalCommandsScanned == 0 || mc.player.age % 100 == 0) fetchServerInfo();
+        if (totalCommandsScanned == 0 || mc.player.tickCount % 100 == 0) fetchServerInfo();
     }
 
     private void executeScan() {
@@ -657,15 +657,15 @@ public class PeakPluginScanner extends Module {
             probing = true;
             probeTickCounter = 0;
             if (mc.player != null) {
-                mc.player.sendMessage(txt("§e[PeakScanner] §7Starting probe scan: §f" + totalProbesQueued + " §7probes queued"), false);
+                mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Starting probe scan: §f" + totalProbesQueued + " §7probes queued"));
             }
         }
 
     }
 
     private void parseCommandTree() {
-        if (mc.player == null || mc.player.networkHandler == null) return;
-        CommandDispatcher<?> dispatcher = mc.player.networkHandler.getCommandDispatcher();
+        if (mc.player == null || mc.player.connection == null) return;
+        CommandDispatcher<?> dispatcher = mc.player.connection.getCommands();
         if (dispatcher == null || dispatcher.getRoot() == null) return;
 
         totalCommandsScanned = 0;
@@ -710,7 +710,7 @@ public class PeakPluginScanner extends Module {
         }
 
         if (mc.player != null) {
-            mc.player.sendMessage(txt("§e[PeakScanner] §7Command tree: §f" + totalCommandsScanned + " §7roots scanned, §f" + observedPluginCommands.size() + " §7observed"), false);
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Command tree: §f" + totalCommandsScanned + " §7roots scanned, §f" + observedPluginCommands.size() + " §7observed"));
         }
     }
 
@@ -810,13 +810,13 @@ public class PeakPluginScanner extends Module {
             return;
         }
 
-        if (mc.getNetworkHandler() == null) {
+        if (mc.getConnection() == null) {
             finishProbing();
             return;
         }
 
-        mc.getNetworkHandler().sendPacket(
-            new RequestCommandCompletionsC2SPacket(probeId, spec.query));
+        mc.getConnection().send(
+            new ServerboundCommandSuggestionPacket(probeId, spec.query));
         totalProbesSent++;
     }
 
@@ -825,25 +825,25 @@ public class PeakPluginScanner extends Module {
 
         inferPluginsFromObservedCommands();
 
-        if (mc.getNetworkHandler() != null && mc.player != null) {
+        if (mc.getConnection() != null && mc.player != null) {
             waitingForPluginList = true;
             querySentTick = 0;
-            mc.getNetworkHandler().sendChatCommand("pl");
+            mc.getConnection().sendCommand("pl");
         }
 
         if (mc.player != null) {
-            mc.player.sendMessage(txt("§e[PeakScanner] §7Probing complete. §f" + totalProbesSent + " §7probes sent, §f" + detectedPlugins.size() + " §7plugins found so far"), false);
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Probing complete. §f" + totalProbesSent + " §7probes sent, §f" + detectedPlugins.size() + " §7plugins found so far"));
         }
 
         if (showResults.get()) displayResults();
     }
 
-    private void onCommandSuggestions(int id, CommandSuggestionsS2CPacket packet) {
+    private void onCommandSuggestions(int id, ClientboundCommandSuggestionsPacket packet) {
         ProbeSpec probe = probeMap.remove(id);
         if (probe == null) return;
         if (packet.suggestions() == null) return;
 
-        for (CommandSuggestionsS2CPacket.Suggestion s : packet.suggestions()) {
+        for (ClientboundCommandSuggestionsPacket.Entry s : packet.suggestions()) {
             String text = s.text();
             if (text == null || text.isEmpty()) continue;
 
@@ -956,14 +956,14 @@ public class PeakPluginScanner extends Module {
         return true;
     }
 
-    private void handlePayload(CustomPayload payload) {
+    private void handlePayload(CustomPacketPayload payload) {
         if (!scanChannels.get()) return;
 
-        if (payload instanceof BrandCustomPayload brand) {
+        if (payload instanceof BrandPayload brand) {
             if (serverBrand == null || serverBrand.isEmpty()) {
                 serverBrand = brand.brand();
             }
-        } else if (payload instanceof UnknownCustomPayload unknown) {
+        } else if (payload instanceof DiscardedPayload unknown) {
             Identifier channelId = unknown.id();
             String channelStr = channelId.toString();
             String ns = channelId.getNamespace();
@@ -1041,30 +1041,27 @@ public class PeakPluginScanner extends Module {
         if (found > 0) {
             waitingForPluginList = false;
             if (mc.player != null) {
-                mc.player.sendMessage(txt("§e[PeakScanner] §7Plugin list: §f" + found + " §7plugins from /plugins"), false);
+                mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Plugin list: §f" + found + " §7plugins from /plugins"));
             }
         }
     }
 
     private void fetchServerInfo() {
-        if (mc.player == null || mc.getNetworkHandler() == null) return;
+        if (mc.player == null || mc.getConnection() == null) return;
 
         try {
-            var serverInfo = mc.getNetworkHandler().getServerInfo();
+            var serverInfo = mc.getConnection().getServerData();
             if (serverInfo != null) {
-                if (serverInfo.address != null) serverIp = serverInfo.address;
-                if (serverInfo.protocolVersion > 0) protocolVersion = serverInfo.protocolVersion;
-                if (serverInfo.version != null) serverVersion = serverInfo.version.getString();
+                if (serverInfo.ip != null) serverIp = serverInfo.ip;
+                
+                
             }
         } catch (Exception ignored) {}
 
         if (protocolVersion == 0) protocolVersion = 769;
 
-        if ((serverBrand == null || serverBrand.isEmpty()) && mc.getNetworkHandler() != null) {
-            try {
-                String brand = mc.getNetworkHandler().getBrand();
-                if (brand != null && !brand.isEmpty()) serverBrand = brand;
-            } catch (Exception ignored) {}
+        if ((serverBrand == null || serverBrand.isEmpty()) && mc.getConnection() != null) {
+
         }
     }
 
@@ -1212,17 +1209,17 @@ public class PeakPluginScanner extends Module {
     public void displayResults() {
         if (mc.player == null) return;
         if (detectedPlugins.isEmpty() && serverBrand == null) {
-            mc.player.sendMessage(txt("§e[PeakScanner] §7No plugins detected."), false);
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7No plugins detected."));
             return;
         }
 
         List<String> anticheats = detectAnticheats();
 
-        mc.player.sendMessage(txt("§e═══════════════════════════════════"), false);
-        mc.player.sendMessage(txt("§e[PeakScanner] §f" + detectedPlugins.size() + " §7plugins detected"), false);
-        if (serverBrand != null) mc.player.sendMessage(txt("§b  Server: §f" + serverBrand + (serverVersion != null ? " " + serverVersion : "")), false);
-        if (serverIp != null) mc.player.sendMessage(txt("§b  IP: §f" + serverIp), false);
-        if (!anticheats.isEmpty()) mc.player.sendMessage(txt("§c  AntiCheat: §f" + String.join(", ", anticheats)), false);
+        mc.player.sendSystemMessage(txt("§e═══════════════════════════════════"));
+        mc.player.sendSystemMessage(txt("§e[PeakScanner] §f" + detectedPlugins.size() + " §7plugins detected"));
+        if (serverBrand != null) mc.player.sendSystemMessage(txt("§b  Server: §f" + serverBrand + (serverVersion != null ? " " + serverVersion : "")));
+        if (serverIp != null) mc.player.sendSystemMessage(txt("§b  IP: §f" + serverIp));
+        if (!anticheats.isEmpty()) mc.player.sendSystemMessage(txt("§c  AntiCheat: §f" + String.join(", ", anticheats)));
 
         Map<Confidence, List<DetectedPlugin>> byConfidence = new LinkedHashMap<>();
         byConfidence.put(Confidence.EXACT, new ArrayList<>());
@@ -1242,23 +1239,23 @@ public class PeakPluginScanner extends Module {
                 case FEATURE -> "§e";
                 case UNKNOWN -> "§7";
             };
-            mc.player.sendMessage(txt(color + "── " + entry.getKey().name() + " (" + entry.getValue().size() + ") ──"), false);
+            mc.player.sendSystemMessage(txt(color + "── " + entry.getKey().name() + " (" + entry.getValue().size() + ") ──"));
 
             StringBuilder sb = new StringBuilder("§7  ");
             for (int i = 0; i < entry.getValue().size(); i++) {
                 if (i > 0) sb.append("§7, ");
                 sb.append("§f").append(entry.getValue().get(i).name);
             }
-            mc.player.sendMessage(txt(sb.toString()), false);
+            mc.player.sendSystemMessage(txt(sb.toString()));
         }
 
-        mc.player.sendMessage(txt("§e═══════════════════════════════════"), false);
+        mc.player.sendSystemMessage(txt("§e═══════════════════════════════════"));
     }
 
     public void copyToClipboard() {
         if (mc.player == null) return;
         if (detectedPlugins.isEmpty()) {
-            mc.player.sendMessage(txt("§e[PeakScanner] §7No plugins detected yet."), false);
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7No plugins detected yet."));
             return;
         }
 
@@ -1291,20 +1288,20 @@ public class PeakPluginScanner extends Module {
             java.awt.Toolkit.getDefaultToolkit()
                 .getSystemClipboard()
                 .setContents(new java.awt.datatransfer.StringSelection(sb.toString()), null);
-            mc.player.sendMessage(txt("§a[PeakScanner] §7Copied §f" + detectedPlugins.size() + " §7plugins to clipboard."), false);
+            mc.player.sendSystemMessage(txt("§a[PeakScanner] §7Copied §f" + detectedPlugins.size() + " §7plugins to clipboard."));
         } catch (Exception e) {
-            mc.player.sendMessage(txt("§c[PeakScanner] Failed to copy: " + e.getMessage()), false);
+            mc.player.sendSystemMessage(txt("§c[PeakScanner] Failed to copy: " + e.getMessage()));
         }
     }
 
     public void displayList() {
         if (mc.player == null) return;
         if (detectedPlugins.isEmpty()) {
-            mc.player.sendMessage(txt("§e[PeakScanner] §7No plugins detected yet. Enable and wait for scan."), false);
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7No plugins detected yet. Enable and wait for scan."));
             return;
         }
 
-        mc.player.sendMessage(txt("§e[PeakScanner] §f" + detectedPlugins.size() + " plugins:"), false);
+        mc.player.sendSystemMessage(txt("§e[PeakScanner] §f" + detectedPlugins.size() + " plugins:"));
 
         List<DetectedPlugin> sorted = new ArrayList<>(detectedPlugins.values());
         sorted.sort((a, b) -> a.name.compareToIgnoreCase(b.name));
@@ -1314,11 +1311,11 @@ public class PeakPluginScanner extends Module {
             if (i > 0) sb.append("§7, ");
             sb.append("§f").append(sorted.get(i).name);
             if (sb.length() > 200) {
-                mc.player.sendMessage(txt(sb.toString()), false);
+                mc.player.sendSystemMessage(txt(sb.toString()));
                 sb = new StringBuilder("§7  ");
             }
         }
-        if (sb.length() > 4) mc.player.sendMessage(txt(sb.toString()), false);
+        if (sb.length() > 4) mc.player.sendSystemMessage(txt(sb.toString()));
     }
 
     public void exportToFile() {
@@ -1366,9 +1363,9 @@ public class PeakPluginScanner extends Module {
             }
 
             pw.close();
-            mc.player.sendMessage(txt("§a[PeakScanner] §7Exported to §fpeakscan_results.txt"), false);
+            mc.player.sendSystemMessage(txt("§a[PeakScanner] §7Exported to §fpeakscan_results.txt"));
         } catch (Exception e) {
-            mc.player.sendMessage(txt("§c[PeakScanner] Export failed: " + e.getMessage()), false);
+            mc.player.sendSystemMessage(txt("§c[PeakScanner] Export failed: " + e.getMessage()));
         }
     }
 
@@ -1424,10 +1421,10 @@ public class PeakPluginScanner extends Module {
         probing = false;
         waitingForPluginList = false;
         if (mc.player != null) {
-            mc.player.sendMessage(txt("§e[PeakScanner] §7Stopped. §f" + detectedPlugins.size() + " §7plugins detected."), false);
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Stopped. §f" + detectedPlugins.size() + " §7plugins detected."));
         }
         if (showResults.get() && !detectedPlugins.isEmpty()) displayResults();
     }
 
-    private static Text txt(String s) { return Text.literal(s); }
+    private static Component txt(String s) { return Component.literal(s); }
 }

@@ -3,7 +3,7 @@ package orbiter.commands;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
-import net.minecraft.command.CommandSource;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
 
 import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 
@@ -14,10 +14,10 @@ public class TransferCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.then(argument("ip", StringArgumentType.greedyString())
             .executes(context -> {
-                if (mc.player == null || mc.getNetworkHandler() == null) {
+                if (mc.player == null || mc.getConnection() == null) {
                     error("Not connected to a server.");
                     return SINGLE_SUCCESS;
                 }
@@ -43,7 +43,7 @@ public class TransferCommand extends Command {
                     return SINGLE_SUCCESS;
                 }
 
-                mc.getNetworkHandler().sendChatCommand("transfer " + host + " " + port);
+                mc.getConnection().sendCommand("transfer " + host + " " + port);
                 info("Transferring to " + host + ":" + port + " ...");
                 return SINGLE_SUCCESS;
             }));

@@ -6,17 +6,17 @@ import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.projectile.ProjectileEntity;
-import net.minecraft.item.ShieldItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.item.ShieldItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
 import orbiter.Orbiter;
 
 import java.util.HashSet;
@@ -188,7 +188,7 @@ public class ShieldAssist extends Module {
 
     @EventHandler(priority = EventPriority.HIGH)
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         tickCounter++;
 
         if (shieldDisableTimer > 0) shieldDisableTimer--;
@@ -225,12 +225,12 @@ public class ShieldAssist extends Module {
 
     private boolean checkHasShield() {
         if (mc.player == null) return false;
-        return mc.player.getOffHandStack().getItem() instanceof ShieldItem
-            || mc.player.getMainHandStack().getItem() instanceof ShieldItem;
+        return mc.player.getOffhandItem().getItem() instanceof ShieldItem
+            || mc.player.getMainHandItem().getItem() instanceof ShieldItem;
     }
 
     private boolean detectThreat() {
-        Vec3d eyes = mc.player.getEyePos();
+        Vec3 eyes = mc.player.getEyePosition();
 
         if (threatMode.get() == ThreatMode.All || threatMode.get() == ThreatMode.Projectiles) {
             if (detectProjectileThreat(eyes)) return true;
@@ -243,26 +243,26 @@ public class ShieldAssist extends Module {
         return false;
     }
 
-    private boolean detectProjectileThreat(Vec3d eyes) {
+    private boolean detectProjectileThreat(Vec3 eyes) {
         double detectionRange = projectileRange.get();
         double dotThreshold = projectileDotThreshold.get();
 
-        for (Entity entity : mc.world.getEntities()) {
-            if (!(entity instanceof ProjectileEntity proj)) continue;
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
+            if (!(entity instanceof Projectile proj)) continue;
             if (proj.getOwner() == mc.player) continue;
-            if (proj.age < 0) continue;
+            if (proj.tickCount < 0) continue;
 
-            Vec3d projPos = new Vec3d(proj.getX(), proj.getY(), proj.getZ());
-            Vec3d projVel = proj.getVelocity();
+            Vec3 projPos = new Vec3(proj.getX(), proj.getY(), proj.getZ());
+            Vec3 projVel = proj.getDeltaMovement();
             double dist = projPos.distanceTo(eyes);
 
             if (dist > detectionRange) continue;
 
-            if (projVel.lengthSquared() < 0.001) continue;
+            if (projVel.lengthSqr() < 0.001) continue;
 
-            Vec3d toPlayer = eyes.subtract(projPos).normalize();
-            Vec3d projDir = projVel.normalize();
-            double dot = toPlayer.dotProduct(projDir);
+            Vec3 toPlayer = eyes.subtract(projPos).normalize();
+            Vec3 projDir = projVel.normalize();
+            double dot = toPlayer.dot(projDir);
 
             if (dot > dotThreshold && dist < 20) {
                 return true;
@@ -276,34 +276,34 @@ public class ShieldAssist extends Module {
         return false;
     }
 
-    private boolean detectMeleeThreat(Vec3d eyes) {
+    private boolean detectMeleeThreat(Vec3 eyes) {
         double meleeDist = meleeRange.get();
 
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (living == mc.player || !living.isAlive()) continue;
 
-            if (living instanceof PlayerEntity p) {
+            if (living instanceof Player p) {
                 if (ignoreFriends.get() && Friends.get().isFriend(p)) continue;
-                if (p.getAbilities().creativeMode) continue;
+                if (p.getAbilities().instabuild) continue;
             }
 
             double dist = living.distanceTo(mc.player);
             if (dist > meleeDist + 2.0) continue;
 
-            if (living.handSwinging && dist < meleeDist) {
+            if (living.swinging && dist < meleeDist) {
                 return true;
             }
 
-            if (detectAxeDisabling.get() && trackedAxeUsers.contains(living.getUuid()) && dist < meleeDist + 1.0) {
+            if (detectAxeDisabling.get() && trackedAxeUsers.contains(living.getUUID()) && dist < meleeDist + 1.0) {
                 return true;
             }
 
             if (living.isSprinting() && dist < meleeDist + 1.0) {
-                Vec3d toPlayer = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ()).subtract(
-                    new Vec3d(living.getX(), living.getY(), living.getZ())).normalize();
-                Vec3d moveDir = living.getVelocity().normalize();
-                if (toPlayer.dotProduct(moveDir) > 0.7) {
+                Vec3 toPlayer = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ()).subtract(
+                    new Vec3(living.getX(), living.getY(), living.getZ())).normalize();
+                Vec3 moveDir = living.getDeltaMovement().normalize();
+                if (toPlayer.dot(moveDir) > 0.7) {
                     return true;
                 }
             }
@@ -316,17 +316,17 @@ public class ShieldAssist extends Module {
         trackedAxeUsers.clear();
         double detectionRange = meleeRange.get() + 4.0;
 
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (living == mc.player || !living.isAlive()) continue;
 
-            ItemStack mainHand = living.getMainHandStack();
-            ItemStack offHand = living.getOffHandStack();
-            boolean hasAxe = mainHand.getItem() instanceof net.minecraft.item.AxeItem
-                || offHand.getItem() instanceof net.minecraft.item.AxeItem;
+            ItemStack mainHand = living.getMainHandItem();
+            ItemStack offHand = living.getOffhandItem();
+            boolean hasAxe = mainHand.getItem() instanceof net.minecraft.world.item.AxeItem
+                || offHand.getItem() instanceof net.minecraft.world.item.AxeItem;
 
             if (hasAxe && living.distanceTo(mc.player) < detectionRange) {
-                trackedAxeUsers.add(living.getUuid());
+                trackedAxeUsers.add(living.getUUID());
             }
         }
     }
@@ -336,12 +336,12 @@ public class ShieldAssist extends Module {
 
         if (shieldDisableTimer > 0) return;
 
-        boolean offHandShield = mc.player.getOffHandStack().getItem() instanceof ShieldItem;
-        boolean mainHandShield = mc.player.getMainHandStack().getItem() instanceof ShieldItem;
+        boolean offHandShield = mc.player.getOffhandItem().getItem() instanceof ShieldItem;
+        boolean mainHandShield = mc.player.getMainHandItem().getItem() instanceof ShieldItem;
 
         if (offHandShield || mainHandShield) {
 
-            mc.options.useKey.setPressed(true);
+            mc.options.keyUse.setDown(true);
             isBlocking = true;
             blockTimer = blockTicks.get();
         }
@@ -349,7 +349,7 @@ public class ShieldAssist extends Module {
 
     private void stopBlocking() {
         if (mc.player == null) return;
-        mc.options.useKey.setPressed(false);
+        mc.options.keyUse.setDown(false);
         isBlocking = false;
         blockTimer = 0;
     }

@@ -2,8 +2,8 @@ package orbiter.util;
 
 import orbiter.modules.ClientSideThings;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.item.ItemStack;
-import net.minecraft.text.Text;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -14,8 +14,8 @@ import java.util.Map;
 public final class ClientSpoofState {
 
     private static final Map<ItemStack, Integer> fakeCounts = Collections.synchronizedMap(new IdentityHashMap<>());
-    private static final Map<ItemStack, Text> fakeNames = Collections.synchronizedMap(new IdentityHashMap<>());
-    private static final Map<ItemStack, List<Text>> fakeLore = Collections.synchronizedMap(new IdentityHashMap<>());
+    private static final Map<ItemStack, Component> fakeNames = Collections.synchronizedMap(new IdentityHashMap<>());
+    private static final Map<ItemStack, List<Component>> fakeLore = Collections.synchronizedMap(new IdentityHashMap<>());
 
     private ClientSpoofState() {
     }
@@ -48,19 +48,19 @@ public final class ClientSpoofState {
         return fakeCounts.getOrDefault(stack, -1);
     }
 
-    public static void setFakeName(ItemStack stack, Text name) {
+    public static void setFakeName(ItemStack stack, Component name) {
         if (stack == null || stack.isEmpty()) return;
 
         if (name == null) fakeNames.remove(stack);
         else fakeNames.put(stack, name);
     }
 
-    public static Text getFakeName(ItemStack stack) {
+    public static Component getFakeName(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return null;
         return fakeNames.get(stack);
     }
 
-    public static void setFakeLore(ItemStack stack, List<Text> lore) {
+    public static void setFakeLore(ItemStack stack, List<Component> lore) {
         if (stack == null || stack.isEmpty()) return;
 
         if (lore == null || lore.isEmpty()) {
@@ -71,10 +71,10 @@ public final class ClientSpoofState {
         fakeLore.put(stack, new ArrayList<>(lore));
     }
 
-    public static List<Text> getFakeLore(ItemStack stack) {
+    public static List<Component> getFakeLore(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return List.of();
 
-        List<Text> lore = fakeLore.get(stack);
+        List<Component> lore = fakeLore.get(stack);
         if (lore == null) return List.of();
 
         return lore;

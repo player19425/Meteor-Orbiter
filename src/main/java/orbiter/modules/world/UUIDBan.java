@@ -4,18 +4,19 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.meteorclient.events.world.TickEvent;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.AttributeModifierSlot;
-import net.minecraft.component.type.AttributeModifiersComponent;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.attribute.EntityAttributeModifier;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.entity.TypedEntityData;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.network.packet.c2s.play.CreativeInventoryActionC2SPacket;
-import net.minecraft.text.Text;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.entity.EquipmentSlotGroup;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.component.TypedEntityData;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
+import net.minecraft.network.chat.Component;
 import orbiter.Orbiter;
 import orbiter.util.ConfigModifier;
 import orbiter.util.MojangApiUtil;
@@ -70,7 +71,7 @@ public class UUIDBan extends Module {
             return;
         }
 
-        if (mc.player == null || mc.world == null || mc.player.networkHandler == null) {
+        if (mc.player == null || mc.level == null || mc.player.connection == null) {
             warning("Join a world first.");
             return;
         }
@@ -80,10 +81,10 @@ public class UUIDBan extends Module {
             return;
         }
 
-        for (var player : mc.world.getPlayers()) {
+        for (var player : mc.level.players()) {
             if (player.getName().getString().equalsIgnoreCase(name)) {
                 resolvedName = name;
-                resolvedUuid = player.getUuid();
+                resolvedUuid = player.getUUID();
                 break;
             }
         }
@@ -131,7 +132,7 @@ public class UUIDBan extends Module {
     }
 
     private void placeEgg(String name, UUID uuid) {
-        if (mc.player == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.player.connection == null) return;
 
         long most = uuid.getMostSignificantBits();
         long least = uuid.getLeastSignificantBits();
@@ -144,9 +145,9 @@ public class UUIDBan extends Module {
             glowing.get() ? ",Glowing:1b" : "");
 
         ItemStack egg = new ItemStack(Items.ARMOR_STAND);
-        egg.set(DataComponentTypes.CUSTOM_NAME, Text.literal("§c§lUUIDBan: " + name));
+        egg.set(DataComponents.CUSTOM_NAME, Component.literal("§c§lUUIDBan: " + name));
 
-        NbtCompound entityData = new NbtCompound();
+        CompoundTag entityData = new CompoundTag();
         entityData.putString("id", entityTypeStr.get());
         entityData.putLong("UUIDMost", most);
         entityData.putLong("UUIDLeast", least);
@@ -157,19 +158,19 @@ public class UUIDBan extends Module {
         entityData.putBoolean("Silent", true);
         if (glowing.get()) entityData.putBoolean("Glowing", true);
 
-        egg.set(DataComponentTypes.ENTITY_DATA,
-            TypedEntityData.create(EntityType.ARMOR_STAND, entityData));
+        egg.set(DataComponents.ENTITY_DATA,
+            TypedEntityData.of(EntityTypes.ARMOR_STAND, entityData));
 
         int slot = mc.player.getInventory().getSelectedSlot();
-        mc.player.networkHandler.sendPacket(new CreativeInventoryActionC2SPacket(36 + slot, egg));
+        mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(36 + slot, egg));
 
         if (debug.get()) info("Placed UUIDBan egg in slot %d for %s (UUID: %s). Right-click to summon.",
             slot + 1, name, uuid);
     }
 
     private void sendKick(String name) {
-        if (mc.player == null || mc.player.networkHandler == null) return;
-        mc.player.networkHandler.sendChatCommand("kick " + name);
+        if (mc.player == null || mc.player.connection == null) return;
+        mc.player.connection.sendCommand("kick " + name);
         if (debug.get()) info("Sent kick for " + name);
     }
 
@@ -180,8 +181,8 @@ public class UUIDBan extends Module {
     }
 
     public void cleanup() {
-        if (mc.player == null || mc.player.networkHandler == null) return;
-        mc.player.networkHandler.sendChatCommand("kill @e[tag=orbiter_uuidban]");
+        if (mc.player == null || mc.player.connection == null) return;
+        mc.player.connection.sendCommand("kill @e[tag=orbiter_uuidban]");
         info("Cleaned up UUIDBan entities.");
     }
 }

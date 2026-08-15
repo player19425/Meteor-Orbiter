@@ -1,8 +1,8 @@
 package orbiter.mixin;
 
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.entity.decoration.DisplayEntity;
-import net.minecraft.text.Text;
+import net.minecraft.world.entity.Display;
+import net.minecraft.network.chat.Component;
 import orbiter.modules.misc.DisplayTextSanitizer;
 import orbiter.modules.misc.ServerProtect;
 import org.spongepowered.asm.mixin.Mixin;
@@ -11,32 +11,32 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(DisplayEntity.TextDisplayEntity.class)
+@Mixin(Display.TextDisplay.class)
 public class CrashFixerTextDisplayMixin {
 
     @Shadow
-    private DisplayEntity.TextDisplayEntity.TextLines textLines;
+    private Display.TextDisplay.CachedInfo clientDisplayCache;
     @Shadow
-    private DisplayEntity.TextDisplayEntity.Data data;
+    private Display.TextDisplay.TextRenderState textRenderState;
 
-    @Inject(method = "splitLines", at = @At("HEAD"), cancellable = true)
-    private void orbiter$sanitizeDisplayCache(DisplayEntity.TextDisplayEntity.LineSplitter splitter,
-                                              CallbackInfoReturnable<DisplayEntity.TextDisplayEntity.TextLines> cir) {
+    @Inject(method = "cacheDisplay", at = @At("HEAD"), cancellable = true)
+    private void orbiter$sanitizeDisplayCache(Display.TextDisplay.LineSplitter splitter,
+                                              CallbackInfoReturnable<Display.TextDisplay.CachedInfo> cir) {
         ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);
         if (mod == null || !mod.isActive() || !mod.shouldSanitizeTextDisplays()) return;
-        if (this.textLines != null || this.data == null) return;
+        if (this.clientDisplayCache != null || this.textRenderState == null) return;
 
-        Text text = this.data.text();
+        Component text = this.textRenderState.text();
         if (!DisplayTextSanitizer.shouldSimplify(text,
                 mod.getTextDisplayMaxChars(), mod.getTextDisplayMaxNodes(), mod.getTextDisplayMaxDepth(),
                 mod.getTextDisplayMaxStyleScore(), mod.getTextDisplayMaxObfuscatedChars(), mod.getTextDisplayMaxComplexNodes())) {
             return;
         }
 
-        this.textLines = splitter.split(
+        this.clientDisplayCache = splitter.split(
             DisplayTextSanitizer.simplifiedText(),
-            DisplayTextSanitizer.clampLineWidth(this.data.lineWidth(), mod.getTextDisplayMaxLineWidth())
+            DisplayTextSanitizer.clampLineWidth(this.textRenderState.lineWidth(), mod.getTextDisplayMaxLineWidth())
         );
-        cir.setReturnValue(this.textLines);
+        cir.setReturnValue(this.clientDisplayCache);
     }
 }

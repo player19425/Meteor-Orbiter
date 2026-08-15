@@ -16,21 +16,26 @@ import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.meteorclient.utils.world.BlockIterator;
 import meteordevelopment.meteorclient.utils.world.BlockUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.*;
-import net.minecraft.block.enums.BlockHalf;
-import net.minecraft.block.enums.SlabType;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.state.property.Properties;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.*;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.world.level.block.*;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Half;
+import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.ClipContext;
 
 import java.util.*;
 import java.util.function.Supplier;
@@ -264,7 +269,7 @@ public class AutoBuild extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) {
+        if (mc.player == null || mc.level == null) {
             placedFade.clear();
             return;
         }
@@ -285,18 +290,18 @@ public class AutoBuild extends Module {
             int range = printingRange.get();
 
             BlockIterator.register(range + 1, range + 1, (pos, blockState) -> {
-                if (mc.player == null || mc.world == null) return;
+                if (mc.player == null || mc.level == null) return;
                 BlockState required = getSchematicBlockState(schematicWorld, pos);
                 if (required == null) return;
 
-                if (!mc.player.getBlockPos().isWithinDistance(pos, range)) return;
-                if (!blockState.isReplaceable()) return;
+                if (!mc.player.blockPosition().closerThan(pos, range)) return;
+                if (!blockState.canBeReplaced()) return;
                 if (!required.getFluidState().isEmpty()) return;
                 if (required.isAir()) return;
                 if (blockState.getBlock() == required.getBlock()) return;
                 if (!isInRenderRange(pos)) return;
                 if (mc.player.getBoundingBox().intersects(
-                    new Box(pos.getX(), pos.getY(), pos.getZ(),
+                    new AABB(pos.getX(), pos.getY(), pos.getZ(),
                         pos.getX() + 1, pos.getY() + 1, pos.getZ() + 1))) return;
                 if (!canSurviveAt(required, pos)) return;
 
@@ -306,23 +311,23 @@ public class AutoBuild extends Module {
                 if (requiredItem == Items.AIR) return;
 
                 boolean isBlockInLineOfSight = isBlockInLineOfSight(pos, required);
-                SlabType wantedSlabType = advanced.get() && required.contains(Properties.SLAB_TYPE)
-                    ? required.get(Properties.SLAB_TYPE) : null;
-                BlockHalf wantedBlockHalf = advanced.get() && required.contains(Properties.BLOCK_HALF)
-                    ? required.get(Properties.BLOCK_HALF) : null;
-                Direction wantedHorizontalOrientation = advanced.get() && required.contains(Properties.HORIZONTAL_FACING)
-                    ? required.get(Properties.HORIZONTAL_FACING) : null;
-                Direction.Axis wantedAxis = advanced.get() && required.contains(Properties.AXIS)
-                    ? required.get(Properties.AXIS) : null;
-                Direction wantedHopperOrientation = advanced.get() && required.contains(Properties.HOPPER_FACING)
-                    ? required.get(Properties.HOPPER_FACING) : null;
+                SlabType wantedSlabType = advanced.get() && required.hasProperty(BlockStateProperties.SLAB_TYPE)
+                    ? required.getValue(BlockStateProperties.SLAB_TYPE) : null;
+                Half wantedHalf = advanced.get() && required.hasProperty(BlockStateProperties.HALF)
+                    ? required.getValue(BlockStateProperties.HALF) : null;
+                Direction wantedHorizontalOrientation = advanced.get() && required.hasProperty(BlockStateProperties.HORIZONTAL_FACING)
+                    ? required.getValue(BlockStateProperties.HORIZONTAL_FACING) : null;
+                Direction.Axis wantedAxis = advanced.get() && required.hasProperty(BlockStateProperties.AXIS)
+                    ? required.getValue(BlockStateProperties.AXIS) : null;
+                Direction wantedHopperOrientation = advanced.get() && required.hasProperty(BlockStateProperties.FACING_HOPPER)
+                    ? required.getValue(BlockStateProperties.FACING_HOPPER) : null;
 
                 Direction effectiveHorizontal = wantedHorizontalOrientation != null
                     ? wantedHorizontalOrientation : wantedHopperOrientation;
 
                 Direction strictSide = placeThroughWall.get()
-                    ? getPlaceSide(pos, required, wantedSlabType, wantedBlockHalf, effectiveHorizontal, wantedAxis, advanced.get() ? dir(required) : null)
-                    : getVisiblePlaceSide(pos, required, wantedSlabType, wantedBlockHalf, effectiveHorizontal, wantedAxis, range, advanced.get() ? dir(required) : null);
+                    ? getPlaceSide(pos, required, wantedSlabType, wantedHalf, effectiveHorizontal, wantedAxis, advanced.get() ? dir(required) : null)
+                    : getVisiblePlaceSide(pos, required, wantedSlabType, wantedHalf, effectiveHorizontal, wantedAxis, range, advanced.get() ? dir(required) : null);
 
                 boolean canPlace = strictSide != null;
                 if (!canPlace && airPlace.get()) {
@@ -379,20 +384,20 @@ public class AutoBuild extends Module {
     }
 
     private boolean place(BlockState required, BlockPos pos) {
-        if (mc.player == null || mc.world == null) return false;
-        if (!mc.world.getBlockState(pos).isReplaceable()) return false;
+        if (mc.player == null || mc.level == null) return false;
+        if (!mc.level.getBlockState(pos).canBeReplaced()) return false;
 
         Direction wantedSide = advanced.get() ? dir(required) : null;
-        SlabType wantedSlabType = advanced.get() && required.contains(Properties.SLAB_TYPE)
-            ? required.get(Properties.SLAB_TYPE) : null;
-        BlockHalf wantedBlockHalf = advanced.get() && required.contains(Properties.BLOCK_HALF)
-            ? required.get(Properties.BLOCK_HALF) : null;
-        Direction wantedHorizontalOrientation = advanced.get() && required.contains(Properties.HORIZONTAL_FACING)
-            ? required.get(Properties.HORIZONTAL_FACING) : null;
-        Direction.Axis wantedAxis = advanced.get() && required.contains(Properties.AXIS)
-            ? required.get(Properties.AXIS) : null;
-        Direction wantedHopperOrientation = advanced.get() && required.contains(Properties.HOPPER_FACING)
-            ? required.get(Properties.HOPPER_FACING) : null;
+        SlabType wantedSlabType = advanced.get() && required.hasProperty(BlockStateProperties.SLAB_TYPE)
+            ? required.getValue(BlockStateProperties.SLAB_TYPE) : null;
+        Half wantedHalf = advanced.get() && required.hasProperty(BlockStateProperties.HALF)
+            ? required.getValue(BlockStateProperties.HALF) : null;
+        Direction wantedHorizontalOrientation = advanced.get() && required.hasProperty(BlockStateProperties.HORIZONTAL_FACING)
+            ? required.getValue(BlockStateProperties.HORIZONTAL_FACING) : null;
+        Direction.Axis wantedAxis = advanced.get() && required.hasProperty(BlockStateProperties.AXIS)
+            ? required.getValue(BlockStateProperties.AXIS) : null;
+        Direction wantedHopperOrientation = advanced.get() && required.hasProperty(BlockStateProperties.FACING_HOPPER)
+            ? required.getValue(BlockStateProperties.FACING_HOPPER) : null;
 
         Direction effectiveHorizontal = wantedHorizontalOrientation != null
             ? wantedHorizontalOrientation : wantedHopperOrientation;
@@ -400,24 +405,24 @@ public class AutoBuild extends Module {
         Direction placeSide;
         if (airPlace.get() && placeThroughWall.get()) {
 
-            placeSide = getPlaceSide(pos, required, wantedSlabType, wantedBlockHalf, effectiveHorizontal, wantedAxis, wantedSide);
+            placeSide = getPlaceSide(pos, required, wantedSlabType, wantedHalf, effectiveHorizontal, wantedAxis, wantedSide);
         } else if (placeThroughWall.get()) {
-            placeSide = getPlaceSide(pos, required, wantedSlabType, wantedBlockHalf, effectiveHorizontal, wantedAxis, wantedSide);
+            placeSide = getPlaceSide(pos, required, wantedSlabType, wantedHalf, effectiveHorizontal, wantedAxis, wantedSide);
         } else {
-            placeSide = getVisiblePlaceSide(pos, required, wantedSlabType, wantedBlockHalf, effectiveHorizontal, wantedAxis,
+            placeSide = getVisiblePlaceSide(pos, required, wantedSlabType, wantedHalf, effectiveHorizontal, wantedAxis,
                 printingRange.get(), wantedSide);
         }
 
-        return doPlace(pos, placeSide, wantedSlabType, wantedBlockHalf, effectiveHorizontal, wantedAxis);
+        return doPlace(pos, placeSide, wantedSlabType, wantedHalf, effectiveHorizontal, wantedAxis);
     }
 
     private boolean doPlace(BlockPos blockPos, Direction direction, SlabType slabType,
-                            BlockHalf blockHalf, Direction horizontalFacing, Direction.Axis wantedAxis) {
-        if (mc.player == null || mc.world == null) return false;
+                            Half blockHalf, Direction horizontalFacing, Direction.Axis wantedAxis) {
+        if (mc.player == null || mc.level == null) return false;
 
-        if (!mc.world.getBlockState(blockPos).isReplaceable()) return false;
+        if (!mc.level.getBlockState(blockPos).canBeReplaced()) return false;
 
-        Vec3d hitPos = Vec3d.ofCenter(blockPos);
+        Vec3 hitPos = Vec3.atCenterOf(blockPos);
         BlockPos neighbor;
 
         if (direction == null) {
@@ -426,43 +431,43 @@ public class AutoBuild extends Module {
             direction = Direction.UP;
             neighbor = blockPos;
         } else {
-            neighbor = blockPos.offset(direction.getOpposite());
+            neighbor = blockPos.relative(direction.getOpposite());
             hitPos = hitPos.add(
-                direction.getOffsetX() * 0.5,
-                direction.getOffsetY() * 0.5,
-                direction.getOffsetZ() * 0.5);
+                direction.getStepX() * 0.5,
+                direction.getStepY() * 0.5,
+                direction.getStepZ() * 0.5);
         }
 
         Direction finalDir = direction;
-        Hand hand = useOffhand.get() ? Hand.OFF_HAND : Hand.MAIN_HAND;
+        InteractionHand hand = useOffhand.get() ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND;
 
         if (rotate.get()) {
-            if (mc.world != null) {
-                BlockState neighborState = mc.world.getBlockState(neighbor);
-                var collisionShape = neighborState.getCollisionShape(mc.world, neighbor);
+            if (mc.level != null) {
+                BlockState neighborState = mc.level.getBlockState(neighbor);
+                var collisionShape = neighborState.getCollisionShape(mc.level, neighbor);
 
                 if (collisionShape.isEmpty()) {
 
-                    final Vec3d fHitPos = hitPos;
+                    final Vec3 fHitPos = hitPos;
                     Rotations.rotate(Rotations.getYaw(fHitPos), Rotations.getPitch(fHitPos),
                         50, clientSideRotation.get(),
                         () -> executePlaceWithSneak(new BlockHitResult(fHitPos, finalDir, neighbor, false), hand));
                     return true;
                 }
 
-                Box aabb = collisionShape.getBoundingBox();
+                AABB aabb = collisionShape.bounds();
 
                 for (double z = 0.1; z < 0.9; z += 0.2) {
                     for (double x = 0.1; x < 0.9; x += 0.2) {
-                        Vec3d[] multipliers = aabbSideMultipliers(finalDir.getOpposite());
-                        for (Vec3d placementMultiplier : multipliers) {
+                        Vec3[] multipliers = aabbSideMultipliers(finalDir.getOpposite());
+                        for (Vec3 placementMultiplier : multipliers) {
 
                             double placeX = neighbor.getX() + aabb.minX * x + aabb.maxX * (1 - x);
 
                             if ((slabType != null && slabType != SlabType.DOUBLE
                                 || blockHalf != null && finalDir != Direction.UP && finalDir != Direction.DOWN)
                                 && !mc.player.isCreative()) {
-                                if (slabType == SlabType.BOTTOM || blockHalf == BlockHalf.BOTTOM) {
+                                if (slabType == SlabType.BOTTOM || blockHalf == Half.BOTTOM) {
                                     if (placementMultiplier.y <= 0.5) continue;
                                 } else {
                                     if (placementMultiplier.y > 0.5) continue;
@@ -472,8 +477,8 @@ public class AutoBuild extends Module {
                             double placeY = neighbor.getY() + aabb.minY * placementMultiplier.y + aabb.maxY * (1 - placementMultiplier.y);
                             double placeZ = neighbor.getZ() + aabb.minZ * z + aabb.maxZ * (1 - z);
 
-                            Vec3d testHitPos = new Vec3d(placeX, placeY, placeZ);
-                            Vec3d playerHead = new Vec3d(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ());
+                            Vec3 testHitPos = new Vec3(placeX, placeY, placeZ);
+                            Vec3 playerHead = new Vec3(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ());
 
                             float[] rot = calcRotation(playerHead, testHitPos);
                             Direction testHorizontalDirection = getHorizontalDirectionFromYaw(rot[0]);
@@ -485,7 +490,7 @@ public class AutoBuild extends Module {
                             if (res == null || res.getType() != HitResult.Type.BLOCK) continue;
                             BlockHitResult blockHitRes = (BlockHitResult) res;
                             if (!blockHitRes.getBlockPos().equals(neighbor)) continue;
-                            if (blockHitRes.getSide() != finalDir) continue;
+                            if (blockHitRes.getDirection() != finalDir) continue;
 
                             Rotations.rotate(Rotations.getYaw(testHitPos), Rotations.getPitch(testHitPos),
                                 50, clientSideRotation.get(),
@@ -496,7 +501,7 @@ public class AutoBuild extends Module {
                 }
             }
 
-            final Vec3d fallbackHitPos = hitPos;
+            final Vec3 fallbackHitPos = hitPos;
             Rotations.rotate(Rotations.getYaw(hitPos), Rotations.getPitch(hitPos),
                 50, clientSideRotation.get(),
                 () -> executePlaceWithSneak(new BlockHitResult(fallbackHitPos, finalDir, neighbor, false), hand));
@@ -507,48 +512,48 @@ public class AutoBuild extends Module {
         return true;
     }
 
-    private boolean executePlaceWithSneak(BlockHitResult hitResult, Hand hand) {
-        if (mc.player == null || mc.interactionManager == null || mc.getNetworkHandler() == null) return false;
+    private boolean executePlaceWithSneak(BlockHitResult hitResult, InteractionHand hand) {
+        if (mc.player == null || mc.gameMode == null || mc.getConnection() == null) return false;
 
         if (strictRotationSync.get()) {
-            Vec3d eye = new Vec3d(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ());
-            float[] rot = calcRotation(eye, hitResult.getPos());
-            mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(
+            Vec3 eye = new Vec3(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ());
+            float[] rot = calcRotation(eye, hitResult.getLocation());
+            mc.getConnection().send(new ServerboundMovePlayerPacket.Rot(
                 rot[0],
                 rot[1],
-                mc.player.isOnGround(),
+                mc.player.onGround(),
                 mc.player.horizontalCollision
             ));
         }
 
-        boolean wasSneaking = mc.player.isSneaking();
-        mc.player.setSneaking(true);
+        boolean wasSneaking = mc.player.isShiftKeyDown();
+        mc.player.setShiftKeyDown(true);
 
-        ActionResult result = mc.interactionManager.interactBlock(mc.player, hand, hitResult);
+        InteractionResult result = mc.gameMode.useItemOn(mc.player, hand, hitResult);
 
-        if (result.isAccepted()) {
-            if (swing.get()) mc.player.swingHand(hand);
-            else mc.getNetworkHandler().sendPacket(new net.minecraft.network.packet.c2s.play.HandSwingC2SPacket(hand));
+        if (result.consumesAction()) {
+            if (swing.get()) mc.player.swing(hand);
+            else mc.getConnection().send(new net.minecraft.network.protocol.game.ServerboundSwingPacket(hand));
 
             if (inventoryResync.get()) {
-                mc.getNetworkHandler().sendPacket(new PlayerActionC2SPacket(
-                    PlayerActionC2SPacket.Action.SWAP_ITEM_WITH_OFFHAND,
-                    BlockPos.ORIGIN,
+                mc.getConnection().send(new ServerboundPlayerActionPacket(
+                    ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND,
+                    BlockPos.ZERO,
                     Direction.DOWN
                 ));
             }
         }
 
-        mc.player.setSneaking(wasSneaking);
-        return result.isAccepted();
+        mc.player.setShiftKeyDown(wasSneaking);
+        return result.consumesAction();
     }
 
     private Direction dir(BlockState state) {
-        if (state.contains(Properties.FACING)) return state.get(Properties.FACING);
-        if (state.contains(Properties.AXIS))
-            return Direction.from(state.get(Properties.AXIS), Direction.AxisDirection.POSITIVE);
-        if (state.contains(Properties.HORIZONTAL_AXIS))
-            return Direction.from(state.get(Properties.HORIZONTAL_AXIS), Direction.AxisDirection.POSITIVE);
+        if (state.hasProperty(BlockStateProperties.FACING)) return state.getValue(BlockStateProperties.FACING);
+        if (state.hasProperty(BlockStateProperties.AXIS))
+            return Direction.fromAxisAndDirection(state.getValue(BlockStateProperties.AXIS), Direction.AxisDirection.POSITIVE);
+        if (state.hasProperty(BlockStateProperties.HORIZONTAL_AXIS))
+            return Direction.fromAxisAndDirection(state.getValue(BlockStateProperties.HORIZONTAL_AXIS), Direction.AxisDirection.POSITIVE);
         return Direction.UP;
     }
 
@@ -560,24 +565,24 @@ public class AutoBuild extends Module {
         return block instanceof AmethystClusterBlock
             || block instanceof EndRodBlock
             || block instanceof LightningRodBlock
-            || block instanceof TrapdoorBlock
+            || block instanceof TrapDoorBlock
             || block instanceof ChainBlock
-            || block instanceof PillarBlock;
+            || block instanceof RotatedPillarBlock;
     }
 
     private boolean isBlockLikeButton(Block block) {
         return block instanceof ButtonBlock
             || block instanceof BellBlock
             || block instanceof GrindstoneBlock
-            || block instanceof TrapdoorBlock;
+            || block instanceof TrapDoorBlock;
     }
 
     private boolean isFaceDesired(Block block, Direction blockHorizontalOrientation, Direction against) {
         return blockHorizontalOrientation == null
             || (!(isBlockSameAsPlaceDir(block) || isBlockPlacementOpposite(block)))
             || (isBlockSameAsPlaceDir(block) && blockHorizontalOrientation == against)
-            || (block instanceof TrapdoorBlock && against.getOpposite() == blockHorizontalOrientation)
-            || (!(block instanceof TrapdoorBlock) && (
+            || (block instanceof TrapDoorBlock && against.getOpposite() == blockHorizontalOrientation)
+            || (!(block instanceof TrapDoorBlock) && (
                 (isBlockPlacementOpposite(block) && blockHorizontalOrientation == against.getOpposite())
                 || (isBlockLikeButton(block) && against != Direction.UP && against != Direction.DOWN
                     && blockHorizontalOrientation == against)
@@ -586,59 +591,59 @@ public class AutoBuild extends Module {
 
     private boolean isPlayerOrientationDesired(Block block, Direction blockHorizontalOrientation, Direction playerOrientation) {
         return blockHorizontalOrientation == null
-            || (block instanceof StairsBlock && playerOrientation == blockHorizontalOrientation)
-            || (!(block instanceof StairsBlock)
+            || (block instanceof StairBlock && playerOrientation == blockHorizontalOrientation)
+            || (!(block instanceof StairBlock)
                 && !isBlockPlacementOpposite(block) && !isBlockSameAsPlaceDir(block)
                 && playerOrientation == blockHorizontalOrientation.getOpposite());
     }
 
     private Direction getPlaceSide(BlockPos blockPos, BlockState placeState, SlabType slabType,
-                                   BlockHalf blockHalf, Direction blockHorizontalOrientation,
+                                   Half blockHalf, Direction blockHorizontalOrientation,
                                    Direction.Axis wantedAxis, Direction requiredDir) {
-        if (mc.world == null || mc.player == null) return null;
+        if (mc.level == null || mc.player == null) return null;
         for (Direction side : Direction.values()) {
-            BlockPos neighbor = blockPos.offset(side);
+            BlockPos neighbor = blockPos.relative(side);
             Direction side2 = side.getOpposite();
 
             if (wantedAxis != null && side.getAxis() != wantedAxis) continue;
             if (blockHalf != null) {
-                if (side == Direction.UP && blockHalf == BlockHalf.BOTTOM) continue;
-                if (side == Direction.DOWN && blockHalf == BlockHalf.TOP) continue;
+                if (side == Direction.UP && blockHalf == Half.BOTTOM) continue;
+                if (side == Direction.DOWN && blockHalf == Half.TOP) continue;
             }
 
             if ((slabType != null && slabType != SlabType.DOUBLE || blockHalf != null)
                 && !mc.player.isCreative()) {
-                if (slabType == SlabType.BOTTOM || blockHalf == BlockHalf.BOTTOM) {
+                if (slabType == SlabType.BOTTOM || blockHalf == Half.BOTTOM) {
                     if (side2 == Direction.DOWN) continue;
                 } else {
                     if (side2 == Direction.UP) continue;
                 }
             }
 
-            BlockState neighborState = mc.world.getBlockState(neighbor);
+            BlockState neighborState = mc.level.getBlockState(neighbor);
             if (wantedAxis == null && !isFaceDesired(placeState.getBlock(), blockHorizontalOrientation, side)) continue;
             if (wantedAxis != null && wantedAxis != side.getAxis()) continue;
 
             if (neighborState.isAir() || BlockUtils.isClickable(neighborState.getBlock())) continue;
             if (!neighborState.getFluidState().isEmpty()) continue;
 
-            if (neighborState.contains(Properties.SLAB_TYPE)) {
-                SlabType nst = neighborState.get(Properties.SLAB_TYPE);
+            if (neighborState.hasProperty(BlockStateProperties.SLAB_TYPE)) {
+                SlabType nst = neighborState.getValue(BlockStateProperties.SLAB_TYPE);
                 if (nst == SlabType.DOUBLE) continue;
                 if (side == Direction.UP && nst == SlabType.TOP) continue;
                 if (side == Direction.DOWN && nst == SlabType.BOTTOM) continue;
             }
 
-            Vec3d hitPos = Vec3d.ofCenter(neighbor);
-            Vec3d playerHead = new Vec3d(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ());
+            Vec3 hitPos = Vec3.atCenterOf(neighbor);
+            Vec3 playerHead = new Vec3(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ());
             float[] rot = calcRotation(playerHead, hitPos);
             Direction testHorizontalDirection = getHorizontalDirectionFromYaw(rot[0]);
 
-            if (placeState.getBlock() instanceof TrapdoorBlock
+            if (placeState.getBlock() instanceof TrapDoorBlock
                 && !(side != Direction.DOWN && side != Direction.UP)
                 && !isPlayerOrientationDesired(placeState.getBlock(), blockHorizontalOrientation, testHorizontalDirection))
                 continue;
-            if (!(placeState.getBlock() instanceof TrapdoorBlock)
+            if (!(placeState.getBlock() instanceof TrapDoorBlock)
                 && !isPlayerOrientationDesired(placeState.getBlock(), blockHorizontalOrientation, testHorizontalDirection))
                 continue;
 
@@ -648,15 +653,15 @@ public class AutoBuild extends Module {
     }
 
     private Direction getVisiblePlaceSide(BlockPos placeAt, BlockState placeAtState, SlabType slabType,
-                                          BlockHalf blockHalf, Direction blockHorizontalOrientation,
+                                          Half blockHalf, Direction blockHorizontalOrientation,
                                           Direction.Axis wantedAxis, int range, Direction requiredDir) {
-        if (mc.world == null || mc.player == null) return null;
+        if (mc.level == null || mc.player == null) return null;
 
         for (Direction against : Direction.values()) {
             if (wantedAxis != null && against.getAxis() != wantedAxis) continue;
             if (blockHalf != null) {
-                if (against == Direction.UP && blockHalf == BlockHalf.BOTTOM) continue;
-                if (against == Direction.DOWN && blockHalf == BlockHalf.TOP) continue;
+                if (against == Direction.UP && blockHalf == Half.BOTTOM) continue;
+                if (against == Direction.DOWN && blockHalf == Half.TOP) continue;
             }
 
             if ((slabType != null && slabType != SlabType.DOUBLE) && !mc.player.isCreative()) {
@@ -668,27 +673,27 @@ public class AutoBuild extends Module {
                 continue;
             if (wantedAxis != null && wantedAxis != against.getAxis()) continue;
 
-            BlockPos neighborPos = placeAt.offset(against);
-            BlockState neighborState = mc.world.getBlockState(neighborPos);
+            BlockPos neighborPos = placeAt.relative(against);
+            BlockState neighborState = mc.level.getBlockState(neighborPos);
 
             if (!canPlaceAgainst(placeAtState, neighborState, against)) continue;
             if (BlockUtils.isClickable(neighborState.getBlock())) continue;
 
-            var collisionShape = neighborState.getCollisionShape(mc.world, neighborPos);
+            var collisionShape = neighborState.getCollisionShape(mc.level, neighborPos);
             if (collisionShape.isEmpty()) continue;
-            Box aabb = collisionShape.getBoundingBox();
+            AABB aabb = collisionShape.bounds();
 
             for (double z = 0.1; z < 0.9; z += 0.2) {
                 for (double x = 0.1; x < 0.9; x += 0.2) {
-                    Vec3d[] multipliers = aabbSideMultipliers(against);
-                    for (Vec3d placementMultiplier : multipliers) {
+                    Vec3[] multipliers = aabbSideMultipliers(against);
+                    for (Vec3 placementMultiplier : multipliers) {
 
                         double placeX = placeAt.getX() + aabb.minX * x + aabb.maxX * (1 - x);
 
                         if ((slabType != null && slabType != SlabType.DOUBLE
                             || blockHalf != null && against != Direction.DOWN && against != Direction.UP)
                             && !mc.player.isCreative()) {
-                            if (slabType == SlabType.BOTTOM || blockHalf == BlockHalf.BOTTOM) {
+                            if (slabType == SlabType.BOTTOM || blockHalf == Half.BOTTOM) {
                                 if (placementMultiplier.y <= 0.5) continue;
                             } else {
                                 if (placementMultiplier.y > 0.5) continue;
@@ -698,17 +703,17 @@ public class AutoBuild extends Module {
                         double placeY = placeAt.getY() + aabb.minY * placementMultiplier.y + aabb.maxY * (1 - placementMultiplier.y);
                         double placeZ = placeAt.getZ() + aabb.minZ * z + aabb.maxZ * (1 - z);
 
-                        Vec3d testHitPos = new Vec3d(placeX, placeY, placeZ);
-                        Vec3d playerHead = new Vec3d(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ());
+                        Vec3 testHitPos = new Vec3(placeX, placeY, placeZ);
+                        Vec3 playerHead = new Vec3(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ());
                         float[] rot = calcRotation(playerHead, testHitPos);
 
                         Direction testHorizontalDirection = getHorizontalDirectionFromYaw(rot[0]);
 
-                        if (placeAtState.getBlock() instanceof TrapdoorBlock
+                        if (placeAtState.getBlock() instanceof TrapDoorBlock
                             && !(against != Direction.DOWN && against != Direction.UP)
                             && !isPlayerOrientationDesired(placeAtState.getBlock(), blockHorizontalOrientation, testHorizontalDirection))
                             continue;
-                        if (!(placeAtState.getBlock() instanceof TrapdoorBlock)
+                        if (!(placeAtState.getBlock() instanceof TrapDoorBlock)
                             && !isPlayerOrientationDesired(placeAtState.getBlock(), blockHorizontalOrientation, testHorizontalDirection))
                             continue;
 
@@ -716,7 +721,7 @@ public class AutoBuild extends Module {
                         if (res == null || res.getType() != HitResult.Type.BLOCK) continue;
                         BlockHitResult blockHitRes = (BlockHitResult) res;
                         if (!blockHitRes.getBlockPos().equals(placeAt)) continue;
-                        if (blockHitRes.getSide() != against.getOpposite()) continue;
+                        if (blockHitRes.getDirection() != against.getOpposite()) continue;
 
                         return against.getOpposite();
                     }
@@ -727,15 +732,15 @@ public class AutoBuild extends Module {
     }
 
     private boolean isBlockNormalCube(BlockState state) {
-        if (mc.world == null) return false;
+        if (mc.level == null) return false;
         Block block = state.getBlock();
         if (block instanceof ScaffoldingBlock || block instanceof ShulkerBoxBlock
             || block instanceof PointedDripstoneBlock || block instanceof AmethystClusterBlock) {
             return false;
         }
         try {
-            return Block.isShapeFullCube(state.getCollisionShape(mc.world, BlockPos.ORIGIN))
-                || state.getBlock() instanceof StairsBlock;
+            return Block.isShapeFullBlock(state.getCollisionShape(mc.level, BlockPos.ZERO))
+                || state.getBlock() instanceof StairBlock;
         } catch (Exception ignored) {}
         return false;
     }
@@ -744,32 +749,32 @@ public class AutoBuild extends Module {
         return isBlockNormalCube(placeAgainstState)
             || placeAgainstState.getBlock() == Blocks.GLASS
             || placeAgainstState.getBlock() instanceof StainedGlassBlock
-            || placeAgainstState.getBlock() instanceof StairsBlock
+            || placeAgainstState.getBlock() instanceof StairBlock
             || (placeAgainstState.getBlock() instanceof SlabBlock
-                && (placeAgainstState.get(SlabBlock.TYPE) != SlabType.BOTTOM
+                && (placeAgainstState.getValue(SlabBlock.TYPE) != SlabType.BOTTOM
                     && placeAtState.getBlock() == placeAgainstState.getBlock()
                     && against != Direction.DOWN
                     || placeAtState.getBlock() != placeAgainstState.getBlock()));
     }
 
     private boolean isBlockInLineOfSight(BlockPos placeAt, BlockState placeAtState) {
-        if (mc.player == null || mc.world == null) return false;
-        Vec3d playerHead = new Vec3d(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ());
-        Vec3d placeAtVec = Vec3d.ofCenter(placeAt);
+        if (mc.player == null || mc.level == null) return false;
+        Vec3 playerHead = new Vec3(mc.player.getX(), mc.player.getEyeY(), mc.player.getZ());
+        Vec3 placeAtVec = Vec3.atCenterOf(placeAt);
 
-        RaycastContext context = new RaycastContext(
+        ClipContext context = new ClipContext(
             playerHead, placeAtVec,
-            RaycastContext.ShapeType.COLLIDER,
-            RaycastContext.FluidHandling.NONE,
+            ClipContext.Block.COLLIDER,
+            ClipContext.Fluid.NONE,
             mc.player);
-        BlockHitResult bhr = mc.world.raycast(context);
+        BlockHitResult bhr = mc.level.clip(context);
         return bhr.getType() == HitResult.Type.MISS;
     }
 
     private boolean canSurviveAt(BlockState state, BlockPos pos) {
-        if (mc.world == null) return true;
+        if (mc.level == null) return true;
         try {
-            return state.canPlaceAt(mc.world, pos);
+            return state.canSurvive(mc.level, pos);
         } catch (Exception e) {
             return true;
         }
@@ -796,23 +801,23 @@ public class AutoBuild extends Module {
         return true;
     }
 
-    private Vec3d[] aabbSideMultipliers(Direction side) {
+    private Vec3[] aabbSideMultipliers(Direction side) {
         return switch (side) {
-            case UP -> new Vec3d[]{
-                new Vec3d(0.5, 1, 0.5), new Vec3d(0.1, 1, 0.5),
-                new Vec3d(0.9, 1, 0.5), new Vec3d(0.5, 1, 0.1), new Vec3d(0.5, 1, 0.9)};
-            case DOWN -> new Vec3d[]{
-                new Vec3d(0.5, 0, 0.5), new Vec3d(0.1, 0, 0.5),
-                new Vec3d(0.9, 0, 0.5), new Vec3d(0.5, 0, 0.1), new Vec3d(0.5, 0, 0.9)};
+            case UP -> new Vec3[]{
+                new Vec3(0.5, 1, 0.5), new Vec3(0.1, 1, 0.5),
+                new Vec3(0.9, 1, 0.5), new Vec3(0.5, 1, 0.1), new Vec3(0.5, 1, 0.9)};
+            case DOWN -> new Vec3[]{
+                new Vec3(0.5, 0, 0.5), new Vec3(0.1, 0, 0.5),
+                new Vec3(0.9, 0, 0.5), new Vec3(0.5, 0, 0.1), new Vec3(0.5, 0, 0.9)};
             default -> {
-                double xm = side.getOffsetX() == 0 ? 0.5 : (1 + side.getOffsetX()) / 2.0;
-                double zm = side.getOffsetZ() == 0 ? 0.5 : (1 + side.getOffsetZ()) / 2.0;
-                yield new Vec3d[]{new Vec3d(xm, 0.25, zm), new Vec3d(xm, 0.75, zm)};
+                double xm = side.getStepX() == 0 ? 0.5 : (1 + side.getStepX()) / 2.0;
+                double zm = side.getStepZ() == 0 ? 0.5 : (1 + side.getStepZ()) / 2.0;
+                yield new Vec3[]{new Vec3(xm, 0.25, zm), new Vec3(xm, 0.75, zm)};
             }
         };
     }
 
-    private float[] calcRotation(Vec3d from, Vec3d to) {
+    private float[] calcRotation(Vec3 from, Vec3 to) {
         double dx = from.x - to.x;
         double dy = from.y - to.y;
         double dz = from.z - to.z;
@@ -823,8 +828,8 @@ public class AutoBuild extends Module {
     }
 
     private HitResult rayTraceTowards(float[] rotation, double blockReachDistance) {
-        if (mc.player == null || mc.world == null) return null;
-        Vec3d start = mc.player.getEyePos();
+        if (mc.player == null || mc.level == null) return null;
+        Vec3 start = mc.player.getEyePosition();
 
         float yawRad = (float) ((-rotation[0]) * Math.PI / 180.0 - Math.PI);
         float pitchRad = (float) (-rotation[1] * Math.PI / 180.0);
@@ -834,16 +839,14 @@ public class AutoBuild extends Module {
         float pitchBase = (float) -Math.cos(pitchRad);
         float pitchHeight = (float) Math.sin(pitchRad);
 
-        Vec3d direction = new Vec3d(flatX * pitchBase, pitchHeight, flatZ * pitchBase);
-        Vec3d end = start.add(
-            direction.x * blockReachDistance,
-            direction.y * blockReachDistance,
-            direction.z * blockReachDistance);
+        Vec3 direction = new Vec3(flatX * pitchBase, pitchHeight, flatZ * pitchBase);
+        Vec3 end = start.add(
+            direction.x * blockReachDistance, direction.y * blockReachDistance, direction.z * blockReachDistance);
 
-        return mc.world.raycast(new RaycastContext(
+        return mc.level.clip(new ClipContext(
             start, end,
-            RaycastContext.ShapeType.OUTLINE,
-            RaycastContext.FluidHandling.NONE,
+            ClipContext.Block.OUTLINE,
+            ClipContext.Fluid.NONE,
             mc.player));
     }
 
@@ -880,12 +883,12 @@ public class AutoBuild extends Module {
 
         int selectedSlot = mc.player.getInventory().getSelectedSlot();
 
-        if (mc.player.getMainHandStack().getItem() == item) {
+        if (mc.player.getMainHandItem().getItem() == item) {
             if (action.get()) { usedSlot = mc.player.getInventory().getSelectedSlot(); return true; }
             return false;
         }
 
-        if (usedSlot != -1 && mc.player.getInventory().getStack(usedSlot).getItem() == item) {
+        if (usedSlot != -1 && mc.player.getInventory().getItem(usedSlot).getItem() == item) {
             InvUtils.swap(usedSlot, returnSlot.get());
             if (action.get()) return true;
             InvUtils.swap(selectedSlot, returnSlot.get());
@@ -918,13 +921,13 @@ public class AutoBuild extends Module {
         }
 
         if (mc.player.isCreative()) {
-            if (mc.getNetworkHandler() == null) return false;
+            if (mc.getConnection() == null) return false;
             int slot = 0;
             FindItemResult fir = InvUtils.find(ItemStack::isEmpty, 0, 8);
             if (fir.found()) slot = fir.slot();
-            mc.getNetworkHandler().sendPacket(
-                new net.minecraft.network.packet.c2s.play.CreativeInventoryActionC2SPacket(
-                    36 + slot, item.getDefaultStack()));
+            mc.getConnection().send(
+                new net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket(
+                    36 + slot, item.getDefaultInstance()));
             InvUtils.swap(slot, returnSlot.get());
             if (action.get()) {
                 usedSlot = mc.player.getInventory().getSelectedSlot();
@@ -939,7 +942,7 @@ public class AutoBuild extends Module {
     private boolean switchItemOffhand(Item item, Supplier<Boolean> action) {
         if (mc.player == null) return false;
 
-        if (mc.player.getOffHandStack().getItem() == item) {
+        if (mc.player.getOffhandItem().getItem() == item) {
             return action.get();
         }
 

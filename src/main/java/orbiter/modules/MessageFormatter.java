@@ -6,8 +6,8 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.network.packet.c2s.play.ChatMessageC2SPacket;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.network.protocol.game.ServerboundChatPacket;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -241,7 +241,7 @@ public class MessageFormatter extends Module {
     private void onTick(TickEvent.Post event) {
         repeatTickClock++;
         if (pendingRepeats.isEmpty()) return;
-        ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+        ClientPacketListener handler = mc.getConnection();
         if (handler == null) { pendingRepeats.clear(); return; }
 
         List<PendingRepeat> ready = new ArrayList<>();
@@ -249,11 +249,11 @@ public class MessageFormatter extends Module {
             ready.add(pendingRepeats.poll());
         }
         for (PendingRepeat pr : ready) {
-            if (mc.getNetworkHandler() == null) { continue; }
+            if (mc.getConnection() == null) { continue; }
             String toSend = pr.message;
 
             if (toSend.length() > 256) toSend = toSend.substring(0, 256);
-            handler.sendChatMessage(toSend);
+            handler.sendChat(toSend);
 
             if (pr.remaining > 1) {
                 pendingRepeats.add(new PendingRepeat(pr.message, pr.remaining - 1, pr.tickInterval, repeatTickClock + pr.tickInterval));
@@ -340,9 +340,9 @@ public class MessageFormatter extends Module {
     @EventHandler
     private void onPacketSend(PacketEvent.Send event) {
         if (isFormatting) return;
-        if (!(event.packet instanceof ChatMessageC2SPacket)) return;
-        ChatMessageC2SPacket packet = (ChatMessageC2SPacket) event.packet;
-        String original = packet.chatMessage();
+        if (!(event.packet instanceof ServerboundChatPacket)) return;
+        ServerboundChatPacket packet = (ServerboundChatPacket) event.packet;
+        String original = packet.message();
         if (original == null || original.isEmpty()) return;
 
         if (original.startsWith("/") && !formatSlashCommands.get()) return;
@@ -824,7 +824,7 @@ public class MessageFormatter extends Module {
     }
 
     private void sendChatMessage(String msg) {
-        ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+        ClientPacketListener handler = mc.getConnection();
         if (handler == null) return;
 
         int count = Math.max(1, repeatCount.get());
@@ -834,7 +834,7 @@ public class MessageFormatter extends Module {
         String first = msg;
         if (count > 1 && randomMessage.get()) first = msg + " [1]";
         if (first.length() > 256) first = first.substring(0, 256);
-        handler.sendChatMessage(first);
+        handler.sendChat(first);
 
         if (count > 1) {
             for (int i = 1; i < count; i++) {
@@ -941,7 +941,7 @@ public class MessageFormatter extends Module {
         String sub = parts[1].toLowerCase();
         switch (sub) {
             case "preview": {
-                String text = parts.length >= 3 ? parts[2] : "Hello World";
+                String text = parts.length >= 3 ? parts[2] : "Hello Level";
                 String formatted = formatMessage(text);
                 info("Preview: %s", formatted);
                 return true;
@@ -951,7 +951,7 @@ public class MessageFormatter extends Module {
                 return true;
             }
             case "steps": {
-                String text = parts.length >= 3 ? parts[2] : "Hello World";
+                String text = parts.length >= 3 ? parts[2] : "Hello Level";
                 String[] stepResults = getStepByStepPreview(text);
                 for (int i = 0; i < PIPELINE_ORDER.length; i++) {
                     info("  %d. %s: %s", i + 1, PIPELINE_ORDER[i], stepResults[i]);
@@ -1007,7 +1007,7 @@ public class MessageFormatter extends Module {
         if (fontPreset.get() != FontPreset.None) active.add("Font: " + fontPreset.get());
         if (leetSpeak.get()) active.add("Leet Speak");
         if (scrambleWords.get()) active.add("Scramble Words");
-        if (reverseText.get()) active.add("Reverse Text");
+        if (reverseText.get()) active.add("Reverse Component");
         if (morseCode.get()) active.add("Morse Code");
         if (baseColor.get().hasCode()) active.add("Base Color: " + baseColor.get());
         if (bold.get()) active.add("Bold");

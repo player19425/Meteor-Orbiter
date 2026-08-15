@@ -4,7 +4,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.command.CommandSource;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -20,7 +20,7 @@ public class ExportModuleListCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.executes(context -> {
             Collection<Module> all = Modules.get().getAll();
             if (all == null || all.isEmpty()) {
@@ -44,7 +44,7 @@ public class ExportModuleListCommand extends Command {
             }
 
             String output = sb.toString();
-            mc.keyboard.setClipboard(output);
+            mc.keyboardHandler.setClipboard(output);
             info("Copied " + lines.size() + " module names (all addons) to clipboard.");
 
             return SINGLE_SUCCESS;

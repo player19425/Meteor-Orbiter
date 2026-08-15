@@ -14,18 +14,18 @@ import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.settings.StringSetting;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.boss.BossBar;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.s2c.play.GameStateChangeS2CPacket;
-import net.minecraft.network.packet.s2c.play.ExperienceBarUpdateS2CPacket;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.text.Text;
-import net.minecraft.world.GameMode;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.BossEvent;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ClientboundGameEventPacket;
+import net.minecraft.network.protocol.game.ClientboundSetExperiencePacket;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.GameType;
+import net.minecraft.util.Mth;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -61,13 +61,13 @@ public class ClientSideThings extends Module {
 
     public enum FakeGameMode {
         Server(null),
-        Survival(GameMode.SURVIVAL),
-        Creative(GameMode.CREATIVE),
-        Adventure(GameMode.ADVENTURE),
-        Spectator(GameMode.SPECTATOR);
+        Survival(GameType.SURVIVAL),
+        Creative(GameType.CREATIVE),
+        Adventure(GameType.ADVENTURE),
+        Spectator(GameType.SPECTATOR);
 
-        public final GameMode mode;
-        FakeGameMode(GameMode mode) { this.mode = mode; }
+        public final GameType mode;
+        FakeGameMode(GameType mode) { this.mode = mode; }
     }
 
     private final SettingGroup sgHud          = settings.getDefaultGroup();
@@ -485,7 +485,7 @@ public class ClientSideThings extends Module {
 
     private final Setting<String> bossbarText = sgBossbar.add(new StringSetting.Builder()
         .name("bossbar-text")
-        .description("Text to replace all bossbar titles with. Empty = no text change.")
+        .description("Component to replace all bossbar titles with. Empty = no text change.")
         .defaultValue("")
         .visible(bossbarOverrideEnabled::get)
         .build());
@@ -512,10 +512,10 @@ public class ClientSideThings extends Module {
         .visible(bossbarOverrideEnabled::get)
         .build());
 
-    private final Setting<BossBar.Color> bossbarColor = sgBossbar.add(new EnumSetting.Builder<BossBar.Color>()
+    private final Setting<BossEvent.BossBarColor> bossbarColor = sgBossbar.add(new EnumSetting.Builder<BossEvent.BossBarColor>()
         .name("bossbar-color")
         .description("Color to override boss bars with.")
-        .defaultValue(BossBar.Color.RED)
+        .defaultValue(BossEvent.BossBarColor.RED)
         .visible(() -> bossbarOverrideEnabled.get() && bossbarColorOverride.get())
         .build());
 
@@ -568,7 +568,7 @@ public class ClientSideThings extends Module {
     private float chaosXpProg;
     private int chaosAbsorption;
 
-    private GameMode realGameMode;
+    private GameType realGameMode;
     private int realLatency = -1;
 
     private boolean showingFakeDeath = false;
@@ -588,17 +588,17 @@ public class ClientSideThings extends Module {
     }
 
     private static final Field currentGameModeField = resolveField(
-        net.minecraft.client.network.ClientPlayerInteractionManager.class,
+        net.minecraft.client.multiplayer.MultiPlayerGameMode.class,
         "currentGameMode", "gameMode", "field_2606"
     );
 
     private static final Field latencyField = resolveField(
-        PlayerListEntry.class,
+        PlayerInfo.class,
         "latency", "ping", "field_3725"
     );
 
     private static final Field absorptionField = resolveField(
-        net.minecraft.entity.player.PlayerEntity.class,
+        net.minecraft.world.entity.player.Player.class,
         "absorptionAmount", "field_13189"
     );
 
@@ -629,16 +629,16 @@ public class ClientSideThings extends Module {
                 xpSnapshotValid = true;
             }
 
-            if (mc.interactionManager != null && currentGameModeField != null) {
+            if (mc.gameMode != null && currentGameModeField != null) {
                 try {
-                    realGameMode = (GameMode) currentGameModeField.get(mc.interactionManager);
+                    realGameMode = (GameType) currentGameModeField.get(mc.gameMode);
                 } catch (IllegalAccessException ignored) {
-                    realGameMode = mc.interactionManager.getCurrentGameMode();
+                    realGameMode = mc.gameMode.getPlayerMode();
                 }
             }
 
-            if (mc.player.networkHandler != null) {
-                PlayerListEntry entry = mc.player.networkHandler.getPlayerListEntry(mc.player.getUuid());
+            if (mc.player.connection != null) {
+                PlayerInfo entry = mc.player.connection.getPlayerInfo(mc.player.getUUID());
                 if (entry != null) {
                     realLatency = entry.getLatency();
                 }
@@ -657,21 +657,21 @@ public class ClientSideThings extends Module {
 
     private void restoreSpoof() {
 
-        if (mc.interactionManager != null && realGameMode != null && currentGameModeField != null) {
+        if (mc.gameMode != null && realGameMode != null && currentGameModeField != null) {
             try {
-                currentGameModeField.set(mc.interactionManager, realGameMode);
+                currentGameModeField.set(mc.gameMode, realGameMode);
             } catch (IllegalAccessException ignored) {}
         }
 
-        if (mc.player != null && mc.player.networkHandler != null && realLatency >= 0 && latencyField != null) {
+        if (mc.player != null && mc.player.connection != null && realLatency >= 0 && latencyField != null) {
             restorePlayerLatency();
         }
     }
 
     private void restorePlayerLatency() {
-        if (mc.player == null || mc.player.networkHandler == null || realLatency < 0) return;
+        if (mc.player == null || mc.player.connection == null || realLatency < 0) return;
 
-        PlayerListEntry entry = mc.player.networkHandler.getPlayerListEntry(mc.player.getUuid());
+        PlayerInfo entry = mc.player.connection.getPlayerInfo(mc.player.getUUID());
         if (entry == null || latencyField == null) return;
 
         try {
@@ -733,17 +733,17 @@ public class ClientSideThings extends Module {
             }
         }
 
-        if (mc.interactionManager != null && fakeGamemode.get() != FakeGameMode.Server && currentGameModeField != null) {
-            GameMode target = fakeGamemode.get().mode;
+        if (mc.gameMode != null && fakeGamemode.get() != FakeGameMode.Server && currentGameModeField != null) {
+            GameType target = fakeGamemode.get().mode;
             if (target != null) {
                 try {
-                    currentGameModeField.set(mc.interactionManager, target);
+                    currentGameModeField.set(mc.gameMode, target);
                 } catch (IllegalAccessException ignored) {}
             }
         }
 
-        if (mc.player != null && mc.player.networkHandler != null && fakePing.get() > 0 && latencyField != null) {
-            PlayerListEntry entry = mc.player.networkHandler.getPlayerListEntry(mc.player.getUuid());
+        if (mc.player != null && mc.player.connection != null && fakePing.get() > 0 && latencyField != null) {
+            PlayerInfo entry = mc.player.connection.getPlayerInfo(mc.player.getUUID());
             if (entry != null) {
                 try {
                     latencyField.setInt(entry, fakePing.get());
@@ -752,7 +752,7 @@ public class ClientSideThings extends Module {
         }
 
         if (fakeBreatheEnabled.get() && mc.player != null) {
-            mc.player.setAir(mc.player.getMaxAir());
+            mc.player.setAirSupply(mc.player.getMaxAirSupply());
         }
 
         updateFakeDeathScreen();
@@ -760,10 +760,10 @@ public class ClientSideThings extends Module {
 
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (event.packet instanceof ExperienceBarUpdateS2CPacket packet) {
+        if (event.packet instanceof net.minecraft.network.protocol.game.ClientboundSetExperiencePacket packet) {
             synchronized (xpLock) {
                 latestRealXpLevel = packet.getExperienceLevel();
-                latestRealXpProgress = packet.getBarProgress();
+                latestRealXpProgress = packet.getExperienceProgress();
                 if (!xpOverridden) {
                     backupXpLevel = latestRealXpLevel;
                     backupXpProgress = latestRealXpProgress;
@@ -774,13 +774,13 @@ public class ClientSideThings extends Module {
         }
 
         if (weatherMode.get() == WeatherMode.Server) return;
-        if (!(event.packet instanceof GameStateChangeS2CPacket packet)) return;
+        if (!(event.packet instanceof ClientboundGameEventPacket packet)) return;
 
-        GameStateChangeS2CPacket.Reason reason = packet.getReason();
-        if (reason == GameStateChangeS2CPacket.RAIN_STARTED
-            || reason == GameStateChangeS2CPacket.RAIN_STOPPED
-            || reason == GameStateChangeS2CPacket.RAIN_GRADIENT_CHANGED
-            || reason == GameStateChangeS2CPacket.THUNDER_GRADIENT_CHANGED) {
+        ClientboundGameEventPacket.Type reason = packet.getEvent();
+        if (reason == ClientboundGameEventPacket.START_RAINING
+            || reason == ClientboundGameEventPacket.STOP_RAINING
+            || reason == ClientboundGameEventPacket.RAIN_LEVEL_CHANGE
+            || reason == ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE) {
             event.cancel();
         }
     }
@@ -804,12 +804,12 @@ public class ClientSideThings extends Module {
 
         smoothT += 0.35f;
         chaosHealth = (float) (1024.0 + Math.sin(smoothT) * 1024.0);
-        chaosHunger = MathHelper.clamp((int) Math.round(10 + Math.sin(smoothT * 1.3f) * 10), 0, 20);
-        chaosSat = MathHelper.clamp((float) (10.0 + Math.cos(smoothT * 1.1f) * 10.0), 0.0f, 20.0f);
-        chaosArmorVal = MathHelper.clamp((int) Math.round(20 + Math.sin(smoothT * 0.9f) * 20), 0, 40);
-        chaosXpLvl = MathHelper.clamp((int) Math.round(2500 + Math.sin(smoothT * 0.6f) * 2500), 0, 5000);
-        chaosXpProg = MathHelper.clamp((float) ((Math.sin(smoothT * 2.2f) + 1.0) / 2.0), 0.0f, 1.0f);
-        chaosAbsorption = MathHelper.clamp((int) Math.round(1024 + Math.sin(smoothT * 0.7f) * 1024), 0, 2048);
+        chaosHunger = Mth.clamp((int) Math.round(10 + Math.sin(smoothT * 1.3f) * 10), 0, 20);
+        chaosSat = Mth.clamp((float) (10.0 + Math.cos(smoothT * 1.1f) * 10.0), 0.0f, 20.0f);
+        chaosArmorVal = Mth.clamp((int) Math.round(20 + Math.sin(smoothT * 0.9f) * 20), 0, 40);
+        chaosXpLvl = Mth.clamp((int) Math.round(2500 + Math.sin(smoothT * 0.6f) * 2500), 0, 5000);
+        chaosXpProg = Mth.clamp((float) ((Math.sin(smoothT * 2.2f) + 1.0) / 2.0), 0.0f, 1.0f);
+        chaosAbsorption = Mth.clamp((int) Math.round(1024 + Math.sin(smoothT * 0.7f) * 1024), 0, 2048);
     }
 
     private void updateFakeDeathScreen() {
@@ -1011,7 +1011,7 @@ public class ClientSideThings extends Module {
     public boolean shouldSpoofClientTickRate() { return spoofTickRateEnabled.get(); }
     public float getSpoofClientTickRate() { return spoofTickRate.get().floatValue(); }
     public boolean shouldOverrideUseCooldown(Item item) { return customUseCooldownEnabled.get() && customCooldownItems.get().contains(item); }
-    public int getCustomUseCooldownTicks() { return MathHelper.clamp(customUseCooldownTicks.get(), 0, 200); }
+    public int getCustomUseCooldownTicks() { return Mth.clamp(customUseCooldownTicks.get(), 0, 200); }
 
     public CrosshairStyle getCrosshairStyle() {
         return crosshairStyle.get();
@@ -1034,20 +1034,20 @@ public class ClientSideThings extends Module {
     }
 
     public double getFogStart() {
-        if (mc.player == null || mc.world == null) return 0.0;
-        var dimKey = mc.world.getRegistryKey();
-        if (dimKey == net.minecraft.world.World.OVERWORLD) return fogOverworldStart.get();
-        if (dimKey == net.minecraft.world.World.NETHER) return fogNetherStart.get();
-        if (dimKey == net.minecraft.world.World.END) return fogEndStart.get();
+        if (mc.player == null || mc.level == null) return 0.0;
+        var dimKey = mc.level.dimension();
+        if (dimKey == net.minecraft.world.level.Level.OVERWORLD) return fogOverworldStart.get();
+        if (dimKey == net.minecraft.world.level.Level.NETHER) return fogNetherStart.get();
+        if (dimKey == net.minecraft.world.level.Level.END) return fogEndStart.get();
         return fogOverworldStart.get();
     }
 
     public double getFogEnd() {
-        if (mc.player == null || mc.world == null) return 65536.0;
-        var dimKey = mc.world.getRegistryKey();
-        if (dimKey == net.minecraft.world.World.OVERWORLD) return fogOverworldEnd.get();
-        if (dimKey == net.minecraft.world.World.NETHER) return fogNetherEnd.get();
-        if (dimKey == net.minecraft.world.World.END) return fogEndEnd.get();
+        if (mc.player == null || mc.level == null) return 65536.0;
+        var dimKey = mc.level.dimension();
+        if (dimKey == net.minecraft.world.level.Level.OVERWORLD) return fogOverworldEnd.get();
+        if (dimKey == net.minecraft.world.level.Level.NETHER) return fogNetherEnd.get();
+        if (dimKey == net.minecraft.world.level.Level.END) return fogEndEnd.get();
         return fogOverworldEnd.get();
     }
 
@@ -1070,14 +1070,14 @@ public class ClientSideThings extends Module {
 
     public float getBossbarPercentOverride() {
         double pct = bossbarPercent.get();
-        return pct < 0.0 ? -1.0f : (float) MathHelper.clamp(pct, 0.0, 1.0);
+        return pct < 0.0 ? -1.0f : (float) Mth.clamp(pct, 0.0, 1.0);
     }
 
     public boolean shouldOverrideBossbarColor() {
         return bossbarOverrideEnabled.get() && bossbarColorOverride.get();
     }
 
-    public BossBar.Color getBossbarColorOverride() {
+    public BossEvent.BossBarColor getBossbarColorOverride() {
         return bossbarColor.get();
     }
 
@@ -1090,7 +1090,7 @@ public class ClientSideThings extends Module {
     }
 
     public int getMaxFakeHotbarCount() {
-        return MathHelper.clamp(maxFakeHotbarCount.get(), 1, 2048);
+        return Mth.clamp(maxFakeHotbarCount.get(), 1, 2048);
     }
 
     public boolean isFakeHotbarItemsEnabled() {
@@ -1118,18 +1118,18 @@ public class ClientSideThings extends Module {
             default -> fallbackCount;
         };
 
-        return MathHelper.clamp(configured, 1, getMaxFakeHotbarCount());
+        return Mth.clamp(configured, 1, getMaxFakeHotbarCount());
     }
 
     public int adjustHotbarCount(int hotbarSlot, int delta) {
         int current = getHotbarSpoofCount(hotbarSlot, 64);
-        int value = MathHelper.clamp(current + delta, 1, getMaxFakeHotbarCount());
+        int value = Mth.clamp(current + delta, 1, getMaxFakeHotbarCount());
         setHotbarCount(hotbarSlot, value);
         return value;
     }
 
     public void setHotbarCount(int hotbarSlot, int value) {
-        int clamped = MathHelper.clamp(value, 1, getMaxFakeHotbarCount());
+        int clamped = Mth.clamp(value, 1, getMaxFakeHotbarCount());
         switch (hotbarSlot) {
             case 0 -> hotbarCount1.set(clamped);
             case 1 -> hotbarCount2.set(clamped);
@@ -1150,7 +1150,7 @@ public class ClientSideThings extends Module {
 
         ItemStack stack;
         if (item != null && item != Items.AIR) {
-            stack = item.getDefaultStack();
+            stack = item.getDefaultInstance();
         } else if (original != null && !original.isEmpty()) {
             stack = original.copy();
         } else {
@@ -1161,8 +1161,8 @@ public class ClientSideThings extends Module {
 
         int fallback = original == null || original.isEmpty() ? 1 : original.getCount();
         int wanted = getHotbarSpoofCount(hotbarSlot, fallback);
-        int allowed = stack.getMaxCount() <= 1 ? 1 : getMaxFakeHotbarCount();
-        stack.setCount(MathHelper.clamp(wanted, 1, allowed));
+        int allowed = stack.getMaxStackSize() <= 1 ? 1 : getMaxFakeHotbarCount();
+        stack.setCount(Mth.clamp(wanted, 1, allowed));
         return stack;
     }
 
@@ -1181,7 +1181,7 @@ public class ClientSideThings extends Module {
         };
     }
 
-    public Text getGlobalFakeName(ItemStack stack) {
+    public Component getGlobalFakeName(ItemStack stack) {
         if (!fakeNbtEnabled.get() || stack == null || stack.isEmpty()) return null;
         String name = fakeName.get();
         if (name == null || name.isBlank()) return null;
@@ -1189,12 +1189,12 @@ public class ClientSideThings extends Module {
         return orbiter.util.LegacyTextFormatter.parse(name);
     }
 
-    public List<Text> getGlobalFakeLore(ItemStack stack) {
+    public List<Component> getGlobalFakeLore(ItemStack stack) {
         if (!fakeNbtEnabled.get() || stack == null || stack.isEmpty()) return List.of();
         String lore = fakeLore.get();
         if (lore == null || lore.isBlank()) return List.of();
 
-        List<Text> lines = new ArrayList<>();
+        List<Component> lines = new ArrayList<>();
         for (String line : lore.split("\\|")) {
             String trimmed = line.trim();
             if (!trimmed.isEmpty()) lines.add(orbiter.util.LegacyTextFormatter.parse(trimmed));
@@ -1216,7 +1216,7 @@ public class ClientSideThings extends Module {
         };
 
         if (item == null || item == Items.AIR) return original;
-        return item.getDefaultStack();
+        return item.getDefaultInstance();
     }
 
     public FakeGameMode getFakeGamemodeSetting() {

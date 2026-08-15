@@ -6,7 +6,7 @@ import meteordevelopment.meteorclient.systems.hud.HudElement;
 import meteordevelopment.meteorclient.systems.hud.HudElementInfo;
 import meteordevelopment.meteorclient.systems.hud.HudRenderer;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
-import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.Minecraft;
 
 public class RenderDistanceHud extends HudElement {
     public static final HudElementInfo<RenderDistanceHud> INFO = new HudElementInfo<>(Orbiter.HUD_GROUP, "render-distance", "Shows current render distance.", RenderDistanceHud::new);
@@ -15,7 +15,7 @@ public class RenderDistanceHud extends HudElement {
 
     private final Setting<SettingColor> textColor = sgGeneral.add(new ColorSetting.Builder()
         .name("color")
-        .description("Text color.")
+        .description("Component color.")
         .defaultValue(new SettingColor(255, 255, 255, 255))
         .build()
     );
@@ -36,7 +36,7 @@ public class RenderDistanceHud extends HudElement {
 
     private final Setting<Double> scale = sgGeneral.add(new DoubleSetting.Builder()
         .name("scale")
-        .description("Text scale.")
+        .description("Component scale.")
         .defaultValue(1.0)
         .min(0.5)
         .sliderRange(0.5, 3.0)
@@ -49,8 +49,8 @@ public class RenderDistanceHud extends HudElement {
 
     @Override
     public void render(HudRenderer renderer) {
-        MinecraftClient mc = MinecraftClient.getInstance();
-        int dist = mc.options != null && mc.options.getViewDistance() != null ? mc.options.getViewDistance().getValue() : 0;
+        Minecraft mc = Minecraft.getInstance();
+        int dist = mc.options != null && mc.options.renderDistance() != null ? mc.options.renderDistance().get() : 0;
         String text = dist + " chunks";
 
         double s = scale.get();

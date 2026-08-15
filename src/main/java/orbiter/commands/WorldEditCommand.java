@@ -7,10 +7,10 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.command.CommandSource;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.core.BlockPos;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -18,7 +18,7 @@ import java.util.Set;
 import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 
 public class WorldEditCommand extends Command {
-    private static final SuggestionProvider<CommandSource> DIRECTION_SUGGESTIONS = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> DIRECTION_SUGGESTIONS = (context, builder) -> {
         String[] dirs = { "north", "south", "east", "west", "up", "down" };
         String remaining = builder.getRemainingLowerCase();
         for (String d : dirs) {
@@ -27,11 +27,11 @@ public class WorldEditCommand extends Command {
         return builder.buildFuture();
     };
 
-    private static final SuggestionProvider<CommandSource> BLOCK_SUGGESTIONS = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> BLOCK_SUGGESTIONS = (context, builder) -> {
         String remaining = builder.getRemainingLowerCase();
         Set<String> suggested = new HashSet<>();
 
-        for (Identifier id : Registries.BLOCK.getIds()) {
+        for (Identifier id : BuiltInRegistries.BLOCK.keySet()) {
             String full = id.toString();
             if (full.startsWith(remaining) && suggested.add(full)) builder.suggest(full);
 
@@ -44,11 +44,11 @@ public class WorldEditCommand extends Command {
         return builder.buildFuture();
     };
 
-    private static final SuggestionProvider<CommandSource> ITEM_SUGGESTIONS = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> ITEM_SUGGESTIONS = (context, builder) -> {
         String remaining = builder.getRemainingLowerCase();
         Set<String> suggested = new HashSet<>();
 
-        for (Identifier id : Registries.ITEM.getIds()) {
+        for (Identifier id : BuiltInRegistries.ITEM.keySet()) {
             String full = id.toString();
             if (full.startsWith(remaining) && suggested.add(full)) builder.suggest(full);
 
@@ -82,7 +82,7 @@ public class WorldEditCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
 
         builder.then(literal("pos1")
                 .executes(ctx -> {

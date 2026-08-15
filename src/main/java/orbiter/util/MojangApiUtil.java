@@ -4,8 +4,8 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.authlib.GameProfile;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.client.network.PlayerListEntry;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.PlayerInfo;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -45,15 +45,15 @@ public final class MojangApiUtil {
         String cached = NAME_TO_UUID.get(key);
         if (cached != null) return cached;
 
-        ClientPlayNetworkHandler handler = null;
+        ClientPacketListener handler = null;
         try {
-            if (net.minecraft.client.MinecraftClient.getInstance().getNetworkHandler() != null) {
-                handler = net.minecraft.client.MinecraftClient.getInstance().getNetworkHandler();
+            if (net.minecraft.client.Minecraft.getInstance().getConnection() != null) {
+                handler = net.minecraft.client.Minecraft.getInstance().getConnection();
             }
         } catch (Throwable ignored) {}
 
         if (handler != null) {
-            for (PlayerListEntry entry : handler.getPlayerList()) {
+            for (PlayerInfo entry : handler.getOnlinePlayers()) {
                 GameProfile profile = entry.getProfile();
                 if (profile == null || profile.name() == null) continue;
                 if (profile.name().equalsIgnoreCase(username) && profile.id() != null) {

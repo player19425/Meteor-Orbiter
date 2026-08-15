@@ -6,7 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
-import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.Minecraft;
 import orbiter.Orbiter;
 
 import java.io.IOException;
@@ -37,8 +37,8 @@ public class OrbiterModuleOrder {
     private static Path resolveConfigPath() {
         if (configPath != null) return configPath;
         try {
-            MinecraftClient mc = MinecraftClient.getInstance();
-            Path dir = mc.runDirectory.toPath();
+            Minecraft mc = Minecraft.getInstance();
+            Path dir = mc.gameDirectory.toPath();
             configPath = dir.resolve(FILE_NAME);
         } catch (Exception e) {
             Orbiter.LOG.warn("Failed to resolve Orbiter config directory, using fallback", e);

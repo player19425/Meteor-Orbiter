@@ -4,21 +4,22 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.screen.slot.Slot;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.entity.EntityTypeTest;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 import orbiter.Orbiter;
 
 import java.util.HashSet;
@@ -207,7 +208,7 @@ public class AutoShop extends Module {
 
     @Override
     public void onDeactivate() {
-        if (mc.player != null && mc.currentScreen instanceof HandledScreen<?>) mc.player.closeHandledScreen();
+        if (mc.player != null && mc.gui.screen() instanceof AbstractContainerScreen<?>) mc.player.closeContainer();
         info("AutoShop stopped. Completed transactions: " + transactionCycles);
     }
 
@@ -228,7 +229,7 @@ public class AutoShop extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null || mc.interactionManager == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.level == null || mc.gameMode == null || mc.player.connection == null) return;
         if (tickWaiter > 0) {
             tickWaiter--;
             return;
@@ -282,7 +283,7 @@ public class AutoShop extends Module {
 
         addClicksDone = 0;
         preTransactionCount = inventoryCount;
-        mc.player.networkHandler.sendChatCommand(shopCommand.get());
+        mc.player.connection.sendCommand(shopCommand.get());
         state = WAIT_SHOP;
         timeout = 60;
         tickWaiter = normalDelay.get();
@@ -302,15 +303,15 @@ public class AutoShop extends Module {
     }
 
     private void clickCategory() {
-        HandledScreen<?> screen = requireShopScreen();
+        AbstractContainerScreen<?> screen = requireShopScreen();
         if (screen == null) return;
         int detected = autoDetectSlots.get() ? findSlotByKeywords(screen, categoryKeyword.get()) : -1;
         int slot = detected >= 0 ? detected : categorySlot.get();
-        if (clickSlot(screen, slot)) advanceAfterClick(CLICK_ITEM);
+        if (handleContainerInput(screen, slot)) advanceAfterClick(CLICK_ITEM);
     }
 
     private void clickItem() {
-        HandledScreen<?> screen = requireShopScreen();
+        AbstractContainerScreen<?> screen = requireShopScreen();
         if (screen == null) return;
         int slot = -1;
         if (autoDetectSlots.get()) {
@@ -319,17 +320,17 @@ public class AutoShop extends Module {
         }
         if (slot < 0) slot = itemSlot.get();
         if (antiWrongItem.get() && !validItemButton(screen, slot)) {
-            error("Item button did not match " + targetItem.get().getName().getString() + ". Stopping.");
+            error("Item button did not match " + targetItem.get().getName(net.minecraft.world.item.ItemStack.EMPTY).getString() + ". Stopping.");
             toggle();
             return;
         }
-        if (clickSlot(screen, slot)) advanceAfterClick(CLICK_STACK_BATCH);
+        if (handleContainerInput(screen, slot)) advanceAfterClick(CLICK_STACK_BATCH);
     }
 
     private void clickFixedShopSlot(int slot, int nextState) {
-        HandledScreen<?> screen = requireShopScreen();
+        AbstractContainerScreen<?> screen = requireShopScreen();
         if (screen == null) return;
-        if (clickSlot(screen, slot)) advanceAfterClick(nextState);
+        if (handleContainerInput(screen, slot)) advanceAfterClick(nextState);
     }
 
     private void clickAddButton() {
@@ -338,19 +339,19 @@ public class AutoShop extends Module {
             tickWaiter = clickDelay.get();
             return;
         }
-        HandledScreen<?> screen = requireShopScreen();
+        AbstractContainerScreen<?> screen = requireShopScreen();
         if (screen == null) return;
-        if (clickSlot(screen, addSlot.get())) {
+        if (handleContainerInput(screen, addSlot.get())) {
             addClicksDone++;
             tickWaiter = clickDelay.get();
         }
     }
 
     private void clickConfirm() {
-        HandledScreen<?> screen = requireShopScreen();
+        AbstractContainerScreen<?> screen = requireShopScreen();
         if (screen == null) return;
         preTransactionCount = getTargetItemCount();
-        if (clickSlot(screen, confirmSlot.get())) {
+        if (handleContainerInput(screen, confirmSlot.get())) {
             state = WAIT_TRANSACTION;
             timeout = 80;
             tickWaiter = clickDelay.get();
@@ -365,7 +366,7 @@ public class AutoShop extends Module {
 
         if (completed) {
             transactionCycles++;
-            if (mc.currentScreen instanceof HandledScreen<?>) mc.player.closeHandledScreen();
+            if (mc.gui.screen() instanceof AbstractContainerScreen<?>) mc.player.closeContainer();
             tickWaiter = normalDelay.get();
             if (mode.get() == Mode.BuyAndDeposit) {
                 state = currentCount > 0 ? FIND_CHEST : WAIT_GROUND_PICKUP;
@@ -384,15 +385,15 @@ public class AutoShop extends Module {
                 state = WAIT_GROUND_PICKUP;
             } else {
                 warning("Purchase was not confirmed by the server; retrying.");
-                if (mc.currentScreen instanceof HandledScreen<?>) mc.player.closeHandledScreen();
+                if (mc.gui.screen() instanceof AbstractContainerScreen<?>) mc.player.closeContainer();
                 state = START;
             }
             tickWaiter = normalDelay.get();
         }
     }
 
-    private HandledScreen<?> requireShopScreen() {
-        HandledScreen<?> screen = getHandledScreen();
+    private AbstractContainerScreen<?> requireShopScreen() {
+        AbstractContainerScreen<?> screen = getHandledScreen();
         if (screen != null) {
             timeout = 40;
             return screen;
@@ -415,14 +416,14 @@ public class AutoShop extends Module {
         tickWaiter = clickDelay.get();
     }
 
-    private boolean clickSlot(HandledScreen<?> screen, int slot) {
+    private boolean handleContainerInput(AbstractContainerScreen<?> screen, int slot) {
         int containerSlots = getContainerSize(screen);
         if (slot < 0 || slot >= containerSlots) {
             error("Configured shop slot " + slot + " is outside the shop container. Stopping.");
             toggle();
             return false;
         }
-        mc.interactionManager.clickSlot(screen.getScreenHandler().syncId, slot, 0, SlotActionType.PICKUP, mc.player);
+        mc.gameMode.handleContainerInput(screen.getMenu().containerId, slot, 0, ContainerInput.PICKUP, mc.player);
         return true;
     }
 
@@ -451,21 +452,21 @@ public class AutoShop extends Module {
         noChestRetries = 0;
         chestReopenFails = 0;
         faceChest(currentChest);
-        BlockHitResult hit = new BlockHitResult(Vec3d.ofCenter(currentChest), Direction.UP, currentChest, false);
-        mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
+        BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(currentChest), Direction.UP, currentChest, false);
+        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
         state = WAIT_CHEST;
         timeout = 40;
         tickWaiter = normalDelay.get();
     }
 
     private void waitForChest() {
-        HandledScreen<?> screen = getHandledScreen();
+        AbstractContainerScreen<?> screen = getHandledScreen();
         if (screen != null && getContainerSize(screen) > 0) {
             int remaining = computeChestRemainingCapacity(screen);
             if (remaining <= 0) {
 
                 markChestFull(currentChest);
-                mc.player.closeHandledScreen();
+                mc.player.closeContainer();
                 state = FIND_CHEST;
                 tickWaiter = normalDelay.get();
                 return;
@@ -480,8 +481,8 @@ public class AutoShop extends Module {
 
         if (currentChest != null) {
             faceChest(currentChest);
-            BlockHitResult hit = new BlockHitResult(Vec3d.ofCenter(currentChest), Direction.UP, currentChest, false);
-            mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
+            BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(currentChest), Direction.UP, currentChest, false);
+            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
         }
         if (--timeout <= 0) {
 
@@ -492,7 +493,7 @@ public class AutoShop extends Module {
     }
 
     private void depositMoveAll() {
-        HandledScreen<?> screen = getHandledScreen();
+        AbstractContainerScreen<?> screen = getHandledScreen();
         if (screen == null) {
 
             if (++chestReopenFails > 6) {
@@ -504,8 +505,8 @@ public class AutoShop extends Module {
             }
             if (currentChest != null) {
                 faceChest(currentChest);
-                BlockHitResult hit = new BlockHitResult(Vec3d.ofCenter(currentChest), Direction.UP, currentChest, false);
-                mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
+                BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(currentChest), Direction.UP, currentChest, false);
+                mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
             }
             state = WAIT_CHEST;
             timeout = 40;
@@ -514,8 +515,8 @@ public class AutoShop extends Module {
         }
         chestReopenFails = 0;
 
-        if (!mc.player.currentScreenHandler.getCursorStack().isEmpty()) {
-            mc.player.closeHandledScreen();
+        if (!mc.player.containerMenu.getCarried().isEmpty()) {
+            mc.player.closeContainer();
             state = WAIT_CHEST;
             timeout = 40;
             tickWaiter = normalDelay.get();
@@ -525,7 +526,7 @@ public class AutoShop extends Module {
         int count = getTargetItemCount();
         if (count == 0) {
 
-            mc.player.closeHandledScreen();
+            mc.player.closeContainer();
             state = getNearbyGroundTargetItemCount() > 0 ? WAIT_GROUND_PICKUP : START;
             groundWaitTicks = 0;
             tickWaiter = normalDelay.get();
@@ -535,7 +536,7 @@ public class AutoShop extends Module {
         if (count < depositLastCount) depositStallTicks = 0;
         else if (++depositStallTicks > 30) {
             markChestFull(currentChest);
-            mc.player.closeHandledScreen();
+            mc.player.closeContainer();
             state = FIND_CHEST;
             tickWaiter = normalDelay.get();
             depositStallTicks = 0;
@@ -546,18 +547,18 @@ public class AutoShop extends Module {
         if (computeChestRemainingCapacity(screen) <= 0) {
 
             markChestFull(currentChest);
-            mc.player.closeHandledScreen();
+            mc.player.closeContainer();
             state = FIND_CHEST;
             tickWaiter = normalDelay.get();
             return;
         }
 
         int containerSize = getContainerSize(screen);
-        int total = screen.getScreenHandler().slots.size();
+        int total = screen.getMenu().slots.size();
         for (int i = containerSize; i < total; i++) {
-            ItemStack stack = screen.getScreenHandler().slots.get(i).getStack();
+            ItemStack stack = screen.getMenu().slots.get(i).getItem();
             if (!stack.isEmpty() && stack.getItem() == targetItem.get()) {
-                clickSlotRaw(screen, i, SlotActionType.QUICK_MOVE);
+                clickSlotRaw(screen, i, ContainerInput.QUICK_MOVE);
             }
         }
 
@@ -567,14 +568,14 @@ public class AutoShop extends Module {
         tickWaiter = depositDelay.get();
     }
 
-    private boolean clickSlotRaw(HandledScreen<?> screen, int slot, SlotActionType action) {
-        int total = screen.getScreenHandler().slots.size();
+    private boolean clickSlotRaw(AbstractContainerScreen<?> screen, int slot, ContainerInput action) {
+        int total = screen.getMenu().slots.size();
         if (slot < 0 || slot >= total) {
             error("Slot " + slot + " is outside the screen. Stopping.");
             toggle();
             return false;
         }
-        mc.interactionManager.clickSlot(screen.getScreenHandler().syncId, slot, 0, action, mc.player);
+        mc.gameMode.handleContainerInput(screen.getMenu().containerId, slot, 0, action, mc.player);
         return true;
     }
 
@@ -596,32 +597,32 @@ public class AutoShop extends Module {
         tickWaiter = 2;
     }
 
-    private HandledScreen<?> getHandledScreen() {
-        return mc.currentScreen instanceof HandledScreen<?> handled ? handled : null;
+    private AbstractContainerScreen<?> getHandledScreen() {
+        return mc.gui.screen() instanceof AbstractContainerScreen<?> handled ? handled : null;
     }
 
-    private int getContainerSize(HandledScreen<?> screen) {
-        return Math.max(0, screen.getScreenHandler().slots.size() - 36);
+    private int getContainerSize(AbstractContainerScreen<?> screen) {
+        return Math.max(0, screen.getMenu().slots.size() - 36);
     }
 
-    private int findSlotByItem(HandledScreen<?> screen, Item item) {
+    private int findSlotByItem(AbstractContainerScreen<?> screen, Item item) {
         int end = getContainerSize(screen);
         for (int i = 0; i < end; i++) {
-            ItemStack stack = screen.getScreenHandler().slots.get(i).getStack();
+            ItemStack stack = screen.getMenu().slots.get(i).getItem();
             if (!stack.isEmpty() && stack.getItem() == item) return i;
         }
         return -1;
     }
 
-    private int findSlotByKeywords(HandledScreen<?> screen, String rawKeywords) {
+    private int findSlotByKeywords(AbstractContainerScreen<?> screen, String rawKeywords) {
         if (rawKeywords == null || rawKeywords.isBlank()) return -1;
         String[] keywords = rawKeywords.split(",");
         int end = getContainerSize(screen);
         for (int i = 0; i < end; i++) {
-            ItemStack stack = screen.getScreenHandler().slots.get(i).getStack();
+            ItemStack stack = screen.getMenu().slots.get(i).getItem();
             if (stack.isEmpty()) continue;
-            String name = stack.getName().getString().toLowerCase(Locale.ROOT);
-            String key = stack.getItem().getTranslationKey().toLowerCase(Locale.ROOT);
+            String name = stack.getHoverName().getString().toLowerCase(Locale.ROOT);
+            String key = stack.getItem().getDescriptionId().toLowerCase(Locale.ROOT);
             for (String keyword : keywords) {
                 String candidate = keyword.trim().toLowerCase(Locale.ROOT);
                 if (!candidate.isEmpty() && (name.contains(candidate) || key.contains(candidate))) return i;
@@ -630,24 +631,24 @@ public class AutoShop extends Module {
         return -1;
     }
 
-    private boolean validItemButton(HandledScreen<?> screen, int slot) {
+    private boolean validItemButton(AbstractContainerScreen<?> screen, int slot) {
         int end = getContainerSize(screen);
         if (slot < 0 || slot >= end) return false;
-        ItemStack stack = screen.getScreenHandler().slots.get(slot).getStack();
+        ItemStack stack = screen.getMenu().slots.get(slot).getItem();
         if (stack.isEmpty()) return false;
         if (stack.getItem() == targetItem.get()) return true;
         String keyword = itemKeyword.get() == null ? "" : itemKeyword.get().trim().toLowerCase(Locale.ROOT);
-        return !keyword.isEmpty() && (stack.getName().getString().toLowerCase(Locale.ROOT).contains(keyword)
-            || stack.getItem().getTranslationKey().toLowerCase(Locale.ROOT).contains(keyword));
+        return !keyword.isEmpty() && (stack.getHoverName().getString().toLowerCase(Locale.ROOT).contains(keyword)
+            || stack.getItem().getDescriptionId().toLowerCase(Locale.ROOT).contains(keyword));
     }
 
-    private int computeChestRemainingCapacity(HandledScreen<?> screen) {
+    private int computeChestRemainingCapacity(AbstractContainerScreen<?> screen) {
         int containerSize = getContainerSize(screen);
         Item target = targetItem.get();
-        int maxPer = target.getMaxCount();
+        int maxPer = target.getDefaultMaxStackSize();
         int capacity = 0;
         for (int i = 0; i < containerSize; i++) {
-            ItemStack stack = screen.getScreenHandler().slots.get(i).getStack();
+            ItemStack stack = screen.getMenu().slots.get(i).getItem();
             if (stack.isEmpty()) capacity += maxPer;
             else if (stack.getItem() == target) capacity += Math.max(0, maxPer - stack.getCount());
         }
@@ -658,34 +659,34 @@ public class AutoShop extends Module {
         if (mc.player == null) return 0;
         int count = 0;
         for (int i = 0; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (!stack.isEmpty() && stack.getItem() == targetItem.get()) count += stack.getCount();
         }
         return count;
     }
 
     private long getNearbyGroundTargetItemCount() {
-        if (mc.player == null || mc.world == null) return 0;
-        Box searchBox = mc.player.getBoundingBox().expand(groundItemRange.get());
+        if (mc.player == null || mc.level == null) return 0;
+        AABB searchBox = mc.player.getBoundingBox().inflate(groundItemRange.get());
         long count = 0;
-        for (ItemEntity entity : mc.world.getEntitiesByClass(ItemEntity.class, searchBox,
-            entity -> entity.isAlive() && !entity.getStack().isEmpty() && entity.getStack().getItem() == targetItem.get())) {
-            count += entity.getStack().getCount();
+        for (ItemEntity entity : mc.level.getEntities(EntityTypeTest.forClass(ItemEntity.class), searchBox,
+            entity -> entity.isAlive() && !entity.getItem().isEmpty() && entity.getItem().getItem() == targetItem.get())) {
+            count += entity.getItem().getCount();
         }
         return count;
     }
 
     private BlockPos findNearbyChest() {
-        BlockPos origin = mc.player.getBlockPos();
+        BlockPos origin = mc.player.blockPosition();
         int range = chestRange.get();
         BlockPos best = null;
         double bestDistance = Double.MAX_VALUE;
         for (int x = -range; x <= range; x++) {
             for (int y = -3; y <= 3; y++) {
                 for (int z = -range; z <= range; z++) {
-                    BlockPos pos = origin.add(x, y, z);
-                    if (fullChests.contains(pos) || !isDepositContainer(mc.world.getBlockState(pos))) continue;
-                    double distance = mc.player.squaredDistanceTo(Vec3d.ofCenter(pos));
+                    BlockPos pos = origin.offset(x, y, z);
+                    if (fullChests.contains(pos) || !isDepositContainer(mc.level.getBlockState(pos))) continue;
+                    double distance = mc.player.distanceToSqr(Vec3.atCenterOf(pos));
                     if (distance < bestDistance) {
                         bestDistance = distance;
                         best = pos;
@@ -697,31 +698,31 @@ public class AutoShop extends Module {
     }
 
     private boolean isDepositContainer(BlockState state) {
-        return state.isOf(Blocks.CHEST)
-            || (useTrappedChests.get() && state.isOf(Blocks.TRAPPED_CHEST))
-            || (useBarrels.get() && state.isOf(Blocks.BARREL));
+        return state.is(Blocks.CHEST)
+            || (useTrappedChests.get() && state.is(Blocks.TRAPPED_CHEST))
+            || (useBarrels.get() && state.is(Blocks.BARREL));
     }
 
     private void markChestFull(BlockPos pos) {
         if (pos == null) return;
         fullChests.add(pos);
-        for (Direction direction : Direction.Type.HORIZONTAL) {
-            BlockPos adjacent = pos.offset(direction);
-            if (mc.world != null && isDepositContainer(mc.world.getBlockState(adjacent))) fullChests.add(adjacent);
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            BlockPos adjacent = pos.relative(direction);
+            if (mc.level != null && isDepositContainer(mc.level.getBlockState(adjacent))) fullChests.add(adjacent);
         }
     }
 
     private void faceChest(BlockPos chest) {
         if (mc.player == null || chest == null) return;
-        Vec3d eye = mc.player.getEyePos();
-        Vec3d center = Vec3d.ofCenter(chest);
+        Vec3 eye = mc.player.getEyePosition();
+        Vec3 center = Vec3.atCenterOf(chest);
         double dx = center.x - eye.x;
         double dy = center.y - eye.y;
         double dz = center.z - eye.z;
         float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90f;
         float pitch = (float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)));
-        mc.player.setYaw(yaw);
-        mc.player.setPitch(pitch);
+        mc.player.setYRot(yaw);
+        mc.player.setXRot(pitch);
     }
 
     public void resetFullChests() {

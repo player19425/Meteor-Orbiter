@@ -4,7 +4,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import orbiter.modules.misc.ISellWand;
-import net.minecraft.command.CommandSource;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
 
 public class ISellWandCommand extends Command {
     public ISellWandCommand() {
@@ -12,7 +12,7 @@ public class ISellWandCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.executes(context -> {
             Modules modules = Modules.get();
             if (modules == null) { error("Modules not initialized."); return SINGLE_SUCCESS; }

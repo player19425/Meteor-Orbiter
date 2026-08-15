@@ -4,9 +4,9 @@ import orbiter.modules.ForceInvisibility;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.command.CommandSource;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.phys.Vec3;
 
 public class FixDeathCommand extends Command {
     public FixDeathCommand() {
@@ -14,7 +14,7 @@ public class FixDeathCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.executes(context -> {
             if (mc.player == null) {
                 error("Player is null.");
@@ -32,17 +32,17 @@ public class FixDeathCommand extends Command {
                 info("Disabled ForceInvisibility before recovery.");
             }
 
-            boolean wasDead = mc.player.isDead() || mc.player.getHealth() <= 0.0f || mc.player.deathTime > 0;
+            boolean wasDead = mc.player.isRemoved() || mc.player.getHealth() <= 0.0f || mc.player.deathTime > 0;
             mc.player.deathTime = 0;
             mc.player.fallDistance = 0.0f;
-            mc.player.setVelocity(Vec3d.ZERO);
+            mc.player.setDeltaMovement(Vec3.ZERO);
 
-            if (mc.getNetworkHandler() != null) {
+            if (mc.getConnection() != null) {
                 if (wasDead) {
-                    mc.player.requestRespawn();
+                    mc.player.respawn();
                 }
 
-                mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
+                mc.getConnection().send(new ServerboundMovePlayerPacket.Pos(
                     mc.player.getX(),
                     mc.player.getY(),
                     mc.player.getZ(),

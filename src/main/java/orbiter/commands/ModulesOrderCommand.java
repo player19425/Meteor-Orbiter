@@ -8,7 +8,7 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import orbiter.util.OrbiterModuleOrder;
-import net.minecraft.command.CommandSource;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -24,7 +24,7 @@ public class ModulesOrderCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.then(literal("move")
             .then(argument("module", StringArgumentType.word())
                 .suggests((context, suggestBuilder) -> {
@@ -47,7 +47,7 @@ public class ModulesOrderCommand extends Command {
         builder.then(literal("list").executes(this::listOrder));
     }
 
-    private int moveModule(CommandContext<CommandSource> ctx) {
+    private int moveModule(CommandContext<ClientSuggestionProvider> ctx) {
         String moduleName = StringArgumentType.getString(ctx, "module");
         String direction = StringArgumentType.getString(ctx, "direction");
 
@@ -107,7 +107,7 @@ public class ModulesOrderCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int listOrder(CommandContext<CommandSource> ctx) {
+    private int listOrder(CommandContext<ClientSuggestionProvider> ctx) {
         Map<String, Integer> all = OrbiterModuleOrder.getAll();
 
         if (all.isEmpty()) {

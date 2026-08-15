@@ -7,7 +7,7 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.world.entity.player.Player;
 
 import java.util.Random;
 
@@ -161,7 +161,7 @@ public class TNTRain extends CreativeSafetyModule {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.player.networkHandler == null)
+        if (mc.player == null || mc.player.connection == null)
             return;
 
         elapsedTicks++;
@@ -197,7 +197,7 @@ public class TNTRain extends CreativeSafetyModule {
             double cx, cy, cz;
             int spreadR = radius.get();
 
-            PlayerEntity targetEntity = findTarget();
+            Player targetEntity = findTarget();
             if (targetEntity != null) {
                 cx = targetEntity.getX();
                 cy = targetEntity.getY();
@@ -221,20 +221,20 @@ public class TNTRain extends CreativeSafetyModule {
             }
 
             String cmd = CommandUtils.formatCommand("summon minecraft:tnt %.2f %.2f %.2f {fuse:%d}", x, y, z, fuse);
-            mc.player.networkHandler.sendChatCommand(cmd);
+            mc.player.connection.sendCommand(cmd);
             spawnedCount++;
         }
     }
 
-    private PlayerEntity findTarget() {
-        if (mc.world == null || mc.player == null || targetMode.get() == TargetMode.None)
+    private Player findTarget() {
+        if (mc.level == null || mc.player == null || targetMode.get() == TargetMode.None)
             return null;
 
         if (targetMode.get() == TargetMode.NamedPlayer) {
             String name = targetPlayerName.get();
             if (name.isEmpty())
                 return null;
-            for (PlayerEntity player : mc.world.getPlayers()) {
+            for (Player player : mc.level.players()) {
                 if (player != mc.player && player.getName().getString().equalsIgnoreCase(name)) {
                     if (ignoreFriends.get() && Friends.get().isFriend(player)) return null;
                     return player;
@@ -243,14 +243,14 @@ public class TNTRain extends CreativeSafetyModule {
             return null;
         }
 
-        PlayerEntity nearest = null;
+        Player nearest = null;
         double nearestDist = Double.MAX_VALUE;
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             if (player == mc.player)
                 continue;
             if (ignoreFriends.get() && Friends.get().isFriend(player))
                 continue;
-            double dist = mc.player.squaredDistanceTo(player);
+            double dist = mc.player.distanceToSqr(player);
             if (dist < nearestDist) {
                 nearestDist = dist;
                 nearest = player;

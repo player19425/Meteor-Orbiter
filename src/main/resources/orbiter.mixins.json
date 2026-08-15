@@ -36,7 +36,6 @@
     "PlayerListEntrySpoofMixin",
     "ClientPlayerInteractionManagerSpoofMixin",
     "HeldItemRendererScaleMixin",
-    "ItemRendererGlintMixin",
     "ServerProtectItemLoreMixin",
     "ServerProtectRecipeBookMixin",
     "ServerProtectCommandTreeAccessor",

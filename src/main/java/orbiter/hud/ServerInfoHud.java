@@ -8,8 +8,8 @@ import meteordevelopment.meteorclient.systems.hud.HudElementInfo;
 import meteordevelopment.meteorclient.systems.hud.HudRenderer;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,7 +60,7 @@ public class ServerInfoHud extends HudElement {
         .defaultValue(true).build());
 
     private final Setting<SettingColor> textColor = sgGeneral.add(new ColorSetting.Builder()
-        .name("color").description("Text color.")
+        .name("color").description("Component color.")
         .defaultValue(new SettingColor(255, 255, 255, 255)).build());
 
     private final Setting<Boolean> shadow = sgGeneral.add(new BoolSetting.Builder()
@@ -68,7 +68,7 @@ public class ServerInfoHud extends HudElement {
         .defaultValue(true).build());
 
     private final Setting<Double> scale = sgGeneral.add(new DoubleSetting.Builder()
-        .name("scale").description("Text scale.")
+        .name("scale").description("Component scale.")
         .defaultValue(1.0).min(0.5).sliderRange(0.5, 3.0).build());
 
     public ServerInfoHud() {
@@ -77,8 +77,8 @@ public class ServerInfoHud extends HudElement {
 
     @Override
     public void render(HudRenderer renderer) {
-        MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player == null || mc.textRenderer == null) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.font == null) {
             setSize(0, 0);
             return;
         }
@@ -103,8 +103,8 @@ public class ServerInfoHud extends HudElement {
 
         if (showIp.get()) {
             String ip = scanner != null ? scanner.getServerIp() : null;
-            if (ip == null && mc.getNetworkHandler() != null && mc.getNetworkHandler().getServerInfo() != null) {
-                ip = mc.getNetworkHandler().getServerInfo().address;
+            if (ip == null && mc.getConnection() != null && mc.getConnection().getServerData() != null) {
+                ip = mc.getConnection().getServerData().ip;
             }
             lines.add("§bIP: §f" + (ip != null ? ip : "Unknown"));
         }
@@ -114,12 +114,12 @@ public class ServerInfoHud extends HudElement {
             lines.add("§bProtocol: §f" + (proto > 0 ? proto : "Unknown"));
         }
 
-        if (showDifficulty.get() && mc.world != null) {
-            lines.add("§bDifficulty: §f" + mc.world.getDifficulty().getName());
+        if (showDifficulty.get() && mc.level != null) {
+            lines.add("§bDifficulty: §f" + mc.level.getDifficulty().getDisplayName());
         }
 
-        if (showTime.get() && mc.world != null) {
-            long timeOfDay = mc.world.getTimeOfDay();
+        if (showTime.get() && mc.level != null) {
+            long timeOfDay = mc.level.getLevelData().getGameTime();
             int ticks = (int) (timeOfDay % 24000);
             int day = (int) (timeOfDay / 24000) + 1;
             int hours = ticks / 1000;

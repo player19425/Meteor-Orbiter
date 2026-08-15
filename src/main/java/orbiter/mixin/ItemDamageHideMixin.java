@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(net.minecraft.item.ItemStack.class)
+@Mixin(net.minecraft.world.item.ItemStack.class)
 public abstract class ItemDamageHideMixin {
     @Inject(method = "isDamaged", at = @At("HEAD"), cancellable = true)
     private void orbiter$isDamaged(CallbackInfoReturnable<Boolean> cir) {
@@ -17,7 +17,7 @@ public abstract class ItemDamageHideMixin {
         cir.setReturnValue(false);
     }
 
-    @Inject(method = "isItemBarVisible", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "isBarVisible", at = @At("HEAD"), cancellable = true)
     private void orbiter$isItemBarVisible(CallbackInfoReturnable<Boolean> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.hideItemDamageEnabled()) return;

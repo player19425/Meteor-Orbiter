@@ -3,14 +3,14 @@ package orbiter.mixin;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.util.Mth;
 import orbiter.modules.render.Camera360;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-@Mixin(ClientPlayerEntity.class)
+@Mixin(LocalPlayer.class)
 public abstract class Camera360RenderPitchMixin {
 
     private boolean orbiter$is360Active() {
@@ -18,19 +18,17 @@ public abstract class Camera360RenderPitchMixin {
         return mod != null && mod.isActive();
     }
 
-    @WrapOperation(method = "tickMovementInput", at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/Entity;getPitch()F", ordinal = 0))
-    private float orbiter$wrapRenderPitchTarget(Entity entity, Operation<Float> original) {
-        float pitch = original.call(entity);
+    @WrapOperation(method = "applyInput", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getXRot()F", ordinal = 0))
+    private float orbiter$wrapRenderPitchTarget(LocalPlayer player, Operation<Float> original) {
+        float pitch = original.call(player);
         if (!orbiter$is360Active()) return pitch;
-        ClientPlayerEntity player = (ClientPlayerEntity)(Object)this;
-        return player.renderPitch + MathHelper.wrapDegrees(pitch - player.renderPitch);
+        return player.getXRot(1.0f) + Mth.wrapDegrees(pitch - player.getXRot(1.0f));
     }
 
-    @WrapOperation(method = "tickMovementInput", at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/Entity;getYaw()F", ordinal = 0))
-    private float orbiter$wrapRenderYawTarget(Entity entity, Operation<Float> original) {
-        float yaw = original.call(entity);
+    @WrapOperation(method = "applyInput", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getYRot()F", ordinal = 0))
+    private float orbiter$wrapRenderYawTarget(LocalPlayer player, Operation<Float> original) {
+        float yaw = original.call(player);
         if (!orbiter$is360Active()) return yaw;
-        ClientPlayerEntity player = (ClientPlayerEntity)(Object)this;
-        return player.renderYaw + MathHelper.wrapDegrees(yaw - player.renderYaw);
+        return player.getYRot(1.0f) + Mth.wrapDegrees(yaw - player.getYRot(1.0f));
     }
 }

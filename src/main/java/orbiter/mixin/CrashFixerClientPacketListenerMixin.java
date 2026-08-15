@@ -1,14 +1,14 @@
 package orbiter.mixin;
 
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.network.packet.s2c.play.EntitiesDestroyS2CPacket;
-import net.minecraft.network.packet.s2c.play.EntitySpawnS2CPacket;
-import net.minecraft.network.packet.s2c.play.ParticleS2CPacket;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.random.Random;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
+import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.util.RandomSource;
 import orbiter.modules.misc.ServerProtect;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -21,36 +21,36 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.HashMap;
 import java.util.Map;
 
-@Mixin(ClientPlayNetworkHandler.class)
+@Mixin(ClientPacketListener.class)
 public class CrashFixerClientPacketListenerMixin {
 
     @Shadow
-    private ClientWorld world;
+    private ClientLevel level;
     @Shadow
     @Final
-    private Random random;
+    private RandomSource random;
 
     @Unique
     private static final Map<Integer, Integer> trackedEntityCounts = new HashMap<>();
 
-    @Inject(method = "onParticle", at = @At("HEAD"), cancellable = true)
-    private void orbiter$clampParticlePacket(ParticleS2CPacket packet, CallbackInfo ci) {
+    @Inject(method = "handleParticleEvent", at = @At("HEAD"), cancellable = true)
+    private void orbiter$clampParticlePacket(ClientboundLevelParticlesPacket packet, CallbackInfo ci) {
         ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);
         if (mod == null || !mod.isActive() || !mod.shouldClampParticlePackets()) return;
         int max = mod.getMaxParticlesPerPacket();
         int count = packet.getCount();
-        if (count <= max || this.world == null) return;
+        if (count <= max || this.level == null) return;
 
         for (int i = 0; i < max; i++) {
-            double xOff = this.random.nextGaussian() * packet.getOffsetX();
-            double yOff = this.random.nextGaussian() * packet.getOffsetY();
-            double zOff = this.random.nextGaussian() * packet.getOffsetZ();
-            double vx = this.random.nextGaussian() * packet.getSpeed();
-            double vy = this.random.nextGaussian() * packet.getSpeed();
-            double vz = this.random.nextGaussian() * packet.getSpeed();
+            double xOff = this.random.nextGaussian() * packet.getXDist();
+            double yOff = this.random.nextGaussian() * packet.getYDist();
+            double zOff = this.random.nextGaussian() * packet.getZDist();
+            double vx = this.random.nextGaussian() * packet.getMaxSpeed();
+            double vy = this.random.nextGaussian() * packet.getMaxSpeed();
+            double vz = this.random.nextGaussian() * packet.getMaxSpeed();
             try {
-                this.world.addParticleClient(packet.getParameters(), packet.shouldForceSpawn(),
-                    packet.isImportant(), packet.getX() + xOff, packet.getY() + yOff, packet.getZ() + zOff, vx, vy, vz);
+                this.level.addParticle(packet.getParticle(), packet.isOverrideLimiter(),
+                    packet.alwaysShow(), packet.getX() + xOff, packet.getY() + yOff, packet.getZ() + zOff, vx, vy, vz);
             } catch (Throwable ignored) {
                 break;
             }
@@ -58,13 +58,13 @@ public class CrashFixerClientPacketListenerMixin {
         ci.cancel();
     }
 
-    @Inject(method = "clearWorld", at = @At("HEAD"))
+    @Inject(method = "clearLevel", at = @At("HEAD"))
     private void orbiter$clearTrackedEntities(CallbackInfo ci) {
         trackedEntityCounts.clear();
     }
 
-    @Inject(method = "onEntitiesDestroy", at = @At("HEAD"))
-    private void orbiter$forgetRemovedEntities(EntitiesDestroyS2CPacket packet, CallbackInfo ci) {
+    @Inject(method = "handleRemoveEntities", at = @At("HEAD"))
+    private void orbiter$forgetRemovedEntities(ClientboundRemoveEntitiesPacket packet, CallbackInfo ci) {
         var it = packet.getEntityIds().iterator();
         while (it.hasNext()) {
             int entityId = it.nextInt();

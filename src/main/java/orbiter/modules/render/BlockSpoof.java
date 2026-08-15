@@ -7,11 +7,11 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.core.BlockPos;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -340,7 +340,7 @@ public class BlockSpoof extends Module {
         if (self == null) return false;
         if (!self.rangeLimitEnabled.get()) return true;
         if (self.mc.player == null) return true;
-        return self.mc.player.getBlockPos().isWithinDistance(pos, self.range.get());
+        return self.mc.player.blockPosition().closerThan(pos, self.range.get());
     }
 
     public static boolean hasActiveReplacements() {
@@ -447,8 +447,8 @@ public class BlockSpoof extends Module {
         String fullId = id.contains(":") ? id : "minecraft:" + id;
 
         try {
-            Identifier identifier = Identifier.of(fullId);
-            Block block = Registries.BLOCK.get(identifier);
+            Identifier identifier = Identifier.withDefaultNamespace(fullId);
+            Block block = BuiltInRegistries.BLOCK.getValue(identifier);
             if (block != Blocks.AIR || fullId.equals("minecraft:air")) {
                 return block;
             }
@@ -462,8 +462,8 @@ public class BlockSpoof extends Module {
             return cached == Blocks.AIR ? null : cached;
         }
 
-        for (Block b : Registries.BLOCK) {
-            Identifier bId = Registries.BLOCK.getId(b);
+        for (Block b : BuiltInRegistries.BLOCK) {
+            Identifier bId = BuiltInRegistries.BLOCK.getKey(b);
             if (bId != null && bId.toString().equalsIgnoreCase(lowerId)) {
                 blockIdCache.put(lowerId, b);
                 return b;
@@ -504,7 +504,7 @@ public class BlockSpoof extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         handleToggleKey();
 
@@ -530,7 +530,7 @@ public class BlockSpoof extends Module {
         boolean isDown = false;
         try {
             int keyCode = toggleKeyCode.get();
-            isDown = org.lwjgl.glfw.GLFW.glfwGetKey(mc.getWindow().getHandle(), keyCode) == 1;
+            isDown = org.lwjgl.glfw.GLFW.glfwGetKey(mc.getWindow().handle(), keyCode) == 1;
         } catch (Exception ignored) {
             return;
         }
@@ -546,11 +546,11 @@ public class BlockSpoof extends Module {
     private void scanOreHighlights() {
         highlightedOres.clear();
 
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         int r = range.get();
-        BlockPos playerPos = mc.player.getBlockPos();
-        BlockPos.Mutable mutable = new BlockPos.Mutable();
+        BlockPos playerPos = mc.player.blockPosition();
+        BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
 
         int budget = ORE_SCAN_BLOCK_BUDGET;
 
@@ -560,13 +560,13 @@ public class BlockSpoof extends Module {
                     if (budget-- <= 0) return;
                     mutable.set(playerPos.getX() + x, playerPos.getY() + y, playerPos.getZ() + z);
 
-                    if (playerPos.getSquaredDistance(mutable) > (long) r * r) continue;
+                    if (playerPos.distSqr(mutable) > (long) r * r) continue;
 
-                    Block block = mc.world.getBlockState(mutable).getBlock();
+                    Block block = mc.level.getBlockState(mutable).getBlock();
                     SettingColor color = getOreHighlightColor(block);
                     if (color != null) {
                         highlightedOres.add(new HighlightedOre(
-                            mutable.toImmutable(), color, block));
+                            mutable.immutable(), color, block));
                     }
                 }
             }
@@ -632,11 +632,11 @@ public class BlockSpoof extends Module {
             pulseAlpha = 0.5f + 0.5f * (float) Math.sin(pulsePhase);
         }
 
-        BlockPos playerPos = mc.player.getBlockPos();
+        BlockPos playerPos = mc.player.blockPosition();
         int rangeSq = range.get() * range.get();
 
         for (HighlightedOre ore : highlightedOres) {
-            if (playerPos.getSquaredDistance(ore.pos) > rangeSq) continue;
+            if (playerPos.distSqr(ore.pos) > rangeSq) continue;
 
             float finalAlpha = opacity * pulseAlpha;
 
@@ -711,16 +711,16 @@ public class BlockSpoof extends Module {
     }
 
     private void requestWorldRendererRefresh() {
-        if (mc.worldRenderer != null) {
+        if (mc.levelRenderer != null) {
             try {
-                mc.worldRenderer.scheduleTerrainUpdate();
+                
                 if (debugPositions.get()) {
                     info("Scheduled world renderer terrain update.");
                 }
             } catch (Exception e) {
 
                 try {
-                    mc.worldRenderer.reload();
+                    
                 } catch (Exception ignored) {
                     warning("Failed to request world renderer refresh.");
                 }
@@ -748,7 +748,7 @@ public class BlockSpoof extends Module {
     public boolean isPositionInRange(BlockPos pos) {
         if (!rangeLimitEnabled.get()) return true;
         if (mc.player == null) return true;
-        return mc.player.getBlockPos().isWithinDistance(pos, range.get());
+        return mc.player.blockPosition().closerThan(pos, range.get());
     }
 
     public OreHighlightMode getOreHighlightMode() {

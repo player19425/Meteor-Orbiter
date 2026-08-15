@@ -7,10 +7,11 @@ import meteordevelopment.meteorclient.settings.EntityTypeListSetting;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.EntityType;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.core.BlockPos;
 
 import java.util.ArrayList;
 import java.util.Locale;
@@ -92,7 +93,7 @@ public class EntitySpammer extends CreativeSafetyModule {
     private final Setting<Set<EntityType<?>>> entityTypes = sgGeneral.add(new EntityTypeListSetting.Builder()
         .name("entity-type")
         .description("Entity types to spawn, animate, or dominate. Selected types are cycled.")
-        .defaultValue(EntityType.ZOMBIE)
+        .defaultValue(EntityTypes.ZOMBIE)
         .build());
 
     private final Setting<TargetMode> targetMode = sgTarget.add(new EnumSetting.Builder<TargetMode>()
@@ -420,7 +421,7 @@ public class EntitySpammer extends CreativeSafetyModule {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.player.connection == null) return;
 
         tickCounter++;
         if (tickCounter < delay.get()) return;
@@ -487,8 +488,8 @@ public class EntitySpammer extends CreativeSafetyModule {
                     z = (random.nextDouble() * 2 - 1) * spreadRadius.get();
                 }
                 case AtLookPos -> {
-                    double yaw = Math.toRadians(mc.player.getYaw());
-                    double pitch = Math.toRadians(mc.player.getPitch());
+                    double yaw = Math.toRadians(mc.player.getYRot());
+                    double pitch = Math.toRadians(mc.player.getXRot());
                     x = -Math.sin(yaw) * Math.cos(pitch) * 10;
                     y = -Math.sin(pitch) * 10;
                     z = Math.cos(yaw) * Math.cos(pitch) * 10;
@@ -505,7 +506,7 @@ public class EntitySpammer extends CreativeSafetyModule {
             ? CommandUtils.formatCommand("execute at %s run summon %s ~%.2f ~%.2f ~%.2f", target, entity, x, y, z)
             : CommandUtils.formatCommand("execute at %s run summon %s ~%.2f ~%.2f ~%.2f {%s}", target, entity, x, y, z, nbt);
 
-        mc.player.networkHandler.sendChatCommand(cmd);
+        mc.player.connection.sendCommand(cmd);
         spawnedCount++;
     }
 
@@ -521,7 +522,7 @@ public class EntitySpammer extends CreativeSafetyModule {
             ? CommandUtils.formatCommand("execute at %s run summon %s ~%d ~%d ~%d", target, entity, pos.getX(), pos.getY(), pos.getZ())
             : CommandUtils.formatCommand("execute at %s run summon %s ~%d ~%d ~%d {%s}", target, entity, pos.getX(), pos.getY(), pos.getZ(), nbt);
 
-        mc.player.networkHandler.sendChatCommand(cmd);
+        mc.player.connection.sendCommand(cmd);
         fillIndex++;
         spawnedCount++;
     }
@@ -564,7 +565,7 @@ public class EntitySpammer extends CreativeSafetyModule {
             }
             case Line -> {
                 double progress = lineProgress / lineLength.get();
-                double facing = Math.toRadians(mc.player.getYaw());
+                double facing = Math.toRadians(mc.player.getYRot());
                 tx = cx + Math.sin(-facing) * lineLength.get() * (progress - 0.5);
                 ty = cy;
                 tz = cz + Math.cos(facing) * lineLength.get() * (progress - 0.5);
@@ -587,7 +588,7 @@ public class EntitySpammer extends CreativeSafetyModule {
 
         String cmd = CommandUtils.formatCommand("tp %s %.2f %.2f %.2f%s",
             getResolvedSelector(), tx, ty, tz, facing);
-        mc.player.networkHandler.sendChatCommand(cmd);
+        mc.player.connection.sendCommand(cmd);
     }
 
     private void doDominate() {
@@ -596,7 +597,7 @@ public class EntitySpammer extends CreativeSafetyModule {
         BlockPos pos = fillPositions.get(fillIndex);
         String cmd = buildDominateCommand(pos);
         if (cmd == null) return;
-        mc.player.networkHandler.sendChatCommand(cmd);
+        mc.player.connection.sendCommand(cmd);
         fillIndex++;
         spawnedCount++;
     }
@@ -671,7 +672,7 @@ public class EntitySpammer extends CreativeSafetyModule {
         if (entityTypes.get().isEmpty()) return fallback;
 
         return entityTypes.get().stream()
-            .map(Registries.ENTITY_TYPE::getId)
+            .map(BuiltInRegistries.ENTITY_TYPE::getKey)
             .filter(id -> id != null)
             .map(Identifier::toString)
             .sorted(Comparator.naturalOrder())
@@ -687,7 +688,7 @@ public class EntitySpammer extends CreativeSafetyModule {
             ids = List.of("minecraft:zombie", "minecraft:skeleton", "minecraft:spider", "minecraft:creeper");
         } else {
             ids = entityTypes.get().stream()
-                .map(Registries.ENTITY_TYPE::getId)
+                .map(BuiltInRegistries.ENTITY_TYPE::getKey)
                 .filter(id -> id != null)
                 .map(Identifier::toString)
                 .sorted()
@@ -809,7 +810,7 @@ public class EntitySpammer extends CreativeSafetyModule {
     private double[] getFormationPosition(int index) {
         double r = formationRadius.get();
         double spacing = formationSpacing.get();
-        double yaw = Math.toRadians(mc.player.getYaw());
+        double yaw = Math.toRadians(mc.player.getYRot());
 
         return switch (formation.get()) {
             case Circle -> {

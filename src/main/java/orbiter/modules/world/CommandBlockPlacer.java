@@ -5,10 +5,10 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.entity.CommandBlockBlockEntity;
-import net.minecraft.network.packet.c2s.play.UpdateCommandBlockC2SPacket;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
+import net.minecraft.world.level.block.entity.CommandBlockEntity;
+import net.minecraft.network.protocol.game.ServerboundSetCommandBlockPacket;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -159,7 +159,7 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
             return;
         }
 
-        if (!mc.player.getAbilities().creativeMode) {
+        if (!mc.player.getAbilities().instabuild) {
             warning("You must be in Creative mode!");
             toggle();
             return;
@@ -173,18 +173,18 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
         phaseTickCounter = 0;
         positions = new ArrayList<>();
 
-        BlockPos start = mc.player.getBlockPos();
+        BlockPos start = mc.player.blockPosition();
         Direction dir = getDirection();
 
         for (int i = 0; i < amount.get(); i++) {
-            BlockPos pos = start.offset(dir, startDistance.get() + i);
+            BlockPos pos = start.offset(dir.getStepX() * (startDistance.get() + i), dir.getStepY() * (startDistance.get() + i), dir.getStepZ() * (startDistance.get() + i));
             positions.add(pos);
         }
     }
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.player.networkHandler == null || mc.interactionManager == null || positions == null)
+        if (mc.player == null || mc.player.connection == null || mc.gameMode == null || positions == null)
             return;
 
         if (placedCount >= positions.size()) {
@@ -214,7 +214,7 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
 
             String cmd = String.format("setblock %d %d %d %s[facing=%s]",
                     pos.getX(), pos.getY(), pos.getZ(), blockId, facingState);
-            mc.player.networkHandler.sendChatCommand(cmd);
+            mc.player.connection.sendCommand(cmd);
 
             phase = 1;
             phaseTickCounter = 0;
@@ -235,15 +235,15 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
                 actualType = CmdBlockType.Chain;
             }
 
-            CommandBlockBlockEntity.Type cbType = switch (actualType) {
-                case Impulse -> CommandBlockBlockEntity.Type.REDSTONE;
-                case Chain -> CommandBlockBlockEntity.Type.SEQUENCE;
-                case Repeat -> CommandBlockBlockEntity.Type.AUTO;
+            CommandBlockEntity.Mode cbType = switch (actualType) {
+                case Impulse -> CommandBlockEntity.Mode.REDSTONE;
+                case Chain -> CommandBlockEntity.Mode.SEQUENCE;
+                case Repeat -> CommandBlockEntity.Mode.AUTO;
             };
 
             boolean autoAct = quickRepeat.get() || autoActivate.get();
 
-            mc.player.networkHandler.sendPacket(new UpdateCommandBlockC2SPacket(
+            mc.player.connection.send(new ServerboundSetCommandBlockPacket(
                     pos,
                     cmd,
                     cbType,

@@ -11,14 +11,14 @@ import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.client.toast.SystemToast;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlayerRemoveS2CPacket;
-import net.minecraft.text.Text;
-import net.minecraft.world.GameMode;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.client.gui.components.toasts.SystemToast;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.GameType;
 
 import java.util.*;
 import java.util.regex.Matcher;
@@ -293,7 +293,7 @@ public class AntiStaff extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (pendingAction != null) {
             if (pendingDelay > 0) { pendingDelay--; return; }
@@ -325,8 +325,8 @@ public class AntiStaff extends Module {
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
         if (!instantPacketCheck.get()) return;
-        if (event.packet instanceof PlayerListS2CPacket packet) {
-            for (PlayerListS2CPacket.Entry entry : packet.getEntries()) {
+        if (event.packet instanceof ClientboundPlayerInfoUpdatePacket packet) {
+            for (ClientboundPlayerInfoUpdatePacket.Entry entry : packet.entries()) {
                 UUID uuid = entry.profileId();
                 if (uuid == null) continue;
                 if (knownPlayers.contains(uuid)) continue;
@@ -338,7 +338,7 @@ public class AntiStaff extends Module {
                 processPlayerDetected(name, display, uuid, "packet");
             }
         }
-        if (notifyOnLeave.get() && event.packet instanceof PlayerRemoveS2CPacket packet) {
+        if (notifyOnLeave.get() && event.packet instanceof net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket packet) {
             for (UUID uuid : packet.profileIds()) {
                 knownPlayers.remove(uuid);
             }
@@ -379,10 +379,10 @@ public class AntiStaff extends Module {
     }
 
     private void scanTabSnapshot(String source) {
-        ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+        ClientPacketListener handler = mc.getConnection();
         if (handler == null) return;
 
-        for (PlayerListEntry entry : handler.getPlayerList()) {
+        for (PlayerInfo entry : handler.getOnlinePlayers()) {
             GameProfile profile = entry.getProfile();
             if (profile == null || profile.id() == null) continue;
             UUID uuid = profile.id();
@@ -390,11 +390,11 @@ public class AntiStaff extends Module {
             if (!knownPlayers.contains(uuid)) {
                 knownPlayers.add(uuid);
                 String name = profile.name();
-                String display = entry.getDisplayName() != null ? entry.getDisplayName().getString() : name;
+                String display = entry.getTabListDisplayName() != null ? entry.getTabListDisplayName().getString() : name;
                 processPlayerDetected(name, display, uuid, source);
             }
 
-            if (detectSpectators.get() && entry.getGameMode() == GameMode.SPECTATOR) {
+            if (detectSpectators.get() && entry.getGameMode() == GameType.SPECTATOR) {
                 String name = profile.name();
                 if (!isIgnoredName(name) && !alertedPlayers.contains("spec:" + name)) {
                     alertedPlayers.add("spec:" + name);
@@ -405,8 +405,8 @@ public class AntiStaff extends Module {
 
             String opName = profile.name();
             if (opName != null && !isIgnoredName(opName)) {
-                if (entry.getDisplayName() != null) {
-                    String display = entry.getDisplayName().getString();
+                if (entry.getTabListDisplayName() != null) {
+                    String display = entry.getTabListDisplayName().getString();
                     String cleanDisplay = stripFormatting(display);
                     if (isMatchOperator(cleanDisplay) && !alertedPlayers.contains("op:" + opName)) {
                         alertedPlayers.add("op:" + opName);
@@ -428,18 +428,18 @@ public class AntiStaff extends Module {
     }
 
     private void scanProximity() {
-        if (mc.world == null || mc.player == null) return;
+        if (mc.level == null || mc.player == null) return;
         double radius = proximityRadius.get();
         double radiusSq = radius * radius;
 
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             if (player == mc.player) continue;
             if (player.getGameProfile() == null) continue;
             String name = player.getGameProfile().name();
             if (name == null || isIgnoredName(name)) continue;
             if (!isMatchName(name)) continue;
 
-            double distSq = mc.player.squaredDistanceTo(player);
+            double distSq = mc.player.distanceToSqr(player);
             if (distSq <= radiusSq) {
                 String key = "prox:" + name;
                 if (!alertedPlayers.contains(key)) {
@@ -453,18 +453,18 @@ public class AntiStaff extends Module {
     }
 
     private void scanVanished() {
-        if (mc.world == null || mc.player == null) return;
-        ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+        if (mc.level == null || mc.player == null) return;
+        ClientPacketListener handler = mc.getConnection();
         if (handler == null) return;
 
         tabListNames.clear();
-        for (PlayerListEntry entry : handler.getPlayerList()) {
+        for (PlayerInfo entry : handler.getOnlinePlayers()) {
             if (entry.getProfile() != null && entry.getProfile().name() != null) {
                 tabListNames.add(entry.getProfile().name().toLowerCase(Locale.ROOT));
             }
         }
 
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             if (player == mc.player) continue;
             String name = player.getGameProfile().name();
             if (name == null || isIgnoredName(name)) continue;
@@ -473,7 +473,7 @@ public class AntiStaff extends Module {
                 String key = "vanish:" + name;
                 if (!alertedPlayers.contains(key)) {
                     alertedPlayers.add(key);
-                    double dist = Math.sqrt(mc.player.squaredDistanceTo(player));
+                    double dist = Math.sqrt(mc.player.distanceToSqr(player));
                     emitAlert("§c§l[AntiStaff] §d⚠ VANISHED PLAYER: §f" + name + " §7(" + (int) dist + " blocks)", name, true);
                     scheduleAction(onDetect.get(), name);
                 }
@@ -516,11 +516,11 @@ public class AntiStaff extends Module {
 
     private void executeAction(TriggerAction action, String target) {
 
-        if (sendChatBeforeAction.get() && mc.player != null && mc.player.networkHandler != null) {
+        if (sendChatBeforeAction.get() && mc.player != null && mc.player.connection != null) {
             String msg = chatMessage.get();
             if (msg != null && !msg.isBlank()) {
-                if (msg.startsWith("/")) mc.player.networkHandler.sendChatCommand(msg.substring(1));
-                else mc.player.networkHandler.sendChatMessage(msg);
+                if (msg.startsWith("/")) mc.player.connection.sendCommand(msg.substring(1));
+                else mc.player.connection.sendChat(msg);
             }
         }
 
@@ -553,10 +553,10 @@ public class AntiStaff extends Module {
         lastLeaveMs = now;
 
         warning("[AntiStaff] " + reason);
-        Text text = Text.literal("[AntiStaff] " + reason);
+        Component text = Component.literal("[AntiStaff] " + reason);
 
-        if (mc.getNetworkHandler() != null) mc.getNetworkHandler().getConnection().disconnect(text);
-        else mc.disconnect(text);
+        if (mc.getConnection() != null) mc.getConnection().getConnection().disconnect(text);
+        else mc.disconnectFromWorld(text);
 
         if (disableAfterLeave.get()) toggle();
     }
@@ -566,11 +566,11 @@ public class AntiStaff extends Module {
             if (high) warning(message);
             else info(message);
         }
-        if (toastNotifications.get() && mc.getToastManager() != null) {
-            mc.getToastManager().add(new SystemToast(
-                SystemToast.Type.PERIODIC_NOTIFICATION,
-                Text.literal("§c⚠ AntiStaff"),
-                Text.literal(playerName + " detected!")
+        if (toastNotifications.get() && mc.gui.toastManager() != null) {
+            mc.gui.toastManager().addToast(new SystemToast(
+                SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+                Component.literal("§c⚠ AntiStaff"),
+                Component.literal(playerName + " detected!")
             ));
         }
     }
@@ -606,7 +606,7 @@ public class AntiStaff extends Module {
 
     private boolean isIgnored(String name, UUID uuid) {
         if (ignoreSelf.get() && mc.player != null) {
-            if (uuid != null && mc.player.getUuid().equals(uuid)) return true;
+            if (uuid != null && mc.player.getUUID().equals(uuid)) return true;
             String self = mc.player.getGameProfile().name();
             if (self != null && namesEqual(self, name)) return true;
         }

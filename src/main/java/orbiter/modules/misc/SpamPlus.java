@@ -8,7 +8,7 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.gui.screen.DisconnectedScreen;
+import net.minecraft.client.gui.screens.DisconnectedScreen;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -217,7 +217,7 @@ public class SpamPlus extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.getNetworkHandler() == null) return;
+        if (mc.player == null || mc.getConnection() == null) return;
         if (messages.get().isEmpty()) return;
 
         if (pendingSplitText != null) {
@@ -352,7 +352,7 @@ public class SpamPlus extends Module {
     }
 
     private void sendMessage(String msg) {
-        if (mc.player == null || mc.getNetworkHandler() == null) return;
+        if (mc.player == null || mc.getConnection() == null) return;
 
         if (uppercase.get()) msg = msg.toUpperCase();
         if (bypass.get()) msg = msg + " " + randomBypassSuffix();

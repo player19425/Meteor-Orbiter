@@ -1,6 +1,6 @@
 package orbiter.util;
 
-import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.Minecraft;
 
 import java.util.Locale;
 
@@ -25,8 +25,8 @@ public final class ServerCommandAdapter {
         return capabilities != null && capabilities.state(command) == ServerCapabilities.State.AVAILABLE;
     }
 
-    public static void send(MinecraftClient client, ServerCapabilities capabilities, String command) {
-        if (client == null || client.player == null || client.player.networkHandler == null || command == null) return;
-        client.player.networkHandler.sendChatCommand(command.startsWith("/") ? command.substring(1) : command);
+    public static void send(Minecraft client, ServerCapabilities capabilities, String command) {
+        if (client == null || client.player == null || client.player.connection == null || command == null) return;
+        client.player.connection.sendCommand(command.startsWith("/") ? command.substring(1) : command);
     }
 }

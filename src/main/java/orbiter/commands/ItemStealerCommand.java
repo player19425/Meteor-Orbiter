@@ -9,10 +9,10 @@ import com.mojang.brigadier.suggestion.SuggestionProvider;
 import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.command.CommandSource;
-import net.minecraft.item.ItemStack;
-import net.minecraft.screen.slot.Slot;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.inventory.Slot;
 
 import java.util.Set;
 
@@ -20,7 +20,7 @@ import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 
 public class ItemStealerCommand extends Command {
 
-    private static final SuggestionProvider<CommandSource> IDS = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> IDS = (context, builder) -> {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod != null) {
             for (String id : mod.listItems()) builder.suggest(id);
@@ -28,7 +28,7 @@ public class ItemStealerCommand extends Command {
         return builder.buildFuture();
     };
 
-    private static final SuggestionProvider<CommandSource> HOTBAR_PRESETS = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> HOTBAR_PRESETS = (context, builder) -> {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod != null) {
             for (String id : mod.listHotbarPresets()) builder.suggest(id);
@@ -36,7 +36,7 @@ public class ItemStealerCommand extends Command {
         return builder.buildFuture();
     };
 
-    private static final SuggestionProvider<CommandSource> SNAPSHOTS = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> SNAPSHOTS = (context, builder) -> {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod != null) {
             for (String id : mod.listSnapshots()) builder.suggest(id);
@@ -44,7 +44,7 @@ public class ItemStealerCommand extends Command {
         return builder.buildFuture();
     };
 
-    private static final SuggestionProvider<CommandSource> PRESET_NAMES = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> PRESET_NAMES = (context, builder) -> {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod != null) {
             for (String name : mod.getPresetNames()) builder.suggest(name);
@@ -57,7 +57,7 @@ public class ItemStealerCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
 
         builder.then(literal("save").then(argument("id", StringArgumentType.string()).executes(this::save)));
         builder.then(literal("load").then(argument("id", StringArgumentType.string()).suggests(IDS).executes(this::load)));
@@ -90,7 +90,7 @@ public class ItemStealerCommand extends Command {
             .then(argument("name", StringArgumentType.string()).suggests(HOTBAR_PRESETS).executes(this::stealHotbarDelete)));
     }
 
-    private int save(CommandContext<CommandSource> ctx) {
+    private int save(CommandContext<ClientSuggestionProvider> ctx) {
         String id = StringArgumentType.getString(ctx, "id");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -98,14 +98,14 @@ public class ItemStealerCommand extends Command {
         ItemStack toSave = null;
         if (mc.player != null) {
 
-            if (!mc.player.getMainHandStack().isEmpty()) toSave = mc.player.getMainHandStack().copy();
+            if (!mc.player.getMainHandItem().isEmpty()) toSave = mc.player.getMainHandItem().copy();
 
-            if (toSave == null && mc.currentScreen instanceof HandledScreen<?> handled) {
+            if (toSave == null && mc.gui.screen() instanceof AbstractContainerScreen<?> handled) {
                 try {
-                    var field = HandledScreen.class.getDeclaredField("focusedSlot");
+                    var field = AbstractContainerScreen.class.getDeclaredField("hoveredSlot");
                     field.setAccessible(true);
                     Slot slot = (Slot) field.get(handled);
-                    if (slot != null && !slot.getStack().isEmpty()) toSave = slot.getStack().copy();
+                    if (slot != null && !slot.getItem().isEmpty()) toSave = slot.getItem().copy();
                 } catch (Throwable ignored) {}
             }
 
@@ -114,8 +114,8 @@ public class ItemStealerCommand extends Command {
                 if (lastCloned != null && !lastCloned.isEmpty()) toSave = lastCloned.copy();
             }
 
-            if (toSave == null && !mc.player.getOffHandStack().isEmpty()) {
-                toSave = mc.player.getOffHandStack().copy();
+            if (toSave == null && !mc.player.getOffhandItem().isEmpty()) {
+                toSave = mc.player.getOffhandItem().copy();
             }
         }
 
@@ -125,14 +125,14 @@ public class ItemStealerCommand extends Command {
         }
 
         if (mod.saveItem(id, toSave)) {
-            ChatUtils.info("Saved '" + toSave.getName().getString() + "' as '" + id + "'.");
+            ChatUtils.info("Saved '" + toSave.getItemName().getString() + "' as '" + id + "'.");
             return SINGLE_SUCCESS;
         }
         error("Failed to save item.");
         return 0;
     }
 
-    private int load(CommandContext<CommandSource> ctx) {
+    private int load(CommandContext<ClientSuggestionProvider> ctx) {
         String id = StringArgumentType.getString(ctx, "id");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -142,11 +142,11 @@ public class ItemStealerCommand extends Command {
             return 0;
         }
         mod.injectClonedIntoInventory(stack);
-        ChatUtils.info("Loaded '" + id + "': " + stack.getName().getString() + " x" + stack.getCount());
+        ChatUtils.info("Loaded '" + id + "': " + stack.getItemName().getString() + " x" + stack.getCount());
         return SINGLE_SUCCESS;
     }
 
-    private int delete(CommandContext<CommandSource> ctx) {
+    private int delete(CommandContext<ClientSuggestionProvider> ctx) {
         String id = StringArgumentType.getString(ctx, "id");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -158,7 +158,7 @@ public class ItemStealerCommand extends Command {
         return 0;
     }
 
-    private int listLegacy(CommandContext<CommandSource> ctx) {
+    private int listLegacy(CommandContext<ClientSuggestionProvider> ctx) {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
         Set<String> ids = mod.listItems();
@@ -168,18 +168,18 @@ public class ItemStealerCommand extends Command {
             ChatUtils.info("Saved items (" + ids.size() + "):");
             for (String id : ids) {
                 ItemStack stack = mod.loadItem(id);
-                String name = (stack != null && !stack.isEmpty()) ? stack.getName().getString() : "(unreadable)";
+                String name = (stack != null && !stack.isEmpty()) ? stack.getItemName().getString() : "(unreadable)";
                 ChatUtils.info("  - " + id + ": " + name);
             }
         }
         return SINGLE_SUCCESS;
     }
 
-    private int inject(CommandContext<CommandSource> ctx) {
+    private int inject(CommandContext<ClientSuggestionProvider> ctx) {
         return load(ctx);
     }
 
-    private int stealAll(CommandContext<CommandSource> ctx) {
+    private int stealAll(CommandContext<ClientSuggestionProvider> ctx) {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
 
@@ -197,7 +197,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealSave(CommandContext<CommandSource> ctx) {
+    private int stealSave(CommandContext<ClientSuggestionProvider> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -215,7 +215,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealLoad(CommandContext<CommandSource> ctx) {
+    private int stealLoad(CommandContext<ClientSuggestionProvider> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -233,7 +233,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealList(CommandContext<CommandSource> ctx) {
+    private int stealList(CommandContext<ClientSuggestionProvider> ctx) {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
 
@@ -244,7 +244,7 @@ public class ItemStealerCommand extends Command {
             ChatUtils.info("Saved items (" + items.size() + "):");
             for (String id : items) {
                 ItemStack stack = mod.loadItem(id);
-                String name = (stack != null && !stack.isEmpty()) ? stack.getName().getString() : "(unreadable)";
+                String name = (stack != null && !stack.isEmpty()) ? stack.getItemName().getString() : "(unreadable)";
                 ChatUtils.info("  - " + id + ": " + name);
             }
         }
@@ -274,7 +274,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealDumpTrades(CommandContext<CommandSource> ctx) {
+    private int stealDumpTrades(CommandContext<ClientSuggestionProvider> ctx) {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
 
@@ -292,7 +292,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealRange(CommandContext<CommandSource> ctx) {
+    private int stealRange(CommandContext<ClientSuggestionProvider> ctx) {
         int start = IntegerArgumentType.getInteger(ctx, "start");
         int end = IntegerArgumentType.getInteger(ctx, "end");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
@@ -317,7 +317,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealSnapshot(CommandContext<CommandSource> ctx) {
+    private int stealSnapshot(CommandContext<ClientSuggestionProvider> ctx) {
         String id = StringArgumentType.getString(ctx, "id");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -327,7 +327,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealPreset(CommandContext<CommandSource> ctx) {
+    private int stealPreset(CommandContext<ClientSuggestionProvider> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -337,7 +337,7 @@ public class ItemStealerCommand extends Command {
             return 0;
         }
 
-        if (!mc.player.getAbilities().creativeMode) {
+        if (!mc.player.getAbilities().instabuild) {
             warning("Creative mode is required to give preset items.");
             return 0;
         }
@@ -350,7 +350,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealHotbarDelete(CommandContext<CommandSource> ctx) {
+    private int stealHotbarDelete(CommandContext<ClientSuggestionProvider> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }

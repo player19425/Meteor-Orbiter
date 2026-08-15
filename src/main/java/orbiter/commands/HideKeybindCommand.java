@@ -3,9 +3,9 @@ package orbiter.commands;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.command.CommandSource;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -30,7 +30,7 @@ public class HideKeybindCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.then(literal("enable")
             .then(literal("permanent").executes(ctx -> apply(true, true)))
             .then(literal("temp").executes(ctx -> apply(true, false))));
@@ -72,19 +72,19 @@ public class HideKeybindCommand extends Command {
         return hidden;
     }
 
-    public static KeyBinding[] filterKeys(KeyBinding[] all) {
+    public static KeyMapping[] filterKeys(KeyMapping[] all) {
         if (!hidden || all == null) return all;
 
-        List<KeyBinding> kept = new ArrayList<>(all.length);
-        for (KeyBinding bind : all) {
+        List<KeyMapping> kept = new ArrayList<>(all.length);
+        for (KeyMapping bind : all) {
             if (!isHiddenId(bind)) kept.add(bind);
         }
-        return kept.toArray(new KeyBinding[0]);
+        return kept.toArray(new KeyMapping[0]);
     }
 
-    private static boolean isHiddenId(KeyBinding bind) {
+    private static boolean isHiddenId(KeyMapping bind) {
         if (bind == null) return false;
-        String id = bind.getId();
+        String id = bind.getName();
         for (String hid : HIDDEN_IDS) {
             if (hid.equals(id)) return true;
         }
@@ -92,11 +92,11 @@ public class HideKeybindCommand extends Command {
     }
 
     private static int hiddenCount() {
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         if (mc == null || mc.options == null) return 0;
 
         int count = 0;
-        for (KeyBinding bind : mc.options.allKeys) {
+        for (KeyMapping bind : mc.options.keyMappings) {
             if (isHiddenId(bind)) count++;
         }
         return count;

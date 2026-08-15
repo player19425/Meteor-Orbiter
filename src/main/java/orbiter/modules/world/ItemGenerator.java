@@ -6,22 +6,22 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.AttributeModifierSlot;
-import net.minecraft.component.type.AttributeModifiersComponent;
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.entity.attribute.EntityAttribute;
-import net.minecraft.entity.attribute.EntityAttributeModifier;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.CreativeInventoryActionC2SPacket;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.entity.EquipmentSlotGroup;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.entity.ai.attributes.Attribute;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.core.Holder;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -233,16 +233,16 @@ public class ItemGenerator extends Module {
     private long lastCreativePacketAtMs = 0L;
 
     @SuppressWarnings("unchecked")
-    private static final RegistryEntry<EntityAttribute>[] ATTRIBUTE_POOL = new RegistryEntry[] {
-            EntityAttributes.ATTACK_DAMAGE,
-            EntityAttributes.ATTACK_SPEED,
-            EntityAttributes.MAX_HEALTH,
-            EntityAttributes.MOVEMENT_SPEED,
-            EntityAttributes.ARMOR,
-            EntityAttributes.ARMOR_TOUGHNESS,
-            EntityAttributes.KNOCKBACK_RESISTANCE,
-            EntityAttributes.LUCK,
-            EntityAttributes.ATTACK_KNOCKBACK
+    private static final Holder<Attribute>[] ATTRIBUTE_POOL = new Holder[] {
+            Attributes.ATTACK_DAMAGE,
+            Attributes.ATTACK_SPEED,
+            Attributes.MAX_HEALTH,
+            Attributes.MOVEMENT_SPEED,
+            Attributes.ARMOR,
+            Attributes.ARMOR_TOUGHNESS,
+            Attributes.KNOCKBACK_RESISTANCE,
+            Attributes.LUCK,
+            Attributes.ATTACK_KNOCKBACK
     };
 
     public ItemGenerator() {
@@ -258,7 +258,7 @@ public class ItemGenerator extends Module {
         lastCreativePacketAtMs = 0L;
         rebuildCache();
 
-        if (mc.player != null && !mc.player.getAbilities().creativeMode) {
+        if (mc.player != null && !mc.player.getAbilities().instabuild) {
             warning("You must be in Creative mode!");
             toggle();
         }
@@ -288,7 +288,7 @@ public class ItemGenerator extends Module {
 
             itemCache = filtered.isEmpty() ? List.of(Items.STONE) : filtered;
         } else {
-            itemCache = Registries.ITEM.stream()
+            itemCache = BuiltInRegistries.ITEM.stream()
                     .filter(item -> item != null && item != Items.AIR)
                     .toList();
         }
@@ -304,10 +304,10 @@ public class ItemGenerator extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.player.networkHandler == null)
+        if (mc.player == null || mc.player.connection == null)
             return;
 
-        if (!mc.player.getAbilities().creativeMode) {
+        if (!mc.player.getAbilities().instabuild) {
             warning("Creative mode required! Disabling.");
             toggle();
             return;
@@ -352,17 +352,17 @@ public class ItemGenerator extends Module {
             ItemStack stack = new ItemStack(item, count);
             if (stack.isEmpty()) continue;
 
-            if (randomEnchants.get() && mc.world != null) applyRandomEnchants(stack);
+            if (randomEnchants.get() && mc.level != null) applyRandomEnchants(stack);
 
             if (randomAttributes.get()) applyRandomAttributes(stack);
 
             if (safe && !isStackSafeForPacket(stack)) continue;
 
             if (dropItems.get()) {
-                mc.player.networkHandler.sendPacket(new CreativeInventoryActionC2SPacket(-1, stack));
+                mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(-1, stack));
             } else {
                 int slot = 36 + (i % 9);
-                mc.player.networkHandler.sendPacket(new CreativeInventoryActionC2SPacket(slot, stack));
+                mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(slot, stack));
             }
 
             lastCreativePacketAtMs = System.currentTimeMillis();
@@ -374,50 +374,50 @@ public class ItemGenerator extends Module {
     }
 
     private void applyRandomEnchants(ItemStack stack) {
-        if (mc.world == null)
+        if (mc.level == null)
             return;
 
-        var registry = mc.world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
-        List<RegistryEntry.Reference<Enchantment>> allEnchants = registry.streamEntries().toList();
+        var registry = mc.level.registryAccess().getOrThrow(Registries.ENCHANTMENT).value();
+        List<Holder.Reference<Enchantment>> allEnchants = registry.keySet().stream().map(id -> registry.get(id)).filter(java.util.Optional::isPresent).map(java.util.Optional::get).toList();
 
         if (allEnchants.isEmpty())
             return;
 
         int numEnchants = minEnchants.get() + random.nextInt(Math.max(1, maxEnchants.get() - minEnchants.get() + 1));
-        ItemEnchantmentsComponent.Builder builder = new ItemEnchantmentsComponent.Builder(
-                ItemEnchantmentsComponent.DEFAULT);
+        ItemEnchantments.Mutable builder = new ItemEnchantments.Mutable(
+                ItemEnchantments.EMPTY);
 
         for (int i = 0; i < numEnchants; i++) {
-            RegistryEntry.Reference<Enchantment> enchant = allEnchants.get(random.nextInt(allEnchants.size()));
+            Holder.Reference<Enchantment> enchant = allEnchants.get(random.nextInt(allEnchants.size()));
             int level = minEnchantLevel.get()
                     + random.nextInt(Math.max(1, maxEnchantLevel.get() - minEnchantLevel.get() + 1));
-            builder.add(enchant, level);
+            builder.set(enchant, level);
         }
 
-        stack.set(DataComponentTypes.ENCHANTMENTS, builder.build());
+        stack.set(DataComponents.ENCHANTMENTS, builder.toImmutable());
     }
 
     private void applyRandomAttributes(ItemStack stack) {
         int numAttrs = minAttributes.get() + random.nextInt(Math.max(1, maxAttributes.get() - minAttributes.get() + 1));
-        AttributeModifiersComponent.Builder builder = AttributeModifiersComponent.builder();
+        ItemAttributeModifiers.Builder builder = ItemAttributeModifiers.builder();
 
         for (int i = 0; i < numAttrs; i++) {
-            RegistryEntry<EntityAttribute> attr = ATTRIBUTE_POOL[random.nextInt(ATTRIBUTE_POOL.length)];
+            Holder<Attribute> attr = ATTRIBUTE_POOL[random.nextInt(ATTRIBUTE_POOL.length)];
             double value = minAttrValue.get() + random.nextDouble() * (maxAttrValue.get() - minAttrValue.get());
 
-            EntityAttributeModifier modifier = new EntityAttributeModifier(
-                    Identifier.of("orbiter", "gen_attr_" + i + "_" + random.nextInt(10000)),
+            AttributeModifier modifier = new AttributeModifier(
+                    Identifier.fromNamespaceAndPath("orbiter", "gen_attr_" + i + "_" + random.nextInt(10000)),
                     value,
-                    EntityAttributeModifier.Operation.ADD_VALUE);
+                    AttributeModifier.Operation.ADD_VALUE);
 
-            builder.add(attr, modifier, AttributeModifierSlot.ANY);
+            builder.add(attr, modifier, EquipmentSlotGroup.ANY);
         }
 
-        stack.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, builder.build());
+        stack.set(DataComponents.ATTRIBUTE_MODIFIERS, builder.build());
     }
 
     private int getStackCount(Item item) {
-        int maxCount = Math.max(1, item.getMaxCount());
+        int maxCount = Math.max(1, item.getDefaultMaxStackSize());
         maxCount = Math.min(maxCount, 99);
 
         return switch (stackMode.get()) {

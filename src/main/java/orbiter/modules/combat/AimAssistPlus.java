@@ -14,18 +14,19 @@ import meteordevelopment.meteorclient.utils.entity.TargetUtils;
 import meteordevelopment.meteorclient.utils.player.PlayerUtils;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.BowItem;
-import net.minecraft.item.CrossbowItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.BowItem;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Random;
 import java.util.Set;
@@ -43,7 +44,7 @@ public class AimAssistPlus extends Module {
     private final Setting<Set<EntityType<?>>> entities = sgGeneral.add(new EntityTypeListSetting.Builder()
             .name("entities")
             .description("Which entities to aim at.")
-            .defaultValue(EntityType.PLAYER)
+            .defaultValue(EntityTypes.PLAYER)
             .build());
 
     private final Setting<Double> range = sgGeneral.add(new DoubleSetting.Builder()
@@ -307,7 +308,7 @@ public class AimAssistPlus extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null)
+        if (mc.player == null || mc.level == null)
             return;
 
         if (onlyWeapon.get() && !isHoldingWeapon()) {
@@ -359,7 +360,7 @@ public class AimAssistPlus extends Module {
         aim(target, event.tickDelta);
 
         if (renderTarget.get() && target instanceof LivingEntity) {
-            Box box = target.getBoundingBox();
+            AABB box = target.getBoundingBox();
             event.renderer.box(box, targetColor.get(), targetColor.get(), ShapeMode.Both, 0);
         }
     }
@@ -385,7 +386,7 @@ public class AimAssistPlus extends Module {
                 return false;
         }
 
-        if (ignoreFriends.get() && entity instanceof PlayerEntity player) {
+        if (ignoreFriends.get() && entity instanceof Player player) {
             if (!Friends.get().shouldAttack(player))
                 return false;
         }
@@ -408,16 +409,16 @@ public class AimAssistPlus extends Module {
     }
 
     private boolean isInFov(Entity entity) {
-        float yaw = mc.player.getYaw();
+        float yaw = mc.player.getYRot();
         double dx = entity.getX() - mc.player.getX();
         double dz = entity.getZ() - mc.player.getZ();
         double angle = Math.toDegrees(Math.atan2(dz, dx)) - 90.0;
-        double diff = MathHelper.wrapDegrees(angle - yaw);
+        double diff = Mth.wrapDegrees(angle - yaw);
         return Math.abs(diff) <= fov.get() / 2.0;
     }
 
     private void aim(Entity target, double tickDelta) {
-        Vec3d targetPos = getTargetPosition(target, tickDelta);
+        Vec3 targetPos = getTargetPosition(target, tickDelta);
 
         double dx = targetPos.x - mc.player.getX();
         double dz = targetPos.z - mc.player.getZ();
@@ -438,15 +439,15 @@ public class AimAssistPlus extends Module {
             desiredPitch += (random.nextDouble() - 0.5) * 2.0 * jitterPitch.get();
         }
 
-        desiredPitch = MathHelper.clamp(desiredPitch, -90.0, 90.0);
+        desiredPitch = Mth.clamp(desiredPitch, -90.0, 90.0);
 
         if (instant.get()) {
-            mc.player.setYaw((float) desiredYaw);
-            mc.player.setPitch((float) desiredPitch);
+            mc.player.setYRot((float) desiredYaw);
+            mc.player.setXRot((float) desiredPitch);
         } else {
 
-            double deltaYaw = MathHelper.wrapDegrees(desiredYaw - mc.player.getYaw());
-            double deltaPitch = MathHelper.wrapDegrees(desiredPitch - mc.player.getPitch());
+            double deltaYaw = Mth.wrapDegrees(desiredYaw - mc.player.getYRot());
+            double deltaPitch = Mth.wrapDegrees(desiredPitch - mc.player.getXRot());
 
             double easeFactor = 1.0 / smoothing.get();
 
@@ -456,8 +457,8 @@ public class AimAssistPlus extends Module {
             double pitchRotation = pitchSpeed.get() * Math.signum(deltaPitch) * tickDelta * easeFactor;
             pitchRotation = clampRotation(pitchRotation, deltaPitch, maxAnglePerTick.get());
 
-            mc.player.setYaw(mc.player.getYaw() + (float) yawRotation);
-            mc.player.setPitch(MathHelper.clamp(mc.player.getPitch() + (float) pitchRotation, -90f, 90f));
+            mc.player.setYRot(mc.player.getYRot() + (float) yawRotation);
+            mc.player.setXRot(Mth.clamp(mc.player.getXRot() + (float) pitchRotation, -90f, 90f));
         }
     }
 
@@ -471,8 +472,8 @@ public class AimAssistPlus extends Module {
         if (chargeCompensation.get() && mc.player != null) {
             ItemStack active = mc.player.getActiveItem();
             if (active != null && active.getItem() instanceof BowItem) {
-                int useTime = mc.player.getItemUseTimeLeft();
-                float charge = BowItem.getPullProgress(useTime);
+                int useTime = mc.player.getUseItemRemainingTicks();
+                float charge = BowItem.getPowerForTime(useTime);
                 v *= Math.max(0.1, charge);
             }
         }
@@ -513,9 +514,9 @@ public class AimAssistPlus extends Module {
     private boolean isHoldingProjectileWeapon() {
         if (mc.player == null)
             return false;
-        ItemStack stack = mc.player.getMainHandStack();
+        ItemStack stack = mc.player.getMainHandItem();
         return stack.getItem() instanceof BowItem || stack.getItem() instanceof CrossbowItem
-                || stack.isOf(Items.TRIDENT);
+                || stack.is(Items.TRIDENT);
     }
 
     private double clampRotation(double rotation, double delta, double maxAngle) {
@@ -530,10 +531,10 @@ public class AimAssistPlus extends Module {
         return rotation;
     }
 
-    private Vec3d getTargetPosition(Entity entity, double tickDelta) {
-        if (entity == null) return Vec3d.ZERO;
+    private Vec3 getTargetPosition(Entity entity, double tickDelta) {
+        if (entity == null) return Vec3.ZERO;
 
-        Vec3d lerpedPos = entity.getLerpedPos((float) tickDelta);
+        Vec3 lerpedPos = entity.position();
         double x = lerpedPos.x;
         double y = lerpedPos.y;
         double z = lerpedPos.z;
@@ -555,23 +556,23 @@ public class AimAssistPlus extends Module {
         }
 
         if (prediction.get()) {
-            Vec3d vel = entity.getVelocity();
+            Vec3 vel = entity.getDeltaMovement();
             x += vel.x * predictionStrength.get();
             y += vel.y * predictionStrength.get();
             z += vel.z * predictionStrength.get();
         }
 
-        return new Vec3d(x, y, z);
+        return new Vec3(x, y, z);
     }
 
     private boolean isHoldingWeapon() {
         if (mc.player == null)
             return false;
-        ItemStack stack = mc.player.getMainHandStack();
+        ItemStack stack = mc.player.getMainHandItem();
         if (stack == null)
             return false;
 
-        return stack.contains(DataComponentTypes.WEAPON);
+        return stack.has(DataComponents.WEAPON);
     }
 
     @Override

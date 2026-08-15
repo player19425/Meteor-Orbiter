@@ -11,7 +11,7 @@ import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.settings.StringSetting;
 import meteordevelopment.orbit.EventHandler;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.network.PlayerListEntry;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import orbiter.util.CommandBatcher;
 import orbiter.util.ServerCapabilities;
 import orbiter.util.UserListLoader;
@@ -205,13 +205,13 @@ public final class DestroyNow extends CreativeSafetyModule {
             clearArmingState(false);
             warning("Armed state expired or was invalidated by a server, executor, or configuration change.");
         }
-        if (!executing || mc.player == null || mc.player.networkHandler == null) return;
+        if (!executing || mc.player == null || mc.player.connection == null) return;
         if (!serverIdentity().equals(preview.serverIdentity()) || !executorName().equals(preview.executorName())) {
             cancel("Server or executor identity changed during execution.");
             return;
         }
         batcher.setBudgetPerTick(commandsPerTick.get());
-        batcher.drain(mc.player.networkHandler::sendChatCommand);
+        batcher.drain(mc.player.connection::sendCommand);
         if (batcher.size() == 0) {
             executing = false;
             info("DestroyNow sent all %d planned commands. Server acceptance is not observable reliably client-side.", executionTotal);
@@ -220,7 +220,7 @@ public final class DestroyNow extends CreativeSafetyModule {
 
     public void inspectAndLoad() {
         if (!requireActiveContext()) return;
-        ServerCapabilities capabilities = ServerCapabilities.capture(mc.getNetworkHandler());
+        ServerCapabilities capabilities = ServerCapabilities.capture(mc.getConnection());
         warning("INSPECT ONLY: activation sent no commands. Server=%s executor=%s", serverIdentity(), executorName());
         warning("Advertised roots: op=%s deop=%s kill=%s tag=%s LuckPerms=%s. Presence does not prove permission.",
             capabilities.hasAny("op", "minecraft:op"), capabilities.hasAny("deop", "minecraft:deop"),
@@ -311,7 +311,7 @@ public final class DestroyNow extends CreativeSafetyModule {
             warning("Online users or exact command plan changed after preview. Re-arm and preview again.");
             return;
         }
-        ServerCapabilities capabilities = ServerCapabilities.capture(mc.getNetworkHandler());
+        ServerCapabilities capabilities = ServerCapabilities.capture(mc.getConnection());
         if (!capabilities.hasAny("tag", "minecraft:tag") || !capabilities.hasAny("kill", "minecraft:kill")) {
             warning("Execution blocked: advertised tag and kill roots are required for self-protection.");
             return;
@@ -359,7 +359,7 @@ public final class DestroyNow extends CreativeSafetyModule {
         String keepTag = "orbiter_keep_" + keepTagSuffix;
         List<String> commands = new ArrayList<>();
         List<String> limitations = new ArrayList<>();
-        ServerCapabilities capabilities = ServerCapabilities.capture(mc.getNetworkHandler());
+        ServerCapabilities capabilities = ServerCapabilities.capture(mc.getConnection());
         boolean luckPerms = capabilities.hasAny("lp", "luckperms", "luckperms:luckperms");
 
         if (luckPerms) addTemplate(commands, wildcardGrantTemplate.get(), "{executor}", executor, limitations, "wildcard grant");
@@ -388,7 +388,7 @@ public final class DestroyNow extends CreativeSafetyModule {
         commands.add(commandRoot(capabilities, "tag") + " @e[tag=" + keepTag + "] remove " + keepTag);
 
         int entities = 0;
-        if (mc.world != null) for (var ignored : mc.world.getEntities()) entities++;
+        if (mc.level != null) for (var ignored : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) entities++;
         return new ExecutionPlan(server, executor, configurationFingerprint(), System.currentTimeMillis(), online,
             allowlist, toDeop, toOp, commands, deduplicate(limitations), entities, keepTag);
     }
@@ -422,7 +422,7 @@ public final class DestroyNow extends CreativeSafetyModule {
     }
 
     private boolean requireActiveContext() {
-        return isActive() && mc.player != null && mc.getNetworkHandler() != null && mc.world != null;
+        return isActive() && mc.player != null && mc.getConnection() != null && mc.level != null;
     }
 
     private void clearArmingState(boolean clearQueue) {
@@ -470,8 +470,8 @@ public final class DestroyNow extends CreativeSafetyModule {
 
     private List<String> onlineUsers() {
         List<String> users = new ArrayList<>();
-        if (mc.getNetworkHandler() == null) return users;
-        for (PlayerListEntry entry : mc.getNetworkHandler().getPlayerList()) {
+        if (mc.getConnection() == null) return users;
+        for (PlayerInfo entry : mc.getConnection().getOnlinePlayers()) {
             GameProfile profile = entry.getProfile();
             if (profile != null && UserListLoader.isValidUsername(profile.name())) users.add(profile.name());
         }
@@ -529,9 +529,9 @@ public final class DestroyNow extends CreativeSafetyModule {
     }
 
     private String serverIdentity() {
-        if (mc.isInSingleplayer()) return "integrated:" + (mc.getServer() == null ? "unknown" : mc.getServer().getSaveProperties().getLevelName());
-        if (mc.getCurrentServerEntry() != null && mc.getCurrentServerEntry().address != null) return mc.getCurrentServerEntry().address;
-        if (mc.getNetworkHandler() != null && mc.getNetworkHandler().getServerInfo() != null) return mc.getNetworkHandler().getServerInfo().address;
+        if (mc.hasSingleplayerServer()) return "integrated:" + (mc.getSingleplayerServer() == null ? "unknown" : mc.getSingleplayerServer().getWorldData().getLevelName());
+        if (mc.getCurrentServer() != null && mc.getCurrentServer().ip != null) return mc.getCurrentServer().ip;
+        if (mc.getConnection() != null && mc.getConnection().getServerData() != null) return mc.getConnection().getServerData().ip;
         return "unknown-server";
     }
 

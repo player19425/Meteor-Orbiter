@@ -1,9 +1,9 @@
 package orbiter.modules.misc;
 
-import net.minecraft.text.PlainTextContent;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.text.TextContent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentContents;
+
 
 import java.util.ArrayDeque;
 import java.util.List;
@@ -12,7 +12,7 @@ public final class DisplayTextSanitizer {
 
     private DisplayTextSanitizer() {}
 
-    public static boolean shouldSimplify(Text component, int maxChars, int maxNodes, int maxDepth,
+    public static boolean shouldSimplify(Component component, int maxChars, int maxNodes, int maxDepth,
                                           int maxStyleScore, int maxObfuscatedChars, int maxComplexNodes) {
         TextCost cost = analyze(component, Math.max(1, maxDepth));
         return cost.tooDeep
@@ -23,15 +23,15 @@ public final class DisplayTextSanitizer {
             || cost.complexNodeCount > Math.max(1, maxComplexNodes);
     }
 
-    public static Text simplifiedText() {
-        return Text.literal("[display text hidden]");
+    public static Component simplifiedText() {
+        return Component.literal("[display text hidden]");
     }
 
     public static int clampLineWidth(int lineWidth, int maxSafeLineWidth) {
         return Math.min(lineWidth, Math.max(1, maxSafeLineWidth));
     }
 
-    private static TextCost analyze(Text root, int maxDepth) {
+    private static TextCost analyze(Component root, int maxDepth) {
         TextCost cost = new TextCost();
         ArrayDeque<VisitNode> stack = new ArrayDeque<>();
         stack.push(new VisitNode(root, 0));
@@ -41,7 +41,7 @@ public final class DisplayTextSanitizer {
                 cost.tooDeep = true;
                 return cost;
             }
-            Text component = node.component;
+            Component component = node.component;
             cost.nodeCount++;
             int directChars = estimateDirectChars(component);
             cost.totalChars += directChars;
@@ -49,10 +49,10 @@ public final class DisplayTextSanitizer {
             if (component.getStyle().isObfuscated()) {
                 cost.obfuscatedChars += Math.max(directChars, 8);
             }
-            if (!(component.getContent() instanceof PlainTextContent)) {
+            if (!(component.getContents() instanceof ComponentContents)) {
                 cost.complexNodeCount++;
             }
-            List<Text> siblings = component.getSiblings();
+            List<Component> siblings = component.getSiblings();
             for (int index = siblings.size() - 1; index >= 0; index--) {
                 stack.addLast(new VisitNode(siblings.get(index), node.depth + 1));
             }
@@ -60,12 +60,10 @@ public final class DisplayTextSanitizer {
         return cost;
     }
 
-    private static int estimateDirectChars(Text component) {
-        String collapsed = component.getLiteralString();
+    private static int estimateDirectChars(Component component) {
+        String collapsed = component.getString();
         if (collapsed != null) return collapsed.length();
-        TextContent contents = component.getContent();
-        if (contents instanceof PlainTextContent plain) return plain.string().length();
-        return 8;
+        return component.getString().length();
     }
 
     private static int estimateStyleScore(Style style, int directChars) {
@@ -89,5 +87,5 @@ public final class DisplayTextSanitizer {
         boolean tooDeep;
     }
 
-    private record VisitNode(Text component, int depth) {}
+    private record VisitNode(Component component, int depth) {}
 }
