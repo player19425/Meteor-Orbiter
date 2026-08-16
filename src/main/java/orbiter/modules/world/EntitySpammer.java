@@ -506,7 +506,7 @@ public class EntitySpammer extends CreativeSafetyModule {
             ? CommandUtils.formatCommand("execute at %s run summon %s ~%.2f ~%.2f ~%.2f", target, entity, x, y, z)
             : CommandUtils.formatCommand("execute at %s run summon %s ~%.2f ~%.2f ~%.2f {%s}", target, entity, x, y, z, nbt);
 
-        mc.player.connection.sendCommand(cmd);
+        mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
         spawnedCount++;
     }
 
@@ -522,7 +522,7 @@ public class EntitySpammer extends CreativeSafetyModule {
             ? CommandUtils.formatCommand("execute at %s run summon %s ~%d ~%d ~%d", target, entity, pos.getX(), pos.getY(), pos.getZ())
             : CommandUtils.formatCommand("execute at %s run summon %s ~%d ~%d ~%d {%s}", target, entity, pos.getX(), pos.getY(), pos.getZ(), nbt);
 
-        mc.player.connection.sendCommand(cmd);
+        mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
         fillIndex++;
         spawnedCount++;
     }
@@ -588,7 +588,7 @@ public class EntitySpammer extends CreativeSafetyModule {
 
         String cmd = CommandUtils.formatCommand("tp %s %.2f %.2f %.2f%s",
             getResolvedSelector(), tx, ty, tz, facing);
-        mc.player.connection.sendCommand(cmd);
+        mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
     }
 
     private void doDominate() {
@@ -597,7 +597,7 @@ public class EntitySpammer extends CreativeSafetyModule {
         BlockPos pos = fillPositions.get(fillIndex);
         String cmd = buildDominateCommand(pos);
         if (cmd == null) return;
-        mc.player.connection.sendCommand(cmd);
+        mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
         fillIndex++;
         spawnedCount++;
     }

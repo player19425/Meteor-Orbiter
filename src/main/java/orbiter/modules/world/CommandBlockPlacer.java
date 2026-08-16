@@ -1,6 +1,7 @@
 package orbiter.modules;
 
 import orbiter.Orbiter;
+import orbiter.util.CommandUtils;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
@@ -179,7 +180,7 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
 
             String cmd = String.format("setblock %d %d %d %s[facing=%s]",
                     pos.getX(), pos.getY(), pos.getZ(), blockId, facingState);
-            mc.player.connection.sendCommand(cmd);
+            mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
 
             phase = 1;
             phaseTickCounter = 0;

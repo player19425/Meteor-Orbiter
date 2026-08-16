@@ -130,7 +130,7 @@ public final class ControlPlayer extends CreativeSafetyModule {
                 mc.player.getX() + dx, mc.player.getY() + height.get(), mc.player.getZ() + dz
             );
         }
-        mc.player.connection.sendCommand(command);
+        mc.player.connection.sendCommand(CommandUtils.vanilla(command));
     }
 
     private String safePlayerName(String value) {

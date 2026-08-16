@@ -1,6 +1,7 @@
 package orbiter.modules;
 
 import orbiter.Orbiter;
+import orbiter.util.CommandUtils;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
@@ -570,7 +571,7 @@ public class AutoFind extends Module {
             && (tickCounter - lastTpTick) >= tpInterval.get()) {
             int bx = wrapBlockX((int) flightX);
             int bz = wrapBlockZ((int) flightZ);
-            mc.getConnection().sendCommand("tp " + bx + " " + flightY.get() + " " + bz);
+            mc.getConnection().sendCommand(CommandUtils.vanilla("tp " + bx + " " + flightY.get() + " " + bz));
             lastTpTick = tickCounter;
         }
     }

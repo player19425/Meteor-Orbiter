@@ -1,6 +1,7 @@
 package orbiter.modules;
 
 import orbiter.Orbiter;
+import orbiter.util.CommandUtils;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
@@ -139,7 +140,7 @@ public class OperatorNuker extends CreativeSafetyModule {
 
             int sent = 0;
             while (cmdIndex < pendingCommands.size() && sent < commandsPerTick.get()) {
-                mc.player.connection.sendCommand(pendingCommands.get(cmdIndex));
+                mc.player.connection.sendCommand(CommandUtils.vanilla(pendingCommands.get(cmdIndex)));
                 cmdIndex++;
                 sent++;
             }

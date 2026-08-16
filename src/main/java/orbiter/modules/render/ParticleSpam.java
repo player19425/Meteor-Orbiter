@@ -189,7 +189,7 @@ public class ParticleSpam extends CreativeSafetyModule {
                         String cmd = CommandUtils.formatCommand("particle %s %.2f %.2f %.2f %.2f %.2f %.2f %.2f %d %s @a",
                                         particle, x, y, z, deltaX.get(), deltaY.get(), deltaZ.get(),
                                         speed.get(), emitted, forceStr);
-                        mc.player.connection.sendCommand(cmd);
+                        mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
                         burstBudget -= emitted;
                 }
 
@@ -209,7 +209,7 @@ public class ParticleSpam extends CreativeSafetyModule {
                                                                 crispTrails.get() ? "0.02" : "0.1",
                                                                 crispTrails.get() ? "0.02" : "0.1",
                                                                 crispTrails.get() ? "0.02" : "0.1");
-                                                mc.player.connection.sendCommand(trailCmd);
+                                                mc.player.connection.sendCommand(CommandUtils.vanilla(trailCmd));
                                                 trailBudget--;
                                         }
                                 }

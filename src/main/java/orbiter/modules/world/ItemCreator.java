@@ -1,6 +1,7 @@
 package orbiter.modules;
 
 import orbiter.Orbiter;
+import orbiter.util.CommandUtils;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import net.minecraft.core.component.DataComponents;
@@ -430,7 +431,7 @@ public class ItemCreator extends CreativeSafetyModule {
                 if (mc.player == null || mc.player.connection == null) return;
                 switch (preset) {
                         case GodSword -> {
-                                mc.player.connection.sendCommand(
+                                mc.player.connection.sendCommand(CommandUtils.vanilla(
                                                 "give @s netherite_sword[" +
                                                                 "custom_name='{\"text\":\"God Sword\",\"color\":\"gold\",\"bold\":true}',"
                                                                 +
@@ -443,11 +444,11 @@ public class ItemCreator extends CreativeSafetyModule {
                                                                 "{type:'attack_speed',id:'orbiter:spd',amount:1000,operation:'add_value',slot:'mainhand'}"
                                                                 +
                                                                 "]" +
-                                                                "]");
+                                                                "]"));
                                 info("Loaded preset: God Sword");
                         }
                         case GodAxe -> {
-                                mc.player.connection.sendCommand(
+                                mc.player.connection.sendCommand(CommandUtils.vanilla(
                                                 "give @s netherite_axe[" +
                                                                 "custom_name='{\"text\":\"God Axe\",\"color\":\"red\",\"bold\":true}',"
                                                                 +
@@ -458,24 +459,24 @@ public class ItemCreator extends CreativeSafetyModule {
                                                                 "{type:'attack_damage',id:'orbiter:god',amount:1000,operation:'add_value',slot:'mainhand'}"
                                                                 +
                                                                 "]" +
-                                                                "]");
+                                                                "]"));
                                 info("Loaded preset: God Axe");
                         }
                         case GodBow -> {
-                                mc.player.connection.sendCommand(
+                                mc.player.connection.sendCommand(CommandUtils.vanilla(
                                                 "give @s bow[" +
                                                                 "custom_name='{\"text\":\"God Bow\",\"color\":\"aqua\",\"bold\":true}',"
                                                                 +
                                                                 "enchantments={levels:{power:255,punch:255,flame:1,infinity:1,unbreaking:255}},"
                                                                 +
                                                                 "unbreakable={}" +
-                                                                "]");
+                                                                "]"));
                                 info("Loaded preset: God Bow");
                         }
                         case GodArmor -> {
                                 String[] pieces = { "helmet", "chestplate", "leggings", "boots" };
                                 for (String piece : pieces) {
-                                        mc.player.connection.sendCommand(
+                                        mc.player.connection.sendCommand(CommandUtils.vanilla(
                                                         "give @s netherite_" + piece + "[" +
                                                                         "custom_name='{\"text\":\"God "
                                                                         + piece.substring(0, 1).toUpperCase()
@@ -492,7 +493,7 @@ public class ItemCreator extends CreativeSafetyModule {
                                                                         "{type:'knockback_resistance',id:'orbiter:kb',amount:1.0,operation:'add_value'}"
                                                                         +
                                                                         "]" +
-                                                                        "]");
+                                                                        "]"));
                                 }
                                 info("Loaded preset: God Armor set (4 pieces)");
                         }
@@ -503,13 +504,13 @@ public class ItemCreator extends CreativeSafetyModule {
                                                 pages.append(",");
                                         pages.append("'{\"text\":\"" + "\u00A7k\u2588".repeat(200) + "\"}'");
                                 }
-                                mc.player.connection.sendCommand(
+                                mc.player.connection.sendCommand(CommandUtils.vanilla(
                                                 "give @s written_book[written_book_content={title:\"Crash\",author:\"Orbiter\",pages:["
-                                                                + pages + "]}]");
+                                                                + pages + "]}]"));
                                 info("Loaded preset: Crash Book");
                         }
                         case BanItem -> {
-                                mc.player.connection.sendCommand(
+                                mc.player.connection.sendCommand(CommandUtils.vanilla(
                                                 "give @s shulker_box[custom_name='{\"text\":\"Ban AABB\",\"color\":\"dark_red\",\"bold\":true}',"
                                                                 +
                                                                 "lore=['\"Opens = crash\"']," +
@@ -517,7 +518,7 @@ public class ItemCreator extends CreativeSafetyModule {
                                                                 "{slot:0,item:{id:'written_book',count:1,components:{written_book_content:{title:'x',author:'o',pages:['\""
                                                                 + "\u00A7k".repeat(200) + "\"']}}}}" +
                                                                 "]" +
-                                                                "]");
+                                                                "]"));
                                 info("Loaded preset: Ban Item (crash shulker)");
                         }
                         default -> {

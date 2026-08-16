@@ -131,7 +131,7 @@ public class PlaySoundSpam extends CreativeSafetyModule {
 
             String cmd = CommandUtils.formatCommand("playsound %s %s %s ~ ~ ~ %.2f %.2f",
                     sound, sourceStr, target.get(), volume.get(), p);
-            mc.player.connection.sendCommand(cmd);
+            mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
         }
     }
 

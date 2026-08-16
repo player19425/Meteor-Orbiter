@@ -1,6 +1,7 @@
 package orbiter.modules;
 
 import orbiter.Orbiter;
+import orbiter.util.CommandUtils;
 import orbiter.util.FillCommandIterator;
 import orbiter.util.SafeRegionMath;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -280,7 +281,7 @@ public class WorldEraser extends CreativeSafetyModule {
                     toggle();
                     return;
                 }
-                mc.player.connection.sendCommand(lazyIterator.next());
+                mc.player.connection.sendCommand(CommandUtils.vanilla(lazyIterator.next()));
                 lazyGeneratedCount++;
                 sent++;
             }
@@ -313,7 +314,7 @@ public class WorldEraser extends CreativeSafetyModule {
 
         int sent = 0;
         while (commandIndex < pendingCommands.size() && sent < commandsPerTick.get()) {
-            mc.player.connection.sendCommand(pendingCommands.get(commandIndex));
+            mc.player.connection.sendCommand(CommandUtils.vanilla(pendingCommands.get(commandIndex)));
             commandIndex++;
             sent++;
         }

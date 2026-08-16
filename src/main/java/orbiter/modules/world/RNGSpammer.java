@@ -133,7 +133,7 @@ public class RNGSpammer extends CreativeSafetyModule {
             double z = (randomPosition.get() ? offset(random, spreadRadius.get()) : 0);
             String cmd = CommandUtils.formatCommand(
                 "execute at %s run loot spawn ~%.2f ~%.2f ~%.2f loot %s", target, x, y, z, table);
-            mc.player.connection.sendCommand(cmd);
+            mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
         }
     }
 

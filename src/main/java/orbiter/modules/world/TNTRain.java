@@ -307,7 +307,7 @@ public class TNTRain extends CreativeSafetyModule {
             nbt.append('}');
 
             String cmd = CommandUtils.formatCommand("summon minecraft:tnt %.2f %.2f %.2f %s", x, y, z, nbt);
-            mc.player.connection.sendCommand(cmd);
+            mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
             spawnedCount++;
         }
     }

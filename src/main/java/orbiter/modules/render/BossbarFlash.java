@@ -179,7 +179,7 @@ public class BossbarFlash extends CreativeSafetyModule {
             return;
 
         commandBatcher.setBudgetPerTick(maxCommandsPerTick.get());
-        commandBatcher.drain(mc.player.connection::sendCommand);
+        commandBatcher.drain(c -> mc.player.connection.sendCommand(CommandUtils.vanilla(c)));
 
         tickCounter++;
         if (tickCounter < delay.get())
@@ -230,7 +230,7 @@ public class BossbarFlash extends CreativeSafetyModule {
             int removed = 0;
             for (int i = 0; i < createdBars.length; i++) {
                 if (!createdBars[i]) continue;
-                mc.player.connection.sendCommand("bossbar remove orbiter:bar_" + i);
+                mc.player.connection.sendCommand(CommandUtils.vanilla("bossbar remove orbiter:bar_" + i));
                 removed++;
             }
             if (removed > 0) info("Cleaned up " + removed + " tracked boss bars.");

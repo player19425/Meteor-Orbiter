@@ -71,16 +71,26 @@ import meteordevelopment.meteorclient.systems.hud.Hud;
 import meteordevelopment.meteorclient.systems.hud.HudGroup;
 import meteordevelopment.meteorclient.systems.modules.Category;
 import meteordevelopment.meteorclient.systems.modules.Modules;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.slf4j.Logger;
 
 public class Orbiter extends MeteorAddon {
     public static final Logger LOG = LogUtils.getLogger();
 
-    public static final Category CATEGORY = new Category("Orbiter Survival", () -> Items.DIAMOND_BLOCK.getDefaultInstance());
-    public static final Category CATEGORY_VANILLA = new Category("Orbiter Vanilla", () -> Items.NETHERITE_SWORD.getDefaultInstance());
-    public static final Category CATEGORY_OP = new Category("Orbiter Creative/OP", () -> Items.DIAMOND_BLOCK.getDefaultInstance());
-    public static final Category CATEGORY_STUPID = new Category("Orbiter Stupid", () -> Items.SLIME_BLOCK.getDefaultInstance());
+    private static ItemStack safeIcon(Item item) {
+        try {
+            return item.getDefaultInstance();
+        } catch (Throwable t) {
+            return ItemStack.EMPTY;
+        }
+    }
+
+    public static final Category CATEGORY = new Category("Orbiter Survival", () -> safeIcon(Items.DIAMOND_BLOCK));
+    public static final Category CATEGORY_VANILLA = new Category("Orbiter Vanilla", () -> safeIcon(Items.NETHERITE_SWORD));
+    public static final Category CATEGORY_OP = new Category("Orbiter Creative/OP", () -> safeIcon(Items.DIAMOND_BLOCK));
+    public static final Category CATEGORY_STUPID = new Category("Orbiter Stupid", () -> safeIcon(Items.SLIME_BLOCK));
     public static final HudGroup HUD_GROUP = new HudGroup("Orbiter");
 
     @Override

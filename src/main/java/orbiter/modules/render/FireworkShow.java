@@ -424,7 +424,7 @@ public class FireworkShow extends CreativeSafetyModule {
         }
 
         String cmd = buildFireworkSummonCommand(x, y, z);
-        mc.player.connection.sendCommand(cmd);
+        mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
     }
 
     private String buildFireworkSummonCommand(double x, double y, double z) {
@@ -560,7 +560,7 @@ public class FireworkShow extends CreativeSafetyModule {
                 pos.getY(),
                 pos.getZ(),
                 facing.getSerializedName());
-        if (setblock.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.connection.sendCommand(setblock);
+        if (setblock.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.connection.sendCommand(CommandUtils.vanilla(setblock));
 
         mc.player.connection.send(new ServerboundSetCommandBlockPacket(
                 pos,
@@ -575,7 +575,7 @@ public class FireworkShow extends CreativeSafetyModule {
                 powerPos.getX(),
                 powerPos.getY(),
                 powerPos.getZ());
-        if (power.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.connection.sendCommand(power);
+        if (power.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.connection.sendCommand(CommandUtils.vanilla(power));
 
         queueOmegaCleanup(pos, powerPos);
     }
@@ -644,7 +644,7 @@ public class FireworkShow extends CreativeSafetyModule {
                 pos.getX(),
                 pos.getY(),
                 pos.getZ());
-        if (clear.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.connection.sendCommand(clear);
+        if (clear.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.connection.sendCommand(CommandUtils.vanilla(clear));
     }
 
     private String buildFireworkEntityNBT(int explosionCount, int colorsPerExplosion, boolean includeFadeColors,
