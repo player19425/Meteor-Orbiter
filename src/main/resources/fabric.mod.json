@@ -8,6 +8,7 @@
   "authors": [
     "player19425"
   ],
+  "license": "MIT",
   "environment": "client",
   "entrypoints": {
     "meteor": [

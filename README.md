@@ -12,6 +12,7 @@
   <a href="https://github.com/player19425/Meteor-Orbiter/commits/1.21.11"><img src="https://img.shields.io/github/last-commit/player19425/Meteor-Orbiter" alt="Last commit"></a>
   <img src="https://img.shields.io/github/languages/code-size/player19425/Meteor-Orbiter" alt="Code size">
   <img src="https://img.shields.io/github/issues/player19425/Meteor-Orbiter" alt="Issues">
+  <img src="https://img.shields.io/github/license/player19425/Meteor-Orbiter" alt="License">
 </div>
 
 <hr />
@@ -197,3 +198,7 @@ The compiled JAR will be in `build/libs/`.
 
 - [Meteor Client](https://github.com/MeteorDevelopment/meteor-client) • the client this addon builds on.
 - This was made as a personal project but i felt bad to gate keep it ♥️
+
+# License
+
+This project is licensed under the [MIT License](LICENSE).
