@@ -198,8 +198,11 @@ The compiled JAR will be in `build/libs/`.
 
 - Destructive features require explicit confirmation and should only be tested on disposable local servers with backups.
 - Command-producing modules use capability detection and bounded queues where supported. Command availability does not prove permission.
+- Any damage caused by this Meteor Client Addon is __not__ the fault of the creator of the mod, and responsibility lies solely with the person who performed the action. 
+- The only official way to download this mod from is [from its github.](https://github.com/player19425/Meteor-Orbiter/releases/latest) Downloading this from any other places is __not__ recommended.
+
 
 # Credits
 
-- [Meteor Client](https://github.com/MeteorDevelopment/meteor-client) • the client this addon builds on
-This was made as a personal project but i felt bad to gate keep it ♥️
+- [Meteor Client](https://github.com/MeteorDevelopment/meteor-client) • the client this addon builds on.
+- This was made as a personal project but i felt bad to gate keep it ♥️
