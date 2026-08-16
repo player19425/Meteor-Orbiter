@@ -23,6 +23,10 @@ public class ServerProtocolHud extends BaseServerInfoHud {
 
         PeakPluginScanner scanner = scanner();
         int protocol = scanner != null ? scanner.getProtocolVersion() : 0;
+        if (protocol <= 0 && mc.getConnection() != null && mc.getConnection().getServerData() != null) {
+            protocol = mc.getConnection().getServerData().protocol;
+        }
+        if (protocol <= 0) protocol = net.minecraft.SharedConstants.getProtocolVersion();
         return "Protocol: " + (protocol > 0 ? protocol : "Unknown");
     }
 }

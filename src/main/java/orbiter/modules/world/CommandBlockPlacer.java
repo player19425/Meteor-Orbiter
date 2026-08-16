@@ -22,10 +22,10 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
 
     private final Setting<Integer> amount = sgGeneral.add(new IntSetting.Builder()
             .name("amount")
-            .description("Number of command blocks to place.")
+            .description("Number of command blocks to place. Commands repeat when there are more blocks than command slots.")
             .defaultValue(1)
             .min(1)
-            .sliderRange(1, 50)
+            .sliderRange(1, 100)
             .build());
 
     private final Setting<CmdBlockType> blockType = sgGeneral.add(new EnumSetting.Builder<CmdBlockType>()
@@ -34,50 +34,15 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
             .defaultValue(CmdBlockType.Impulse)
             .build());
 
-    private final Setting<String> command1 = sgCommands.add(new StringSetting.Builder()
-            .name("command-1")
-            .description("Command for the first block (without /).")
-            .defaultValue("say Orbiter On Crack!")
+    private final Setting<Integer> commandSlots = sgCommands.add(new IntSetting.Builder()
+            .name("command-slots")
+            .description("Number of command slots to show. The more slots, the more command blocks get their own command.")
+            .defaultValue(10)
+            .min(1)
+            .sliderRange(1, 100)
             .build());
 
-    private final Setting<String> command2 = sgCommands.add(new StringSetting.Builder()
-            .name("command-2")
-            .description("Command for the second block (leave empty to reuse command-1).")
-            .defaultValue("")
-            .build());
-
-    private final Setting<String> command3 = sgCommands.add(new StringSetting.Builder()
-            .name("command-3")
-            .description("Command for the third block.")
-            .defaultValue("")
-            .build());
-
-    private final Setting<String> command4 = sgCommands.add(new StringSetting.Builder()
-            .name("command-4")
-            .description("Command for the fourth block.")
-            .defaultValue("")
-            .build());
-
-    private final Setting<String> command5 = sgCommands.add(new StringSetting.Builder()
-            .name("command-5")
-            .description("Command for the fifth block.")
-            .defaultValue("")
-            .build());
-
-    private final Setting<String> command6 = sgCommands.add(new StringSetting.Builder()
-            .name("command-6").defaultValue("").build());
-
-    private final Setting<String> command7 = sgCommands.add(new StringSetting.Builder()
-            .name("command-7").defaultValue("").build());
-
-    private final Setting<String> command8 = sgCommands.add(new StringSetting.Builder()
-            .name("command-8").defaultValue("").build());
-
-    private final Setting<String> command9 = sgCommands.add(new StringSetting.Builder()
-            .name("command-9").defaultValue("").build());
-
-    private final Setting<String> command10 = sgCommands.add(new StringSetting.Builder()
-            .name("command-10").defaultValue("").build());
+    private final List<Setting<String>> commandSettings = buildCommandSettings();
 
     private final Setting<PlaceDirection> direction = sgPlacement.add(new EnumSetting.Builder<PlaceDirection>()
             .name("direction")
@@ -262,16 +227,25 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
         positions = null;
     }
 
-    private String getCommandForIndex(int index) {
-        String[] commands = {
-                command1.get(), command2.get(), command3.get(), command4.get(), command5.get(),
-                command6.get(), command7.get(), command8.get(), command9.get(), command10.get()
-        };
-
-        if (index < commands.length && !commands[index].isEmpty()) {
-            return commands[index];
+    private List<Setting<String>> buildCommandSettings() {
+        List<Setting<String>> list = new ArrayList<>();
+        for (int i = 1; i <= 100; i++) {
+            final int slot = i;
+            list.add(sgCommands.add(new StringSetting.Builder()
+                    .name("command-" + slot)
+                    .description("Command for block " + slot + " (without /, empty reuses command-1).")
+                    .defaultValue(slot == 1 ? "say Orbiter On Crack!" : "")
+                    .visible(() -> commandSlots.get() >= slot)
+                    .build()));
         }
-        return command1.get();
+        return list;
+    }
+
+    private String getCommandForIndex(int index) {
+        if (index < commandSettings.size() && !commandSettings.get(index).get().isEmpty()) {
+            return commandSettings.get(index).get();
+        }
+        return commandSettings.get(0).get();
     }
 
     private String getBlockId(CmdBlockType type) {

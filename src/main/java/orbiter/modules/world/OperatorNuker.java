@@ -198,6 +198,11 @@ public class OperatorNuker extends CreativeSafetyModule {
         maxY = Math.min(worldTopY(), maxY);
         if (minY > maxY) return commands;
 
+        if (!hasBlocksInArea(nukeCenter, minX, maxX, minY, maxY, minZ, maxZ, r)) {
+            warning("No non-air blocks found in the nuke area.");
+            return commands;
+        }
+
         if (method.get() == NukeMethod.Fill) {
             for (int y = minY; y <= maxY; y++) {
                 for (int z = minZ; z <= maxZ; z++) {
@@ -244,6 +249,20 @@ public class OperatorNuker extends CreativeSafetyModule {
         }
 
         return commands;
+    }
+
+    private boolean hasBlocksInArea(BlockPos center, int minX, int maxX, int minY, int maxY, int minZ, int maxZ, int r) {
+        BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    if (!isInsideShape(center, x, y, z, r)) continue;
+                    mutable.set(x, y, z);
+                    if (!mc.level.getBlockState(mutable).isAir()) return true;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean isInsideShape(BlockPos center, int x, int y, int z, int radius) {

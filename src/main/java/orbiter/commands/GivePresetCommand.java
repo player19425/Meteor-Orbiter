@@ -150,9 +150,6 @@ public class GivePresetCommand extends Command {
         presets.put("potion-harming", () -> potionLore(Potions.HARMING, "Harming Splash", ChatFormatting.DARK_RED, "Instant damage", "Deals 6 hearts"));
         presets.put("potion-leaping", () -> potionLore(Potions.LEAPING, "Leaping Splash", ChatFormatting.GREEN, "Jump super high", "Leap over walls"));
 
-        presets.put("book-enchant-all", this::enchantBook);
-        presets.put("book-survival-guide", this::survivalGuideBook);
-
         presets.put("ultimate-kit", this::ultimateKit);
         presets.put("pvp-kit", this::pvpKit);
         presets.put("builder-kit", this::builderKit);
@@ -219,7 +216,6 @@ public class GivePresetCommand extends Command {
         sb.append("Spawns: spawn-wither, spawn-ender-dragon, spawn-warden, spawn-elder-guardian, spawn-ravager, spawn-ghast, spawn-blaze, spawn-piglin-brute, spawn-breeze, spawn-creaking, charged-creeper, all-spawn-eggs\n");
         sb.append("Blocks: netherite-block-64, diamond-block-64, emerald-block-64, gold-block-64, iron-block-64, obsidian-64, end-stone-64, crying-obsidian-64, ancient-debris-64, copper-block-64, amethyst-block-64, tnt-64, packed-ice-64, blue-ice-64, mossy-cobble-64, snow-block-64, deepslate-64, resin-block-64\n");
         sb.append("Potions: potion-strength-ii, potion-speed-ii, potion-regen-ii, potion-healing-ii, potion-fire-resist, potion-invisibility, potion-night-vision, potion-water-breathing, potion-absorption-ii, potion-slow-falling, potion-poison-ii, potion-wither-ii, potion-harming-ii, potion-leaping-ii\n");
-        sb.append("Books: book-enchant-all, book-survival-guide\n");
         sb.append("Kits: ultimate-kit, pvp-kit, builder-kit, end-kit, nether-kit, fishing-kit, redstone-kit\n");
         sb.append("Special: shulker-full, music-discs, lodestone, echo-shard-stack, recovery-compass, bundle-stack, saddle-stack, debug-stick, lodestone-compass");
         info(sb.toString());
@@ -599,29 +595,6 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.TOTEM_OF_UNDYING);
         s.set(DataComponents.CUSTOM_NAME, name("Totem of Dying", ChatFormatting.GOLD));
         setLore(s, "Extra life in your offhand", "Respawn on death");
-        return s;
-    }
-
-    private ItemStack enchantBook() {
-        ItemStack s = new ItemStack(Items.WRITTEN_BOOK);
-        s.set(DataComponents.CUSTOM_NAME, name("Enchantment Guide", ChatFormatting.GOLD));
-        List<Filterable<Component>> pages = new ArrayList<>();
-        String[] data = {"Sharpness, Smite, Bane of Arthropods\nKnockback, Fire Aspect\nLooting, Sweeping Edge", "Power, Punch, Flame\nInfinity, Riptide, Loyalty\nChanneling, Impaling", "Protection, Blast Protection\nFire Protection, Projectile Protection\nThorns, Respiration", "Depth Strider, Frost Walker\nSoul Speed, Swift Sneak\nFeather Falling, Aqua Affinity", "Efficiency, Fortune, Silk Touch\nQuick Charge, Piercing, Multishot\nDensity, Wind Burst, Smashing", "Unbreaking, Mending\nCurse of Vanishing\nCurse of Binding"};
-        for (String d : data) pages.add(Filterable.passThrough(Component.literal(d)));
-        s.set(DataComponents.WRITTEN_BOOK_CONTENT, new WrittenBookContent(Filterable.passThrough("Enchantments"), "Orbiter", 0, pages, true));
-        setLore(s, "Complete enchantment reference", "All enchantments listed");
-        return s;
-    }
-
-    private ItemStack survivalGuideBook() {
-        ItemStack s = new ItemStack(Items.WRITTEN_BOOK);
-        s.set(DataComponents.CUSTOM_NAME, name("Survival Guide", ChatFormatting.GREEN));
-        List<Filterable<Component>> pages = new ArrayList<>();
-        pages.add(Filterable.passThrough(Component.literal("Welcome to the Orbiter Survival Guide!\n\nTip 1: Always carry a totem\nTip 2: Netherite armor is king\nTip 3: Enchant everything")));
-        pages.add(Filterable.passThrough(Component.literal("Tip 4: Elytra + fireworks = freedom\nTip 5: Fortune 3 on diamonds\nTip 6: Never dig straight down\nTip 7: Keep away from creepers")));
-        pages.add(Filterable.passThrough(Component.literal("Tip 8: Beds explode in the Nether\nTip 9: Shield blocks most attacks\nTip 10: Mending keeps gear alive")));
-        s.set(DataComponents.WRITTEN_BOOK_CONTENT, new WrittenBookContent(Filterable.passThrough("Survival Guide"), "Orbiter", 0, pages, true));
-        setLore(s, "Your survival companion", "10 tips for surviving Minecraft");
         return s;
     }
 

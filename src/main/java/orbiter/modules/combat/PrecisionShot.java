@@ -53,11 +53,9 @@ public class PrecisionShot extends Module {
     private final Setting<Boolean> autoOnlySupportedItems = sgGeneral.add(new BoolSetting.Builder()
         .name("supported-items-only").description("Only render/predict for supported items.").defaultValue(true).build());
     private final Setting<Boolean> silentPacketAim = sgGeneral.add(new BoolSetting.Builder()
-        .name("silent-packet-aim").description("Send look packets without moving camera.").defaultValue(false).build());
+        .name("silent-packet-aim").description("Send look packets without moving the camera so projectiles hit where you point.").defaultValue(true).build());
     private final Setting<SilentAimMode> silentAimMode = sgGeneral.add(new EnumSetting.Builder<SilentAimMode>()
         .name("silent-aim-mode").defaultValue(SilentAimMode.BallisticCrosshair).visible(silentPacketAim::get).build());
-    private final Setting<Boolean> releaseOnly = sgGeneral.add(new BoolSetting.Builder()
-        .name("release-only").description("Only silent-aim on bow release.").defaultValue(true).visible(silentPacketAim::get).build());
     private final Setting<Boolean> ignoreFriends = sgGeneral.add(new BoolSetting.Builder()
         .name("ignore-friends").description("Don't target friends.").defaultValue(true).build());
     private final Setting<Boolean> onlyPlayers = sgGeneral.add(new BoolSetting.Builder()
@@ -83,7 +81,7 @@ public class PrecisionShot extends Module {
     private AimSolution cachedPreviewAim = null;
 
     public PrecisionShot() {
-        super(Orbiter.CATEGORY, "precision-shot", "Predicts projectile trajectories and supports silent packet aiming.");
+        super(Orbiter.CATEGORY, "precision-shot", "Silent aim: moves the camera server-side so projectiles hit the block or entity you point at.");
     }
 
     @Override
@@ -183,13 +181,12 @@ public class PrecisionShot extends Module {
             return;
         }
 
-        if (releaseOnly.get()) return;
         if (!(event.packet instanceof ServerboundUseItemPacket interactPacket)) return;
 
         ItemStack stack = interactPacket.getHand() == InteractionHand.MAIN_HAND
             ? mc.player.getMainHandItem()
             : mc.player.getOffhandItem();
-        if (isSupportedItem(stack.getItem())) performSilentAim(stack);
+        if (isThrowable(stack.getItem())) performSilentAim(stack);
     }
 
     private void performSilentAim(ItemStack stack) {
@@ -293,8 +290,11 @@ public class PrecisionShot extends Module {
     }
 
     private boolean isSupportedItem(Item item) {
-        return item instanceof BowItem || item == Items.CROSSBOW
-            || item == Items.ENDER_PEARL || item == Items.SNOWBALL || item == Items.EGG
+        return item instanceof BowItem || item == Items.CROSSBOW || isThrowable(item);
+    }
+
+    private boolean isThrowable(Item item) {
+        return item == Items.ENDER_PEARL || item == Items.SNOWBALL || item == Items.EGG
             || item == Items.SPLASH_POTION || item == Items.LINGERING_POTION;
     }
 

@@ -11,6 +11,7 @@ import meteordevelopment.orbit.EventPriority;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.TridentItem;
@@ -26,6 +27,7 @@ import orbiter.util.ComboTracker;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 public class TridentAssist extends Module {
 
@@ -91,6 +93,12 @@ public class TridentAssist extends Module {
     private final Setting<Boolean> playersOnly = sgTarget.add(new BoolSetting.Builder()
         .name("players-only")
         .defaultValue(false)
+        .build()
+    );
+
+    private final Setting<Set<EntityType<?>>> entities = sgTarget.add(new EntityTypeListSetting.Builder()
+        .name("entities")
+        .description("Which entity types to target. Empty targets all living entities.")
         .build()
     );
 
@@ -480,6 +488,7 @@ public class TridentAssist extends Module {
             if (ignoreCreative.get() && p.getAbilities().instabuild) return false;
         }
         if (playersOnly.get() && !(entity instanceof Player)) return false;
+        if (!entities.get().isEmpty() && !entities.get().contains(entity.getType())) return false;
         if (ignoreInvisibles.get() && entity.isInvisible()) return false;
         return true;
     }

@@ -14,6 +14,7 @@ import java.util.Random;
 public class TNTRain extends CreativeSafetyModule {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgContinuous = settings.createGroup("Continuous Mode");
+    private final SettingGroup sgPhysics = settings.createGroup("Physics");
     private final SettingGroup sgTarget = settings.createGroup("Target Mode");
 
     private final Setting<Integer> totalTNT = sgGeneral.add(new IntSetting.Builder()
@@ -104,6 +105,69 @@ public class TNTRain extends CreativeSafetyModule {
             .visible(randomFuse::get)
             .build());
 
+    private final Setting<Boolean> randomRate = sgContinuous.add(new BoolSetting.Builder()
+            .name("random-rate")
+            .description("Randomize the spawn rate per second.")
+            .defaultValue(false)
+            .build());
+
+    private final Setting<Integer> minRate = sgContinuous.add(new IntSetting.Builder()
+            .name("min-rate")
+            .description("Minimum spawn rate when randomized.")
+            .defaultValue(1)
+            .min(1)
+            .sliderRange(1, 100)
+            .visible(randomRate::get)
+            .build());
+
+    private final Setting<Integer> maxRate = sgContinuous.add(new IntSetting.Builder()
+            .name("max-rate")
+            .description("Maximum spawn rate when randomized.")
+            .defaultValue(30)
+            .min(1)
+            .sliderRange(1, 100)
+            .visible(randomRate::get)
+            .build());
+
+    private final Setting<Boolean> randomMotion = sgPhysics.add(new BoolSetting.Builder()
+            .name("random-motion")
+            .description("Apply a random velocity to each TNT so they fly.")
+            .defaultValue(true)
+            .build());
+
+    private final Setting<Double> motionMin = sgPhysics.add(new DoubleSetting.Builder()
+            .name("motion-min")
+            .description("Minimum random horizontal force.")
+            .defaultValue(0.5)
+            .min(0)
+            .sliderRange(0, 5)
+            .visible(randomMotion::get)
+            .build());
+
+    private final Setting<Double> motionMax = sgPhysics.add(new DoubleSetting.Builder()
+            .name("motion-max")
+            .description("Maximum random horizontal force.")
+            .defaultValue(2.5)
+            .min(0)
+            .sliderRange(0, 10)
+            .visible(randomMotion::get)
+            .build());
+
+    private final Setting<Double> upwardMotion = sgPhysics.add(new DoubleSetting.Builder()
+            .name("upward-motion")
+            .description("Extra upward velocity added to the random force.")
+            .defaultValue(0.5)
+            .min(-5)
+            .sliderRange(-5, 10)
+            .visible(randomMotion::get)
+            .build());
+
+    private final Setting<Boolean> randomRotation = sgPhysics.add(new BoolSetting.Builder()
+            .name("random-rotation")
+            .description("Give each TNT a random yaw and pitch.")
+            .defaultValue(true)
+            .build());
+
     private final Setting<TargetMode> targetMode = sgTarget.add(new EnumSetting.Builder<TargetMode>()
             .name("target-mode")
             .description("Target a player to rain TNT on their head.")
@@ -181,7 +245,12 @@ public class TNTRain extends CreativeSafetyModule {
         int toSpawn;
         if (continuous.get()) {
 
-            double perTick = tntPerSecond.get() / 20.0;
+            int rate = tntPerSecond.get();
+            if (randomRate.get()) {
+                rate = minRate.get() + random.nextInt(Math.max(1, maxRate.get() - minRate.get() + 1));
+            }
+
+            double perTick = rate / 20.0;
             toSpawn = (int) perTick;
 
             if (random.nextDouble() < (perTick - toSpawn))
@@ -220,7 +289,24 @@ public class TNTRain extends CreativeSafetyModule {
                 fuse = fuseTicks.get();
             }
 
-            String cmd = CommandUtils.formatCommand("summon minecraft:tnt %.2f %.2f %.2f {fuse:%d}", x, y, z, fuse);
+            StringBuilder nbt = new StringBuilder("{fuse:" + fuse);
+
+            if (randomMotion.get()) {
+                double angle = random.nextDouble() * Math.PI * 2;
+                double force = motionMin.get() + random.nextDouble() * Math.max(0, motionMax.get() - motionMin.get());
+                double vx = Math.cos(angle) * force;
+                double vz = Math.sin(angle) * force;
+                double vy = upwardMotion.get() + random.nextDouble() * 0.3;
+                nbt.append(CommandUtils.formatCommand(",Motion:[%.2f,%.2f,%.2f]", vx, vy, vz));
+            }
+
+            if (randomRotation.get()) {
+                nbt.append(CommandUtils.formatCommand(",Rotation:[%.1f,%.1f]", random.nextDouble() * 360 - 180, random.nextDouble() * 180 - 90));
+            }
+
+            nbt.append('}');
+
+            String cmd = CommandUtils.formatCommand("summon minecraft:tnt %.2f %.2f %.2f %s", x, y, z, nbt);
             mc.player.connection.sendCommand(cmd);
             spawnedCount++;
         }

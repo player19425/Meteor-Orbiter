@@ -39,7 +39,7 @@ public class Camera360 extends Module {
 
     @Override
     public void onActivate() {
-        if (!ConfigModifier.get().stupidModules.get()) {
+        if (!ConfigModifier.get().stupidModulesEnabled()) {
             info("Stupid Modules is disabled. Enable it in Meteor Config → Orbiter → Stupid Modules");
             toggle();
             return;
@@ -63,7 +63,7 @@ public class Camera360 extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null) return;
 
-        if (!ConfigModifier.get().stupidModules.get()) {
+        if (!ConfigModifier.get().stupidModulesEnabled()) {
             info("Stupid Modules was disabled • 360 Camera auto-disabled.");
             toggle();
             return;

@@ -12,16 +12,20 @@ import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.component.TypedEntityData;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
 import net.minecraft.network.chat.Component;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import orbiter.Orbiter;
-import orbiter.util.ConfigModifier;
 import orbiter.util.MojangApiUtil;
 
-import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 public class UUIDBan extends Module {
@@ -33,7 +37,7 @@ public class UUIDBan extends Module {
         .defaultValue("").build());
 
     private final Setting<String> entityTypeStr = sgEntity.add(new StringSetting.Builder()
-        .name("entity-type").description("Entity type to summon (e.g. minecraft:villager, minecraft:armor_stand).")
+        .name("entity-type").description("Entity type to summon. Uses its spawn egg when available, armor stand otherwise.")
         .defaultValue("minecraft:villager").build());
 
     private final Setting<Boolean> glowing = sgEntity.add(new BoolSetting.Builder()
@@ -136,21 +140,10 @@ public class UUIDBan extends Module {
 
         long most = uuid.getMostSignificantBits();
         long least = uuid.getLeastSignificantBits();
-        String uuidNbt = String.format("[I;%d,%d,%d,%d]",
-            (int)(most >> 32), (int)most, (int)(least >> 32), (int)least);
-
-        String entityNbt = String.format(Locale.ROOT,
-            "{UUID:%s,NoAI:1b,Invulnerable:1b,NoGravity:1b,PersistenceRequired:1b,Silent:1b%s}",
-            uuidNbt,
-            glowing.get() ? ",Glowing:1b" : "");
-
-        ItemStack egg = new ItemStack(Items.ARMOR_STAND);
-        egg.set(DataComponents.CUSTOM_NAME, Component.literal("§c§lUUIDBan: " + name));
+        int[] uuidArray = new int[]{(int) (most >> 32), (int) most, (int) (least >> 32), (int) least};
 
         CompoundTag entityData = new CompoundTag();
-        entityData.putString("id", entityTypeStr.get());
-        entityData.putLong("UUIDMost", most);
-        entityData.putLong("UUIDLeast", least);
+        entityData.putIntArray("UUID", uuidArray);
         entityData.putBoolean("NoAI", true);
         entityData.putBoolean("Invulnerable", true);
         entityData.putBoolean("NoGravity", true);
@@ -158,14 +151,41 @@ public class UUIDBan extends Module {
         entityData.putBoolean("Silent", true);
         if (glowing.get()) entityData.putBoolean("Glowing", true);
 
-        egg.set(DataComponents.ENTITY_DATA,
-            TypedEntityData.of(EntityTypes.ARMOR_STAND, entityData));
+        EntityType<?> type = resolveEntityType();
+        ItemStack egg;
+
+        if (type != null && type != EntityTypes.ARMOR_STAND) {
+            Optional<Holder<Item>> eggHolder = SpawnEggItem.byId(type);
+            if (eggHolder.isPresent()) {
+                egg = new ItemStack(eggHolder.get());
+                entityData.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(type).toString());
+            } else {
+                egg = new ItemStack(Items.ARMOR_STAND);
+                type = EntityTypes.ARMOR_STAND;
+            }
+        } else {
+            egg = new ItemStack(Items.ARMOR_STAND);
+            type = EntityTypes.ARMOR_STAND;
+        }
+
+        egg.set(DataComponents.CUSTOM_NAME, Component.literal("§c§lUUIDBan: " + name));
+        egg.set(DataComponents.ENTITY_DATA, TypedEntityData.of(type, entityData));
 
         int slot = mc.player.getInventory().getSelectedSlot();
         mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(36 + slot, egg));
 
-        if (debug.get()) info("Placed UUIDBan egg in slot %d for %s (UUID: %s). Right-click to summon.",
+        if (debug.get()) info("Placed UUIDBan item in slot %d for %s (UUID: %s). Right-click to summon.",
             slot + 1, name, uuid);
+    }
+
+    private EntityType<?> resolveEntityType() {
+        try {
+            Identifier id = Identifier.tryParse(entityTypeStr.get());
+            if (id == null) return null;
+            return BuiltInRegistries.ENTITY_TYPE.get(id).map(Holder::value).orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private void sendKick(String name) {

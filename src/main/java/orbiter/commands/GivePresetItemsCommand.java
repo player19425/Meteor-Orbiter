@@ -94,7 +94,7 @@ public class GivePresetItemsCommand extends Command {
     private static final IntList FIREWORK_FADE = new IntArrayList(new int[]{16777215, 0, 16711680});
 
     public GivePresetItemsCommand() {
-        super("givepresetitems", "300+ useful creative-mode presets. Send via Creative Write Packet.", "gpi");
+        super("givepresetitems", "200+ OP and command-block-only presets. Send via Creative Write Packet.", "gpi");
         registerAll();
     }
 
@@ -106,7 +106,6 @@ public class GivePresetItemsCommand extends Command {
         registerPotions();
         registerTippedArrows();
         registerSpawnEggs();
-        registerEnchantedBooks();
         registerKits();
         registerUtility();
         registerMisc();
@@ -781,13 +780,8 @@ public class GivePresetItemsCommand extends Command {
             new ArrowDef("Night Vision", Potions.LONG_NIGHT_VISION, 9600, 0),
             new ArrowDef("Water Breathing", Potions.LONG_WATER_BREATHING, 9600, 0),
             new ArrowDef("Regeneration II", Potions.STRONG_REGENERATION, 480, 1),
-            new ArrowDef("Strength II", Potions.STRONG_STRENGTH, 840, 1),
-            new ArrowDef("Slow Falling", Potions.SLOW_FALLING, 840, 0),
             new ArrowDef("Invisibility", Potions.LONG_INVISIBILITY, 9600, 0),
-            new ArrowDef("Haste II", Potions.STRONG_SWIFTNESS, 840, 1),
             new ArrowDef("Luck", Potions.LUCK, 9600, 0),
-            new ArrowDef("Absorption", Potions.LEAPING, 840, 1),
-            new ArrowDef("Slow Falling", Potions.SLOW_FALLING, 840, 0),
             new ArrowDef("Poison", Potions.LONG_POISON, 9600, 0),
         };
         for (ArrowDef a : arrows) {
@@ -857,57 +851,6 @@ public class GivePresetItemsCommand extends Command {
                     net.minecraft.world.entity.EntityTypes.CAVE_SPIDER, nbt));
                 s.set(DataComponents.LORE, new ItemLore(List.of(
                     line(cname + " spawn egg x" + cnt),
-                    gold("Orbiter Preset"))));
-                return s;
-            });
-        }
-    }
-
-    private void registerEnchantedBooks() {
-        String[][] books = {
-            {"sharpness", "Sharpness"},
-            {"smite", "Smite"},
-            {"bane_of_arthropods", "Bane of Arthropods"},
-            {"knockback", "Knockback"},
-            {"fire_aspect", "Fire Aspect"},
-            {"looting", "Looting"},
-            {"sweeping_edge", "Sweeping Edge"},
-            {"efficiency", "Efficiency"},
-            {"fortune", "Fortune"},
-            {"silk_touch", "Silk Touch"},
-            {"unbreaking", "Unbreaking"},
-            {"power", "Power"},
-            {"punch", "Punch"},
-            {"flame", "Flame"},
-            {"infinity", "Infinity"},
-            {"protection", "Protection"},
-            {"blast_protection", "Blast Protection"},
-            {"fire_protection", "Fire Protection"},
-            {"projectile_protection", "Projectile Protection"},
-            {"thorns", "Thorns"},
-            {"respiration", "Respiration"},
-            {"aqua_affinity", "Aqua Affinity"},
-            {"depth_strider", "Depth Strider"},
-            {"frost_walker", "Frost Walker"},
-            {"soul_speed", "Soul Speed"},
-            {"swift_sneak", "Swift Sneak"},
-            {"impaling", "Impaling"},
-            {"loyalty", "Loyalty"},
-            {"channeling", "Channeling"},
-            {"mending", "Mending"},
-        };
-        for (String[] b : books) {
-            final String enchantId = b[0];
-            final String displayName = b[1];
-            final String safeName = enchantId.replace('_', '-');
-            reg("book-" + safeName, "Enchanted Book: " + displayName + " 255", () -> {
-                ItemStack s = new ItemStack(Items.ENCHANTED_BOOK, 1);
-                s.set(DataComponents.CUSTOM_NAME, name(displayName + " 255", ChatFormatting.GREEN));
-                ItemEnchantments.Mutable eb = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
-                addEnchant(eb, enchantId, 255);
-                s.set(DataComponents.ENCHANTMENTS, eb.toImmutable());
-                s.set(DataComponents.LORE, new ItemLore(List.of(
-                    line(displayName + " at level 255 • impossible in vanilla"),
                     gold("Orbiter Preset"))));
                 return s;
             });
@@ -1111,31 +1054,10 @@ public class GivePresetItemsCommand extends Command {
     private void registerUtility() {
 
         reg("totems-64", "64x Totems of Undying", this::makeTotems64);
-        reg("totems-stack", "Stacked Totems x64", this::makeTotemStack);
 
         reg("god-apples-64", "64x Enchanted Golden Apples", this::makeGodApples64);
-        reg("golden-carrots-64", "64x Golden Carrots", this::makeGoldenCarrots64);
-        reg("cooked-beef-64", "64x Cooked Beef", this::makeCookedBeef64);
-        reg("cake-stack", "64x Cakes", this::makeCakeStack);
-        reg("enchanted-bread", "Enchanted Bread x64 • Regeneration", this::makeEnchantedBread);
-        reg("enchanted-steak", "Enchanted Steak x64 • All buffs", this::makeEnchantedSteak);
 
-        reg("arrows-harm-64", "64x Instant Damage II Arrows", () -> makeTippedArrow64(Potions.STRONG_HARMING, "Harming II"));
-        reg("arrows-poison-64", "64x Poison II Arrows", () -> makeTippedArrow64(Potions.STRONG_POISON, "Poison II"));
-        reg("arrows-slow-64", "64x Slowness II Arrows", () -> makeTippedArrow64(Potions.STRONG_SLOWNESS, "Slowness II"));
-        reg("arrows-heal-64", "64x Instant Health II Arrows", () -> makeTippedArrow64(Potions.STRONG_HEALING, "Healing II"));
-
-        reg("ender-pearls-64", "64x Ender Pearls", this::makeEnderPearls64);
-        reg("eyes-64", "64x Eyes of Ender", this::makeEyes64);
-
-        reg("sponge-64", "64x Sponges", this::makeSponge64);
-        reg("wet-sponge-64", "64x Wet Sponges", this::makeWetSponge64);
-
-        reg("shulker-shells-64", "64x Shulker Shells", this::makeShulkerShells64);
-        reg("echo-shards-64", "64x Echo Shards", this::makeEchoShards64);
-        reg("nether-stars-64", "64x Nether Stars", this::makeNetherStars64);
         reg("dragon-eggs", "64x Dragon Eggs", this::makeDragonEggs);
-        reg("end-crystals-64", "64x End Crystals", this::makeEndCrystals64);
 
         reg("speed-apple", "Speed Apple • Enchanted Golden Apple + Movement Speed", this::makeSpeedApple);
         reg("speed-carrot", "Speed Carrot • Golden Carrot + Movement Speed", this::makeSpeedCarrot);
@@ -1146,65 +1068,6 @@ public class GivePresetItemsCommand extends Command {
         reg("damage-ring", "Damage Ring (Redstone) • +500 Attack Damage", this::makeDamageRing);
         reg("knockback-gauntlet", "Knockback Gauntlet (Gold) • +10 Knockback", this::makeKnockbackGauntlet);
 
-        reg("name-tag-red", "Red Name Tag", () -> makeNameTag("Red Tag", ChatFormatting.RED));
-        reg("name-tag-gold", "Gold Name Tag", () -> makeNameTag("Gold Tag", ChatFormatting.GOLD));
-        reg("name-tag-aqua", "Aqua Name Tag", () -> makeNameTag("Aqua Tag", ChatFormatting.AQUA));
-        reg("name-tag-green", "Green Name Tag", () -> makeNameTag("Green Tag", ChatFormatting.GREEN));
-        reg("name-tag-lp", "Purple Name Tag", () -> makeNameTag("Purple Tag", ChatFormatting.LIGHT_PURPLE));
-
-        reg("music-discs", "All Music Discs", this::makeAllMusicDiscs);
-        reg("jukebox-64", "64x Jukeboxes", this::makeJukebox64);
-
-        reg("lodestone-compass", "Lodestone Compass", this::makeLodestoneCompass);
-        reg("recovery-compass", "Recovery Compass", this::makeRecoveryCompass);
-
-        reg("boat-64", "64x Oak Boats", this::makeBoat64);
-        reg("chest-boat-64", "64x Oak Chest Boats", this::makeChestBoat64);
-
-        reg("egg-villager-64", "64x Villager Spawn Eggs", () -> makeMobEgg64(Items.VILLAGER_SPAWN_EGG, "Villager"));
-        reg("egg-iron-golem-64", "64x Iron Golem Spawn Eggs", () -> makeMobEgg64(Items.IRON_GOLEM_SPAWN_EGG, "Iron Golem"));
-        reg("egg-wandering-trader-64", "64x Wandering Trader Eggs", () -> makeMobEgg64(Items.WANDERING_TRADER_SPAWN_EGG, "Wandering Trader"));
-        reg("egg-cat-64", "64x Cat Spawn Eggs", () -> makeMobEgg64(Items.CAT_SPAWN_EGG, "Cat"));
-        reg("egg-dolphin-64", "64x Dolphin Spawn Eggs", () -> makeMobEgg64(Items.DOLPHIN_SPAWN_EGG, "Dolphin"));
-        reg("egg-parrot-64", "64x Parrot Spawn Eggs", () -> makeMobEgg64(Items.PARROT_SPAWN_EGG, "Parrot"));
-        reg("egg-bee-64", "64x Bee Spawn Eggs", () -> makeMobEgg64(Items.BEE_SPAWN_EGG, "Bee"));
-        reg("egg-fox-64", "64x Fox Spawn Eggs", () -> makeMobEgg64(Items.FOX_SPAWN_EGG, "Fox"));
-        reg("egg-axolotl-64", "64x Axolotl Spawn Eggs", () -> makeMobEgg64(Items.AXOLOTL_SPAWN_EGG, "Axolotl"));
-        reg("egg-allay-64", "64x Allay Spawn Eggs", () -> makeMobEgg64(Items.ALLAY_SPAWN_EGG, "Allay"));
-        reg("egg-frog-64", "64x Frog Spawn Eggs", () -> makeMobEgg64(Items.FROG_SPAWN_EGG, "Frog"));
-        reg("egg-turtle-64", "64x Turtle Spawn Eggs", () -> makeMobEgg64(Items.TURTLE_SPAWN_EGG, "Turtle"));
-        reg("egg-wolf-64", "64x Wolf Spawn Eggs", () -> makeMobEgg64(Items.WOLF_SPAWN_EGG, "Wolf"));
-        reg("egg-horse-64", "64x Horse Spawn Eggs", () -> makeMobEgg64(Items.HORSE_SPAWN_EGG, "Horse"));
-        reg("egg-ravager-64", "64x Ravager Spawn Eggs", () -> makeMobEgg64(Items.RAVAGER_SPAWN_EGG, "Ravager"));
-        reg("egg-warden-64", "64x Warden Spawn Eggs", () -> makeMobEgg64(Items.WARDEN_SPAWN_EGG, "Warden"));
-        reg("egg-sniffer-64", "64x Sniffer Spawn Eggs", () -> makeMobEgg64(Items.SNIFFER_SPAWN_EGG, "Sniffer"));
-        reg("egg-breeze-64", "64x Breeze Spawn Eggs", () -> makeMobEgg64(Items.BREEZE_SPAWN_EGG, "Breeze"));
-        reg("egg-polar-bear-64", "64x Polar Bear Eggs", () -> makeMobEgg64(Items.POLAR_BEAR_SPAWN_EGG, "Polar Bear"));
-        reg("egg-panda-64", "64x Panda Spawn Eggs", () -> makeMobEgg64(Items.PANDA_SPAWN_EGG, "Panda"));
-        reg("egg-mooshroom-64", "64x Mooshroom Eggs", () -> makeMobEgg64(Items.MOOSHROOM_SPAWN_EGG, "Mooshroom"));
-        reg("egg-glow-squid-64", "64x Glow Squid Eggs", () -> makeMobEgg64(Items.GLOW_SQUID_SPAWN_EGG, "Glow Squid"));
-        reg("egg-goat-64", "64x Goat Spawn Eggs", () -> makeMobEgg64(Items.GOAT_SPAWN_EGG, "Goat"));
-        reg("egg-snow-golem-64", "64x Snow Golem Eggs", () -> makeMobEgg64(Items.SNOW_GOLEM_SPAWN_EGG, "Snow Golem"));
-        reg("egg-ocelot-64", "64x Ocelot Spawn Eggs", () -> makeMobEgg64(Items.OCELOT_SPAWN_EGG, "Ocelot"));
-        reg("egg-rabbit-64", "64x Rabbit Spawn Eggs", () -> makeMobEgg64(Items.RABBIT_SPAWN_EGG, "Rabbit"));
-        reg("egg-armadillo-64", "64x Armadillo Eggs", () -> makeMobEgg64(Items.ARMADILLO_SPAWN_EGG, "Armadillo"));
-        reg("egg-bogged-64", "64x Bogged Spawn Eggs", () -> makeMobEgg64(Items.BOGGED_SPAWN_EGG, "Bogged"));
-
-        reg("golden-apple-64", "64x Golden Apples", () -> makeStackItem(Items.GOLDEN_APPLE, 64, "Golden Apples x64", ChatFormatting.GOLD));
-        reg("ender-pearl-64", "64x Ender Pearls", () -> makeStackItem(Items.ENDER_PEARL, 64, "Ender Pearls x64", ChatFormatting.DARK_PURPLE));
-        reg("experience-bottle-64", "64x XP Bottles", () -> makeStackItem(Items.EXPERIENCE_BOTTLE, 64, "XP Bottles x64", ChatFormatting.GREEN));
-        reg("ender-pearl-16", "16x Ender Pearls", () -> makeStackItem(Items.ENDER_PEARL, 16, "Ender Pearls x16", ChatFormatting.DARK_PURPLE));
-        reg("bone-meal-64", "64x Bone Meal", () -> makeStackItem(Items.BONE_MEAL, 64, "Bone Meal x64", ChatFormatting.WHITE));
-        reg("slime-ball-64", "64x Slime Balls", () -> makeStackItem(Items.SLIME_BALL, 64, "Slime Balls x64", ChatFormatting.GREEN));
-        reg("blaze-powder-64", "64x Blaze Powder", () -> makeStackItem(Items.BLAZE_POWDER, 64, "Blaze Powder x64", ChatFormatting.GOLD));
-        reg("blaze-rod-64", "64x Blaze Rods", () -> makeStackItem(Items.BLAZE_ROD, 64, "Blaze Rods x64", ChatFormatting.GOLD));
-        reg("nether-wart-64", "64x Nether Wart", () -> makeStackItem(Items.NETHER_WART, 64, "Nether Wart x64", ChatFormatting.RED));
-        reg("diamond-64", "64x Diamonds", () -> makeStackItem(Items.DIAMOND, 64, "Diamonds x64", ChatFormatting.AQUA));
-        reg("emerald-64", "64x Emeralds", () -> makeStackItem(Items.EMERALD, 64, "Emeralds x64", ChatFormatting.GREEN));
-        reg("netherite-ingot-64", "64x Netherite Ingots", () -> makeStackItem(Items.NETHERITE_INGOT, 64, "Netherite Ingots x64", ChatFormatting.DARK_GRAY));
-        reg("elytra-stack", "Elytra x64", () -> makeStackItem(Items.ELYTRA, 64, "Elytra x64", ChatFormatting.AQUA));
-        reg("trident-stack", "Trident x64", () -> makeStackItem(Items.TRIDENT, 64, "Trident x64", ChatFormatting.DARK_AQUA));
-        reg("totem-stack-64", "Totem x64", () -> makeStackItem(Items.TOTEM_OF_UNDYING, 64, "Totems x64", ChatFormatting.GOLD));
         reg("trident-far", "Trident • +50 Reach", this::makeReachTrident);
         reg("fishing-far", "Fishing Rod • +30 Reach", this::makeReachFishingRod);
         reg("crossbow-fire", "Fire Crossbow • Flame + Multishot + Quick Charge", this::makeFireCrossbow);
@@ -1542,38 +1405,10 @@ public class GivePresetItemsCommand extends Command {
         reg("op-snowball", "OP Snowball • 64x with Knockback", this::makeOpSnowball);
         reg("op-egg", "OP Egg • 64x with Extreme Knockback", this::makeOpEgg);
         reg("op-lead", "OP Lead • 64x with Extended Range", this::makeOpLead64);
-        reg("saddle-stack", "64x Saddles", this::makeSaddleStack);
-        reg("name-tag-anvil", "64x Anvils", this::makeAnvilStack);
-
         reg("knockback-stick", "Knockback Stick • Knockback 255", this::makeKnockbackStick);
         reg("fire-stick", "Fire Stick • Fire Aspect 255", this::makeFireStick);
         reg("silk-stick", "Silk Touch Stick • Mine anything", this::makeSilkStick);
 
-        reg("banner-white", "White Banner x64", () -> makeBanner(Items.BANNER.pick(DyeColor.WHITE), "White", ChatFormatting.WHITE));
-        reg("banner-red", "Red Banner x64", () -> makeBanner(Items.BANNER.pick(DyeColor.RED), "Red", ChatFormatting.RED));
-        reg("banner-blue", "Blue Banner x64", () -> makeBanner(Items.BANNER.pick(DyeColor.BLUE), "Blue", ChatFormatting.AQUA));
-        reg("banner-purple", "Purple Banner x64", () -> makeBanner(Items.BANNER.pick(DyeColor.PURPLE), "Purple", ChatFormatting.LIGHT_PURPLE));
-        reg("banner-black", "Black Banner x64", () -> makeBanner(Items.BANNER.pick(DyeColor.BLACK), "Black", ChatFormatting.DARK_GRAY));
-
-        reg("bed-red", "Red Bed x64", () -> makeBed(Items.BED.pick(DyeColor.RED), "Red", ChatFormatting.RED));
-        reg("bed-blue", "Blue Bed x64", () -> makeBed(Items.BED.pick(DyeColor.BLUE), "Blue", ChatFormatting.AQUA));
-        reg("bed-white", "White Bed x64", () -> makeBed(Items.BED.pick(DyeColor.WHITE), "White", ChatFormatting.WHITE));
-
-        reg("skeleton-skull", "Skeleton Skull x64", () -> makeSkull64(Items.SKELETON_SKULL, "Skeleton Skull"));
-        reg("wither-skull", "Wither Skeleton Skull x64", () -> makeSkull64(Items.WITHER_SKELETON_SKULL, "Wither Skeleton Skull"));
-        reg("zombie-head", "Zombie Head x64", () -> makeSkull64(Items.ZOMBIE_HEAD, "Zombie Head"));
-        reg("creeper-head", "Creeper Head x64", () -> makeSkull64(Items.CREEPER_HEAD, "Creeper Head"));
-        reg("piglin-head", "Piglin Head x64", () -> makeSkull64(Items.PIGLIN_HEAD, "Piglin Head"));
-
-        reg("book-commands", "Command Reference Book", this::makeCommandBook);
-        reg("book-coords", "Coordinates Book", this::makeCoordsBook);
-        reg("book-enchants", "Enchantment Guide Book", this::makeEnchantGuideBook);
-
-        reg("shulker-white", "White Shulker AABB", () -> makeColoredShulker(Items.DYED_SHULKER_BOX.pick(DyeColor.WHITE), "White", ChatFormatting.WHITE));
-        reg("shulker-red", "Red Shulker AABB", () -> makeColoredShulker(Items.DYED_SHULKER_BOX.pick(DyeColor.RED), "Red", ChatFormatting.RED));
-        reg("shulker-blue", "Blue Shulker AABB", () -> makeColoredShulker(Items.DYED_SHULKER_BOX.pick(DyeColor.BLUE), "Blue", ChatFormatting.AQUA));
-        reg("shulker-purple", "Purple Shulker AABB", () -> makeColoredShulker(Items.DYED_SHULKER_BOX.pick(DyeColor.PURPLE), "Purple", ChatFormatting.LIGHT_PURPLE));
-        reg("shulker-gold", "Gold Shulker AABB", () -> makeColoredShulker(Items.DYED_SHULKER_BOX.pick(DyeColor.YELLOW), "Gold", ChatFormatting.GOLD));
     }
 
     private ItemStack makeFarPearl() {

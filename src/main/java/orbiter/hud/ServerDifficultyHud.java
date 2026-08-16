@@ -19,6 +19,6 @@ public class ServerDifficultyHud extends BaseServerInfoHud {
     protected String getText() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return null;
-        return "Difficulty: " + mc.level.getDifficulty().getDisplayName();
+        return "Difficulty: " + mc.level.getDifficulty().getDisplayName().getString();
     }
 }

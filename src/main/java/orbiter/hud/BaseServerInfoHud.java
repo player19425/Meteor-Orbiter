@@ -49,12 +49,11 @@ public abstract class BaseServerInfoHud extends HudElement {
         super(info);
     }
 
-    /** Returns the text to display, or null to hide the element. */
     protected abstract String getText();
 
     @Override
     public void render(HudRenderer renderer) {
-        String text = getText();
+        String text = stripCodes(getText());
         if (text == null) {
             setSize(0, 0);
             return;
@@ -75,6 +74,23 @@ public abstract class BaseServerInfoHud extends HudElement {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    protected static String stripCodes(String value) {
+        if (value == null) return null;
+        StringBuilder sb = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '§' && i + 1 < value.length()) {
+                char code = Character.toLowerCase(value.charAt(i + 1));
+                if ("0123456789abcdefklmnorx".indexOf(code) >= 0) {
+                    i++;
+                    continue;
+                }
+            }
+            sb.append(c);
+        }
+        return sb.toString();
     }
 
     protected SettingColor rainbowColor() {

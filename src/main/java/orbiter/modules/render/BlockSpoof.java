@@ -87,7 +87,8 @@ public class BlockSpoof extends Module {
 
     private final Setting<String> blockMap = sgMap.add(new StringSetting.Builder()
         .name("block-map")
-        .description("Custom replacement map. Format: minecraft:blockA=minecraft:blockB;...")
+        .description("Custom replacement map. Format: minecraft:blockA=minecraft:blockB. "
+            + "Separate multiple entries with ';', ',', spaces or newlines (e.g. stone=cobblestone, dirt=grass).")
         .defaultValue("")
         .visible(() -> preset.get() == SpoofPreset.Custom)
         .onChanged(s -> onBlockMapChanged())
@@ -405,7 +406,8 @@ public class BlockSpoof extends Module {
     }
 
     private void parseBlockMapString(String mapString) {
-        String[] entries = mapString.split(";");
+        String normalized = mapString.replaceAll("\\s*=\\s*", "=");
+        String[] entries = normalized.split("[;,\\s]+");
         int parsed = 0;
         int failed = 0;
 

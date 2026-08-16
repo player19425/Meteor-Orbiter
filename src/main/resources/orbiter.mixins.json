@@ -46,6 +46,8 @@
     "Camera360Mixin",
     "Camera360RenderPitchMixin",
     "Camera360HandMixin",
+    "ServerboundMovePlayerPacketMixin",
+    "ControllingNewKeyBindsListMixin",
     "PacketDecoderMixin",
     "ModulesMixin",
     "CrashFixerParticleManagerMixin",

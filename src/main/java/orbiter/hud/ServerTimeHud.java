@@ -25,6 +25,6 @@ public class ServerTimeHud extends BaseServerInfoHud {
         int day = (int) (timeOfDay / 24000) + 1;
         int hours = ticks / 1000;
         int minutes = (ticks % 1000) * 60 / 1000;
-        return String.format("Time: Day %d - %d:%02d", day, hours, minutes);
+        return String.format("Time Day %d (%d:%02d)", day, hours, minutes);
     }
 }

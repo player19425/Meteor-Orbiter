@@ -14,7 +14,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(EntityFluidInteraction.class)
 public abstract class EntityFluidInteractionMixin {
-    // Cancels the actual fluid current application (flowing water/lava push) for the local player.
     @Inject(method = "applyCurrentTo", at = @At("HEAD"), cancellable = true)
     private void orbiter$blockFluidCurrent(TagKey<Fluid> fluidTag, Entity entity, double strength, CallbackInfo ci) {
         if (entity != Minecraft.getInstance().player) return;

@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
 public abstract class ModulesMixin {
 
     private static boolean orbiter$isStupidEnabled() {
-        return ConfigModifier.get().stupidModules.get();
+        return ConfigModifier.get().stupidModulesEnabled();
     }
 
     @ModifyReturnValue(method = "loopCategories", at = @At("RETURN"))

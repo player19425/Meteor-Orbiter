@@ -9,6 +9,7 @@ import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BowItem;
@@ -23,6 +24,7 @@ import orbiter.util.ComboTracker;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 public class BowAssist extends Module {
 
@@ -89,6 +91,12 @@ public class BowAssist extends Module {
         .name("players-only")
         .description("Only target player entities.")
         .defaultValue(false)
+        .build()
+    );
+
+    private final Setting<Set<EntityType<?>>> entities = sgTarget.add(new EntityTypeListSetting.Builder()
+        .name("entities")
+        .description("Which entity types to target. Empty targets all living entities.")
         .build()
     );
 
@@ -437,6 +445,7 @@ public class BowAssist extends Module {
         }
 
         if (playersOnly.get() && !(entity instanceof Player)) return false;
+        if (!entities.get().isEmpty() && !entities.get().contains(entity.getType())) return false;
         if (ignoreInvisibles.get() && entity.isInvisible()) return false;
 
         return true;

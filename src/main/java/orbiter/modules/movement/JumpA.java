@@ -24,8 +24,16 @@ public class JumpA extends Module {
         .defaultValue(false).build());
 
     private final Setting<Double> velocityCap = sg.add(new DoubleSetting.Builder()
-        .name("velocity-cap").description("Maximum upward velocity to apply.")
+        .name("velocity-cap").description("Maximum upward velocity to apply (limits how high you can jump).")
         .defaultValue(2.0).min(0.42).max(4.0).sliderRange(0.42, 4.0).build());
+
+    private final Setting<Integer> maxScanHeight = sg.add(new IntSetting.Builder()
+        .name("max-scan-height").description("Scan upward this many blocks for a platform and jump to the highest non-air block found (0 = off).")
+        .defaultValue(32).min(0).max(256).sliderRange(0, 128).build());
+
+    private final Setting<Boolean> unlimitedHeight = sg.add(new BoolSetting.Builder()
+        .name("unlimited-height").description("Ignore the velocity cap and jump as high as the target requires (like Slime Jump).")
+        .defaultValue(false).build());
 
     private final Setting<Double> lookRange = sg.add(new DoubleSetting.Builder()
         .name("look-range").description("How far to raytrace for parkour target.")
@@ -41,13 +49,13 @@ public class JumpA extends Module {
     }
 
     @Override public void onActivate() {
-        if (!ConfigModifier.get().stupidModules.get()) { info("Stupid Modules disabled."); toggle(); }
+        if (!ConfigModifier.get().stupidModulesEnabled()) { info("Stupid Modules disabled."); toggle(); }
     }
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null) return;
-        if (!ConfigModifier.get().stupidModules.get()) { toggle(); return; }
+        if (!ConfigModifier.get().stupidModulesEnabled()) { toggle(); return; }
 
         if (!mc.options.keyJump.isDown()) return;
         if (requireGrounded.get() && !mc.player.onGround()) return;
@@ -77,9 +85,38 @@ public class JumpA extends Module {
             return;
         }
 
+        if (maxScanHeight.get() > 0) {
+            double platformHeight = scanPlatformHeight();
+            if (platformHeight > 0) {
+                double velocity = solveVelocity(platformHeight + 0.36, unlimitedHeight.get());
+                if (unlimitedHeight.get() || velocity <= velocityCap.get()) {
+                    applyVelocity(velocity);
+                    if (debugMode.get()) info("Platform jump: %.1f blocks, velocity %.3f", platformHeight, velocity);
+                    return;
+                }
+            }
+        }
+
         if (debugMode.get() && wallHeight <= 0 && parkourVelocity <= 0) {
             info("No target detected.");
         }
+    }
+
+    private double scanPlatformHeight() {
+        if (mc.player == null || mc.level == null || maxScanHeight.get() <= 0) return 0;
+
+        BlockPos feet = mc.player.blockPosition();
+        int baseY = feet.getY();
+        int maxY = baseY + maxScanHeight.get();
+        BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+
+        for (int y = maxY; y > baseY; y--) {
+            m.set(feet.getX(), y, feet.getZ());
+            if (isSolid(m) && (y == maxY || !isSolid(m.above()))) {
+                return y - baseY + 1.0;
+            }
+        }
+        return 0;
     }
 
     private double detectWall() {
@@ -167,9 +204,13 @@ public class JumpA extends Module {
     }
 
     private double solveVelocity(double targetHeight) {
-        double lo = 0.42, hi = 6.0;
+        return solveVelocity(targetHeight, false);
+    }
+
+    private double solveVelocity(double targetHeight, boolean unlimited) {
+        double lo = 0.42, hi = unlimited ? 64.0 : 6.0;
         if (simApex(hi) < targetHeight) return hi + 1;
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 25; i++) {
             double mid = (lo + hi) * 0.5;
             if (simApex(mid) >= targetHeight) hi = mid;
             else lo = mid;
@@ -179,7 +220,7 @@ public class JumpA extends Module {
 
     private double simApex(double v0) {
         double v = v0, rise = 0, max = 0;
-        for (int t = 0; t < 100 && v > -3.92; t++) {
+        for (int t = 0; t < 2000 && v > 0.001; t++) {
             rise += v;
             max = Math.max(max, rise);
             v = (v - 0.08) * 0.98;

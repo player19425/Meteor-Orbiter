@@ -57,6 +57,56 @@ public class SpamPlus extends Module {
         .build()
     );
 
+    private final Setting<String> commandPrefix = sgGeneral.add(new StringSetting.Builder()
+        .name("command-prefix")
+        .description("If set, every message is sent as <prefix><message> (e.g. '/msg bob ' to private message, '/team chat ' to use team chat). Kept raw, spaces allowed.")
+        .defaultValue("")
+        .build()
+    );
+
+    private final Setting<String> messageSuffix = sgGeneral.add(new StringSetting.Builder()
+        .name("suffix")
+        .description("Text appended to every message.")
+        .defaultValue("")
+        .build()
+    );
+
+    private final Setting<Integer> startDelay = sgGeneral.add(new IntSetting.Builder()
+        .name("start-delay")
+        .description("Ticks to wait before sending the first message.")
+        .defaultValue(0)
+        .min(0)
+        .sliderRange(0, 200)
+        .build()
+    );
+
+    private final Setting<Boolean> randomDelay = sgGeneral.add(new BoolSetting.Builder()
+        .name("random-delay")
+        .description("Use a random delay between messages instead of the fixed delay.")
+        .defaultValue(false)
+        .build()
+    );
+
+    private final Setting<Integer> delayMin = sgGeneral.add(new IntSetting.Builder()
+        .name("delay-min")
+        .description("Minimum random delay in ticks.")
+        .defaultValue(5)
+        .min(0)
+        .sliderRange(0, 100)
+        .visible(randomDelay::get)
+        .build()
+    );
+
+    private final Setting<Integer> delayMax = sgGeneral.add(new IntSetting.Builder()
+        .name("delay-max")
+        .description("Maximum random delay in ticks.")
+        .defaultValue(40)
+        .min(0)
+        .sliderRange(0, 200)
+        .visible(randomDelay::get)
+        .build()
+    );
+
     private final Setting<Boolean> bypass = sgBypass.add(new BoolSetting.Builder()
         .name("bypass")
         .description("Add random suffix to bypass spam filter.")
@@ -189,7 +239,7 @@ public class SpamPlus extends Module {
 
     @Override
     public void onActivate() {
-        timer = 0;
+        timer = startDelay.get();
         messageIndex = 0;
         ladderIndex = 0;
         stupidStep = 0;
@@ -247,7 +297,7 @@ public class SpamPlus extends Module {
 
         String msg = getNextMessage();
         sendMessage(msg);
-        timer = delay.get();
+        timer = nextDelay();
     }
 
     private void tickStupid() {
@@ -288,7 +338,7 @@ public class SpamPlus extends Module {
             advanceMessage();
         }
 
-        timer = delay.get();
+        timer = nextDelay();
     }
 
     private void tickLadder() {
@@ -319,7 +369,7 @@ public class SpamPlus extends Module {
             advanceMessage();
         }
 
-        timer = delay.get();
+        timer = nextDelay();
     }
 
     private String getNextMessage() {
@@ -354,6 +404,8 @@ public class SpamPlus extends Module {
     private void sendMessage(String msg) {
         if (mc.player == null || mc.getConnection() == null) return;
 
+        if (commandPrefix.get() != null && !commandPrefix.get().isEmpty()) msg = commandPrefix.get() + msg;
+        if (messageSuffix.get() != null && !messageSuffix.get().isEmpty()) msg = msg + messageSuffix.get();
         if (uppercase.get()) msg = msg.toUpperCase();
         if (bypass.get()) msg = msg + " " + randomBypassSuffix();
 
@@ -387,10 +439,19 @@ public class SpamPlus extends Module {
 
             pendingSplitText = null;
             splitNum = 0;
-            timer = delay.get();
+            timer = nextDelay();
         } else {
             timer = splitDelay.get();
         }
+    }
+
+    private int nextDelay() {
+        if (randomDelay.get()) {
+            int min = Math.min(delayMin.get(), delayMax.get());
+            int max = Math.max(delayMin.get(), delayMax.get());
+            return min == max ? min : min + rng.nextInt(max - min + 1);
+        }
+        return delay.get();
     }
 
     private String randomBypassSuffix() {

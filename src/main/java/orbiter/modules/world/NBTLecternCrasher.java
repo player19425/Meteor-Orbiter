@@ -364,19 +364,16 @@ public class NBTLecternCrasher extends Module {
         String fill = getSafeFillCharacter();
         if (length <= 0) return fill;
 
-        StringBuilder sb = new StringBuilder(length * (alternateObfuscated.get() ? 6 : 2));
+        StringBuilder sb = new StringBuilder(length * 2);
         for (int i = 0; i < length; i++) {
-            if (alternateObfuscated.get() && (i % 2 == 1)) {
-                sb.append('\u00A7').append('k').append(fill).append('\u00A7').append('r');
-            } else {
-                sb.append(fill);
-            }
+            sb.append(fill);
         }
         return sb.toString();
     }
 
     private String escapeForJson(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+        String cleaned = value.replace("\u00A7", "").replace("\n", "").replace("\r", "");
+        return cleaned.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private String getFirstCodepointAsString(String value) {

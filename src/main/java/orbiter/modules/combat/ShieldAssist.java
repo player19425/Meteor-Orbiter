@@ -8,6 +8,7 @@ import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -128,6 +129,12 @@ public class ShieldAssist extends Module {
         .name("ignore-friends")
         .description("Don't block against attacks from friends.")
         .defaultValue(true)
+        .build()
+    );
+
+    private final Setting<Set<EntityType<?>>> entities = sgTarget.add(new EntityTypeListSetting.Builder()
+        .name("entities")
+        .description("Which entity types count as melee threats. Empty counts all living entities.")
         .build()
     );
 
@@ -282,6 +289,7 @@ public class ShieldAssist extends Module {
         for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (living == mc.player || !living.isAlive()) continue;
+            if (!entities.get().isEmpty() && !entities.get().contains(living.getType())) continue;
 
             if (living instanceof Player p) {
                 if (ignoreFriends.get() && Friends.get().isFriend(p)) continue;

@@ -1336,13 +1336,12 @@ public class WorldEditModule extends CreativeSafetyModule {
         if (mc.player == null || mc.player.connection == null || mc.player.getInventory() == null) return;
 
         Item tool = resolveSelectionToolItem(true);
-        for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getItem(i).getItem() == tool) return;
-        }
+        int slot = mc.player.getInventory().getSelectedSlot();
+        if (mc.player.getInventory().getItem(slot).getItem() == tool) return;
 
         ItemStack toolStack = new ItemStack(tool, 1);
-        mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(36, toolStack));
-        mc.player.getInventory().setItem(0, toolStack);
+        mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(36 + slot, toolStack));
+        mc.player.getInventory().setItem(slot, toolStack);
         info("Gave selection tool: " + BuiltInRegistries.ITEM.getId(tool));
     }
 

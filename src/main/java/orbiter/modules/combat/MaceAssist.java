@@ -12,6 +12,7 @@ import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -19,6 +20,8 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.Set;
 
 public class MaceAssist extends Module {
     public enum TargetMode {
@@ -97,6 +100,12 @@ public class MaceAssist extends Module {
         .name("ignore-friends")
         .description("Don't target friends.")
         .defaultValue(true)
+        .build()
+    );
+
+    private final Setting<Set<EntityType<?>>> entities = sgGeneral.add(new EntityTypeListSetting.Builder()
+        .name("entities")
+        .description("Which entity types to target. Empty targets all living entities.")
         .build()
     );
 
@@ -248,6 +257,8 @@ public class MaceAssist extends Module {
         if (ignoreFriends.get() && entity instanceof Player player) {
             if (!Friends.get().shouldAttack(player)) return false;
         }
+
+        if (!entities.get().isEmpty() && !entities.get().contains(entity.getType())) return false;
 
         if (!ignoreWalls.get()) {
             if (mc.level != null && mc.player != null) {

@@ -8,9 +8,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
 
-// Optional dependency on Sodium: skipped automatically when Sodium isn't installed (@Pseudo).
-// Sodium's chunk mesher reads block states from its own LevelSlice, so this is where the
-// client-side block spoof has to hook in to be visible.
 @Pseudo
 @Mixin(targets = "net.caffeinemc.mods.sodium.client.world.LevelSlice")
 public abstract class LevelSliceBlockSpoofMixin {

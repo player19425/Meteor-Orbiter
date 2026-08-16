@@ -26,11 +26,11 @@ public class SlimeJump extends Module {
 
     private final Setting<Double> maxVelocity = sgGeneral.add(new DoubleSetting.Builder()
         .name("max-velocity")
-        .description("Maximum upward velocity cap to prevent anti-cheat flags.")
-        .defaultValue(5.0)
+        .description("Maximum upward velocity cap. Raise it to bounce super high.")
+        .defaultValue(10.0)
         .min(0.5)
-        .max(20.0)
-        .sliderRange(1.0, 10.0)
+        .max(50.0)
+        .sliderRange(1.0, 30.0)
         .build()
     );
 
@@ -62,7 +62,7 @@ public class SlimeJump extends Module {
 
     @Override
     public void onActivate() {
-        if (!ConfigModifier.get().stupidModules.get()) {
+        if (!ConfigModifier.get().stupidModulesEnabled()) {
             info("Stupid Modules is disabled. Enable it in Meteor Config → Orbiter → Stupid Modules");
             toggle();
             return;
@@ -82,7 +82,7 @@ public class SlimeJump extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null) return;
 
-        if (!ConfigModifier.get().stupidModules.get()) {
+        if (!ConfigModifier.get().stupidModulesEnabled()) {
             info("Stupid Modules was disabled. SlimeJump turning off.");
             toggle();
             return;
@@ -92,11 +92,13 @@ public class SlimeJump extends Module {
 
         if (onSlime) {
             offSlimeTicks = 0;
-        } else {
+        } else if (mc.player.onGround()) {
             offSlimeTicks++;
             if (offSlimeTicks >= resetTicks.get()) {
                 bounceCount = 0;
             }
+        } else {
+            offSlimeTicks = 0;
         }
 
         double yVel = mc.player.getDeltaMovement().y;

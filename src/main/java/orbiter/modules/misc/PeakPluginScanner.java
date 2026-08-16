@@ -1,6 +1,7 @@
 package orbiter.modules.misc;
 
 import orbiter.Orbiter;
+import orbiter.util.PeakScanCache;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.tree.CommandNode;
 import meteordevelopment.meteorclient.events.game.GameLeftEvent;
@@ -15,6 +16,8 @@ import net.minecraft.network.protocol.common.custom.DiscardedPayload;
 import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.network.protocol.game.ClientboundCommandSuggestionsPacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
+import net.minecraft.network.protocol.game.ServerboundChatPacket;
 import net.minecraft.network.protocol.game.ServerboundCommandSuggestionPacket;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -458,11 +461,13 @@ public class PeakPluginScanner extends Module {
         final String query;
         final ProbeKind kind;
         final String hint;
+        int attempts;
 
         ProbeSpec(String query, ProbeKind kind, String hint) {
             this.query = query;
             this.kind = kind;
             this.hint = hint;
+            this.attempts = 0;
         }
     }
 
@@ -505,6 +510,22 @@ public class PeakPluginScanner extends Module {
         .name("max-probes").description("Maximum probes to send (0 = unlimited).")
         .defaultValue(0).min(0).sliderRange(0, 500).visible(enableProbing::get).build());
 
+    private final Setting<Integer> probeRetries = sgProbing.add(new IntSetting.Builder()
+        .name("probe-retries").description("How many times to resend a probe when the send fails.")
+        .defaultValue(3).min(0).max(8).sliderRange(0, 8).visible(enableProbing::get).build());
+
+    private final Setting<Boolean> observeOwnCommands = sgProbing.add(new BoolSetting.Builder()
+        .name("observe-own-commands").description("Use commands you execute as evidence for plugin detection.")
+        .defaultValue(true).build());
+
+    private final Setting<Boolean> useCache = sgGeneral.add(new BoolSetting.Builder()
+        .name("use-cache").description("Load and save scan results per server so rejoins show them instantly.")
+        .defaultValue(true).build());
+
+    private final Setting<Integer> cacheAgeHours = sgGeneral.add(new IntSetting.Builder()
+        .name("cache-age-hours").description("How long a cached scan is considered fresh before a full rescan.")
+        .defaultValue(24).min(1).max(168).sliderRange(1, 168).build());
+
     private final Map<String, DetectedPlugin> detectedPlugins = new LinkedHashMap<>();
 
     private final Set<String> observedPluginCommands = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
@@ -522,6 +543,9 @@ public class PeakPluginScanner extends Module {
     private int nextCompletionId = 1000;
     private int totalProbesSent;
     private int totalProbesQueued;
+    private int sentProbes;
+    private int retriedProbes;
+    private int failedProbes;
 
     private String serverBrand;
     private String serverIp;
@@ -554,7 +578,7 @@ public class PeakPluginScanner extends Module {
     public void onDeactivate() {
         probing = false;
         waitingForPluginList = false;
-
+        saveCache();
         RawPacketCapture.clearPending();
     }
 
@@ -564,6 +588,7 @@ public class PeakPluginScanner extends Module {
 
     @EventHandler
     private void onGameLeft(GameLeftEvent event) {
+        saveCache();
         RawPacketCapture.clearPending();
         probing = false;
         waitingForPluginList = false;
@@ -608,6 +633,25 @@ public class PeakPluginScanner extends Module {
     }
 
     @EventHandler
+    private void onPacketSend(PacketEvent.Send event) {
+        if (!isActive() || !observeOwnCommands.get()) return;
+
+        String command = null;
+        if (event.packet instanceof ServerboundChatCommandPacket pkt) {
+            command = pkt.command();
+        } else if (event.packet instanceof ServerboundChatPacket pkt) {
+            String msg = pkt.message();
+            if (msg != null && msg.trim().startsWith("/")) {
+                command = msg.trim().substring(1);
+            }
+        }
+        if (command == null || command.isBlank()) return;
+
+        String token = addObservedPluginCommand(command);
+        if (!token.isEmpty()) inferPluginsFromObservedCommands();
+    }
+
+    @EventHandler
     private void onTick(TickEvent.Post event) {
         if (!isActive() || mc.player == null || mc.level == null) return;
 
@@ -646,6 +690,10 @@ public class PeakPluginScanner extends Module {
         scanned = true;
 
         fetchServerInfo();
+
+        if (useCache.get() && tryLoadCache()) {
+            return;
+        }
 
         if (scanCommandTree.get()) {
             parseCommandTree();
@@ -815,9 +863,19 @@ public class PeakPluginScanner extends Module {
             return;
         }
 
-        mc.getConnection().send(
-            new ServerboundCommandSuggestionPacket(probeId, spec.query));
-        totalProbesSent++;
+        try {
+            mc.getConnection().send(new ServerboundCommandSuggestionPacket(probeId, spec.query));
+            totalProbesSent++;
+            sentProbes++;
+        } catch (Exception e) {
+            if (spec.attempts < probeRetries.get()) {
+                spec.attempts++;
+                retriedProbes++;
+                probeQueue.addLast(spec);
+            } else {
+                failedProbes++;
+            }
+        }
     }
 
     private void finishProbing() {
@@ -836,6 +894,7 @@ public class PeakPluginScanner extends Module {
         }
 
         if (showResults.get()) displayResults();
+        saveCache();
     }
 
     private void onCommandSuggestions(int id, ClientboundCommandSuggestionsPacket packet) {
@@ -1053,16 +1112,15 @@ public class PeakPluginScanner extends Module {
             var serverInfo = mc.getConnection().getServerData();
             if (serverInfo != null) {
                 if (serverInfo.ip != null) serverIp = serverInfo.ip;
-                
-                
+                if (serverInfo.version != null && (serverVersion == null || serverVersion.isEmpty())) {
+                    String v = serverInfo.version.getString();
+                    if (v != null && !v.isBlank()) serverVersion = v;
+                }
+                if (serverInfo.protocol > 0) protocolVersion = serverInfo.protocol;
             }
         } catch (Exception ignored) {}
 
-        if (protocolVersion == 0) protocolVersion = 769;
-
-        if ((serverBrand == null || serverBrand.isEmpty()) && mc.getConnection() != null) {
-
-        }
+        if (protocolVersion == 0) protocolVersion = net.minecraft.SharedConstants.getProtocolVersion();
     }
 
     private String normalizeCommandToken(String raw) {
@@ -1424,6 +1482,78 @@ public class PeakPluginScanner extends Module {
             mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Stopped. §f" + detectedPlugins.size() + " §7plugins detected."));
         }
         if (showResults.get() && !detectedPlugins.isEmpty()) displayResults();
+    }
+
+    private String currentAddress() {
+        try {
+            if (mc.getConnection() != null && mc.getConnection().getServerData() != null) {
+                String ip = mc.getConnection().getServerData().ip;
+                if (ip != null && !ip.isBlank()) return ip;
+            }
+        } catch (Exception ignored) {
+        }
+        return serverIp;
+    }
+
+    private boolean tryLoadCache() {
+        String address = currentAddress();
+        if (address == null || address.isBlank()) return false;
+
+        PeakScanCache.Entry cached = PeakScanCache.get(address);
+        if (cached == null || cached.plugins == null || cached.plugins.isEmpty()) return false;
+
+        long maxAgeMs = cacheAgeHours.get() * 3600_000L;
+        if (System.currentTimeMillis() - cached.scannedAtMs > maxAgeMs) return false;
+
+        seedFromCache(cached);
+        if (mc.player != null) {
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Loaded §f" + detectedPlugins.size()
+                + " §7plugins from cache (§f" + address + "§7). Live evidence still being collected."));
+        }
+        return true;
+    }
+
+    private void seedFromCache(PeakScanCache.Entry entry) {
+        detectedPlugins.clear();
+        for (PeakScanCache.PluginData data : entry.plugins) {
+            if (data == null || data.name == null || data.name.isBlank()) continue;
+            Confidence conf = Confidence.UNKNOWN;
+            try {
+                conf = Confidence.valueOf(data.confidence);
+            } catch (Exception ignored) {
+            }
+            DetectedPlugin dp = new DetectedPlugin(data.name, data.category, data.evidence, conf);
+            if (data.commands != null) dp.commands.addAll(data.commands);
+            detectedPlugins.put(canonicalize(data.name), dp);
+        }
+    }
+
+    private void saveCache() {
+        if (!useCache.get()) return;
+        String address = currentAddress();
+        if (address == null || address.isBlank()) return;
+
+        PeakScanCache.Entry entry = new PeakScanCache.Entry();
+        entry.address = address;
+        entry.name = address;
+        entry.brand = serverBrand == null ? "" : serverBrand;
+        entry.version = serverVersion == null ? "" : serverVersion;
+        entry.status = probing ? "IN_PROGRESS" : scanned ? "COMPLETE" : "PENDING";
+        entry.scannedAtMs = System.currentTimeMillis();
+        entry.totalProbes = totalProbesQueued;
+        entry.sentProbes = sentProbes;
+
+        for (DetectedPlugin dp : new ArrayList<>(detectedPlugins.values())) {
+            PeakScanCache.PluginData data = new PeakScanCache.PluginData();
+            data.name = dp.name;
+            data.category = dp.category;
+            data.evidence = dp.evidence;
+            data.confidence = dp.confidence.name();
+            data.commands = new ArrayList<>(dp.commands);
+            entry.plugins.add(data);
+        }
+
+        PeakScanCache.put(address, entry);
     }
 
     private static Component txt(String s) { return Component.literal(s); }
