@@ -25,7 +25,15 @@ import orbiter.commands.SetPrefixCommand;
 import orbiter.hud.CustomTextHud;
 import orbiter.hud.NearestPlayerHud;
 import orbiter.hud.RenderDistanceHud;
-import orbiter.hud.ServerInfoHud;
+import orbiter.hud.ServerAnticheatHud;
+import orbiter.hud.ServerBrandHud;
+import orbiter.hud.ServerDifficultyHud;
+import orbiter.hud.ServerIpHud;
+import orbiter.hud.ServerPluginsHud;
+import orbiter.hud.ServerProtocolHud;
+import orbiter.hud.ServerTimeHud;
+import orbiter.hud.ServerTpsHud;
+import orbiter.hud.ServerVersionHud;
 import orbiter.hud.WeaponCooldownHud;
 import orbiter.modules.render.BlockSpoof;
 import orbiter.modules.render.BossbarFlash;
@@ -187,7 +195,15 @@ public class Orbiter extends MeteorAddon {
                 hud.register(WeaponCooldownHud.INFO);
                 hud.register(RenderDistanceHud.INFO);
                 hud.register(NearestPlayerHud.INFO);
-                hud.register(ServerInfoHud.INFO);
+                hud.register(ServerTpsHud.INFO);
+                hud.register(ServerIpHud.INFO);
+                hud.register(ServerBrandHud.INFO);
+                hud.register(ServerVersionHud.INFO);
+                hud.register(ServerProtocolHud.INFO);
+                hud.register(ServerDifficultyHud.INFO);
+                hud.register(ServerTimeHud.INFO);
+                hud.register(ServerAnticheatHud.INFO);
+                hud.register(ServerPluginsHud.INFO);
             }
         } catch (Exception e) {
             LOG.warn("Failed to register HUD elements", e);

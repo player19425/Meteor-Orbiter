@@ -167,6 +167,15 @@ Everything is organized into four in-game categories:
 | **Custom Text** | Displays custom text on the HUD with placeholders. |
 | **Nearest Player** | Shows the nearest player and their distance. |
 | **Render Distance** | Shows current render distance. |
+| **Server TPS** | Shows the server's ticks per second. |
+| **Server IP** | Shows the real server IP address. |
+| **Server Brand** | Shows the server brand. |
+| **Server Version** | Shows the server version. |
+| **Server Protocol** | Shows the server protocol version. |
+| **Server Difficulty** | Shows the world difficulty. |
+| **Server Time** | Shows the in-game day and time. |
+| **Server Anticheats** | Shows detected anticheats. |
+| **Server Plugins** | Shows the detected plugin count. |
 | **Weapon Cooldown** | Shows current weapon attack cooldown in seconds. |
 
 # Building from Source
