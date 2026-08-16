@@ -1,10 +1,9 @@
 <div align="center">
-  <!-- Logo and Title -->
   <img src="src/main/resources/assets/orbiter/icon.png" alt="Orbiter logo" width="20%"/>
   <h1>Meteor Orbiter</h1>
   <p>An addon for <a href="https://meteorclient.com/">Meteor Client</a> that adds 60+ modules, custom commands, and HUD elements for anarchy, griefing, and quality of life.</p>
 
-  <!-- Badges -->
+  
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.0-orange" alt="Version"></a>
   <img src="https://img.shields.io/badge/Minecraft-26.2-blue" alt="Minecraft version">
   <img src="https://img.shields.io/badge/Java-25-green" alt="Java version">
@@ -19,7 +18,7 @@
 
 # About
 
-Orbiter is a collection of modules and tools for [Meteor Client](https://meteorclient.com/), originally built for survival, anarchy, and creative/OP play.
+Orbiter is a collection of modules and tools for [Meteor Client](https://meteorclient.com/), originally built for survival, anarchy, and creative/OP.
 
 Everything is organized into four in-game categories:
 
@@ -37,8 +36,9 @@ Everything is organized into four in-game categories:
 # Installation
 
 1. Download the latest [release](https://github.com/player19425/Meteor-Orbiter/releases) of the mod.
-2. Put the `.jar` in your `.minecraft/mods` folder.
+2. Put the `.jar` in your `.minecraft/mods` folder. (varies depending on launcher)
 3. Launch the game with Fabric and Meteor Client installed.
+4. It should be properly installed by now.
 
 # Modules:
 
@@ -97,7 +97,7 @@ Everything is organized into four in-game categories:
 | **World Edit** | Expanded client-side WorldEdit using vanilla commands. Chat: `.we <command>` |
 | **World Eraser** | Erases blocks in a radius. Enable TWICE within 10s to trigger. OP permissions required. |
 
-## Render
+## Render:
 
 | Module | Description |
 |---|---|
@@ -178,14 +178,15 @@ Everything is organized into four in-game categories:
 | **Server Plugins** | Shows the detected plugin count. |
 | **Weapon Cooldown** | Shows current weapon attack cooldown in seconds. |
 
-# Building from Source
+# Building from Source:
 
-### Prerequisites
+### Prerequisites:
 - [JDK](https://adoptium.net/temurin/releases) 25 or higher
+- Gradlew
 
-### Steps
+### Steps:
 ```bash
-git clone https://github.com/player19425/Meteor-Orbiter.git
+git clone https://github.com/player19425/Meteor-Orbiter
 cd Meteor-Orbiter
 
 ./gradlew build
@@ -201,3 +202,4 @@ The compiled JAR will be in `build/libs/`.
 # Credits
 
 - [Meteor Client](https://github.com/MeteorDevelopment/meteor-client) • the client this addon builds on
+This was made as a personal project but i felt bad to gate keep it ♥️
