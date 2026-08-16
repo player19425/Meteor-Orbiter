@@ -45,7 +45,7 @@ public class JumpA extends Module {
 
     public JumpA() {
         super(Orbiter.CATEGORY_STUPID, "jump-a",
-            "Jump over walls or reach blocks you're looking at with calculated velocity.");
+            "Jumps over walls and reaches blocks.");
     }
 
     @Override public void onActivate() {

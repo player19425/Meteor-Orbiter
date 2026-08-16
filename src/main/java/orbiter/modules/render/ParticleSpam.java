@@ -150,7 +150,7 @@ public class ParticleSpam extends CreativeSafetyModule {
 
         public ParticleSpam() {
                 super("particle-spam",
-                                "Spams /particle commands in a radius. OP required.");
+                                "Spams particles in a radius. OP required.");
         }
 
         @Override

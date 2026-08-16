@@ -138,7 +138,7 @@ public class NBTLecternCrasher extends Module {
 
     public NBTLecternCrasher() {
         super(Orbiter.CATEGORY_OP, "nbt-lectern-crasher",
-                "Creates a massive NBT book and spams lectern interactions to overload the server. Creative + OP.");
+                "Crashes servers with NBT books. Creative + OP.");
     }
 
     @Override

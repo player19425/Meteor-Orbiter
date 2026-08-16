@@ -370,7 +370,7 @@ public class PingSpoof extends Module {
     private static final long COMBAT_STATE_EXPIRY_MS = 3000;
 
     public PingSpoof() {
-        super(Orbiter.CATEGORY, "ping-spoof", "Advanced ping/movement spoof with bypass, spoof, adaptive, competitive, and dynamic adaptive modes.");
+        super(Orbiter.CATEGORY, "ping-spoof", "Spoofs your ping.");
     }
 
     @Override

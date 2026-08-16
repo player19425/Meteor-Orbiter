@@ -161,7 +161,7 @@ public class BossbarFlash extends CreativeSafetyModule {
 
     public BossbarFlash() {
         super("bossbar-flash",
-                "Rapidly creates/updates boss bars with random colors and titles. OP required.");
+                "Flash random boss bars. OP required.");
     }
 
     @Override

@@ -107,7 +107,7 @@ public class RNGSpammer extends CreativeSafetyModule {
     private int tableIndex;
 
     public RNGSpammer() {
-        super("rng-spammer", "Spawns valid loot tables around selected players. OP required.");
+        super("rng-spammer", "Spawns loot tables around players. OP.");
     }
 
     @Override

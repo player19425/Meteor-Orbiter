@@ -75,7 +75,7 @@ public class ItemInfo extends Module {
 
     public ItemInfo() {
         super(Orbiter.CATEGORY, "item-info",
-            "Adds client-side-only lore to item tooltips: durability, enchantments, components, and full NBT.");
+            "Extra info in item tooltips.");
     }
 
     public static ItemInfo get() {

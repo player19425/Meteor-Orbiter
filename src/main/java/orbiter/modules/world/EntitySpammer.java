@@ -383,7 +383,7 @@ public class EntitySpammer extends CreativeSafetyModule {
 
     public EntitySpammer() {
         super("entity-spammer",
-            "Mega entity manipulation module: spawn, fill, animate, and dominate entities. OP required.");
+            "Spawns and animates entities. OP required.");
     }
 
     @Override

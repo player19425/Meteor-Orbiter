@@ -122,7 +122,7 @@ public class ISellWand extends Module {
 
     public ISellWand() {
         super(Orbiter.CATEGORY_STUPID, "i-sell-wand",
-            "Equips a sell wand and right-clicks recorded/nearby chests on a delay to automate selling.");
+            "Auto-sells using a sell wand.");
     }
 
     @Override

@@ -42,7 +42,7 @@ public class LeaveMessage extends Module {
     private volatile boolean pendingLeave = false;
 
     public LeaveMessage() {
-        super(Orbiter.CATEGORY, "leave-message", "Intercepts close events, sends leave chat, waits, then disconnects gracefully.");
+        super(Orbiter.CATEGORY, "leave-message", "Sends a chat message before leaving.");
     }
 
     @Override

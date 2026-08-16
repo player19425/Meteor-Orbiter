@@ -57,7 +57,7 @@ public class SlimeJump extends Module {
     private boolean wasOnSlime = false;
 
     public SlimeJump() {
-        super(Orbiter.CATEGORY_STUPID, "slime-jump", "Progressive slime block bouncing. Each bounce makes you jump higher.");
+        super(Orbiter.CATEGORY_STUPID, "slime-jump", "Bounces higher on slime.");
     }
 
     @Override

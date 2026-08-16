@@ -74,7 +74,7 @@ public class Restock extends Module {
     private int timer = 0;
 
     public Restock() {
-        super(Orbiter.CATEGORY, "restock", "Fast hotbar restocking from inventory first, then open storage GUIs.");
+        super(Orbiter.CATEGORY, "restock", "Auto-restocks your hotbar.");
     }
 
     @Override

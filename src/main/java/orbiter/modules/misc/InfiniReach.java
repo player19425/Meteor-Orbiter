@@ -65,7 +65,7 @@ public class InfiniReach extends Module {
 
     public InfiniReach() {
         super(Orbiter.CATEGORY_STUPID, "infini-reach",
-            "Extended reach via OP commands or an invisible offhand item. Server validates distance.");
+            "Infinite reach.");
     }
 
     @Override

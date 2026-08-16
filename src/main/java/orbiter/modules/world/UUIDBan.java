@@ -62,7 +62,7 @@ public class UUIDBan extends Module {
 
     public UUIDBan() {
         super(Orbiter.CATEGORY_OP, "uuid-ban",
-            "Summon an entity carrying the target's UUID to lock them out of the server. Summon Command works on all versions; the spawn egg only keeps the UUID on 1.21.4 and older servers.");
+            "Locks players out with their UUID. OP.");
     }
 
     @Override

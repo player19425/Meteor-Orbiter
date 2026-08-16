@@ -273,7 +273,7 @@ public class OutOfReach extends Module {
     }
 
     public OutOfReach() {
-        super(Orbiter.CATEGORY, "out-of-reach", "Aggressively teleports you outside player reach using gamemode detection and movement prediction.");
+        super(Orbiter.CATEGORY, "out-of-reach", "Fights from outside player reach.");
     }
 
     @Override

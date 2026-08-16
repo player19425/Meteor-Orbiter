@@ -196,7 +196,7 @@ public class AutoShop extends Module {
     private final Set<BlockPos> fullChests = new HashSet<>();
 
     public AutoShop() {
-        super(Orbiter.CATEGORY, "auto-shop", "Runs the server shop sequence and deposits purchased items into nearby chests.");
+        super(Orbiter.CATEGORY, "auto-shop", "Buys from server shops automatically.");
     }
 
     @Override

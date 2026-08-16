@@ -171,7 +171,7 @@ public class ShieldAssist extends Module {
 
     public ShieldAssist() {
         super(Orbiter.CATEGORY_VANILLA, "shield-assist",
-            "Auto-blocks with shield against projectiles, melee, and special attacks. Smart release for counter-attacks.");
+            "Auto-blocks with the shield.");
     }
 
     @Override

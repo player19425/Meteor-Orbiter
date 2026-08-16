@@ -602,7 +602,7 @@ public class ServerProtect extends Module {
 
     public ServerProtect() {
         super(Orbiter.CATEGORY, "server-protect",
-            "Comprehensive anti-abuse module. Blocks crash packets, entity spam, malicious items, and more.");
+            "Blocks crash packets and malicious items.");
     }
 
     @Override

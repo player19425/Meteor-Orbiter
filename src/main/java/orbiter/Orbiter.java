@@ -40,6 +40,7 @@ import orbiter.modules.render.BossbarFlash;
 import orbiter.modules.render.Camera360;
 import orbiter.modules.render.FireworkShow;
 import orbiter.modules.render.ParticleSpam;
+import orbiter.modules.render.BlockSpam;
 import orbiter.modules.render.ParticleControl;
 import orbiter.modules.render.PlaySoundSpam;
 import orbiter.modules.render.ViewBlocks;
@@ -152,6 +153,7 @@ public class Orbiter extends MeteorAddon {
         modules.add(new NBTLecternCrasher());
         modules.add(new WorldEditModule());
         modules.add(new ParticleControl());
+        modules.add(new BlockSpam());
         modules.add(new ControlPlayer());
         modules.add(new ParticleSpam());
         modules.add(new PlaySoundSpam());

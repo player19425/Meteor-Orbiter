@@ -238,7 +238,7 @@ public class MessageFormatter extends Module {
     private long repeatTickClock = 0;
 
     public MessageFormatter() {
-        super(Orbiter.CATEGORY, "message-formatter", "Formats outgoing chat with color codes, gradients, font presets, Zalgo, and character injection.");
+        super(Orbiter.CATEGORY, "message-formatter", "Formats outgoing chat.");
         initFontTables();
     }
 

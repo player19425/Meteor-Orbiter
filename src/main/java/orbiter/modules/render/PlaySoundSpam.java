@@ -88,7 +88,7 @@ public class PlaySoundSpam extends CreativeSafetyModule {
 
     public PlaySoundSpam() {
         super("playsound-spam",
-                "Spams every sound in the game via /playsound. OP required.");
+                "Spams every sound. OP required.");
     }
 
     @Override

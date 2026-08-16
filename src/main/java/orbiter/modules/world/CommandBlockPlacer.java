@@ -115,7 +115,7 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
 
     public CommandBlockPlacer() {
         super("command-block-placer",
-                "Places command blocks with set commands. Requires Creative + OP.");
+                "Places command blocks. Creative + OP.");
     }
 
     @Override

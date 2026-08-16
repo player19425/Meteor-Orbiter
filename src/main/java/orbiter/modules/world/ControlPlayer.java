@@ -55,7 +55,7 @@ public final class ControlPlayer extends CreativeSafetyModule {
     private double angle;
 
     public ControlPlayer() {
-        super("control-player", "Uses owner-authorized OP commands to rotate selected players around you.");
+        super("control-player", "Rotates players around you. OP.");
     }
 
     @Override

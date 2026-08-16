@@ -43,7 +43,7 @@ public class AntiKnockback extends Module {
         .build());
 
     public AntiKnockback() {
-        super(Orbiter.CATEGORY, "anti-knockback", "Handles knockback only.");
+        super(Orbiter.CATEGORY, "anti-knockback", "No knockback.");
     }
 
     @EventHandler

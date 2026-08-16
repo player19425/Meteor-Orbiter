@@ -202,7 +202,7 @@ public class WorldDownloader extends Module {
 
     public WorldDownloader() {
         super(Orbiter.CATEGORY_OP, "world-downloader",
-            "Saves chunks, containers, and entities from any server to a local Minecraft world.");
+            "Saves the server world locally.");
     }
 
     @Override

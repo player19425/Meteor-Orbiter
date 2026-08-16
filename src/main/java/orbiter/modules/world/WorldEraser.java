@@ -199,7 +199,7 @@ public class WorldEraser extends CreativeSafetyModule {
 
     public WorldEraser() {
         super("world-eraser",
-                "Erases blocks in a radius. Enable TWICE within 10s to trigger. OP permissions required.");
+                "Erases blocks in a radius. Toggle twice to trigger. OP.");
     }
 
     @Override

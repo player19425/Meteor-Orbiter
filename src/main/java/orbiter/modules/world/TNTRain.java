@@ -204,7 +204,7 @@ public class TNTRain extends CreativeSafetyModule {
 
     public TNTRain() {
         super("tnt-rain",
-                "Spawns TNT falling from the sky in a radius. OP required.");
+                "Rain of TNT. OP.");
     }
 
     @Override

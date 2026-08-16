@@ -185,7 +185,7 @@ public class WorldEditModule extends CreativeSafetyModule {
     private boolean warnedInvalidToolItem = false;
 
     public WorldEditModule() {
-        super("world-edit", "Expanded client-side WorldEdit using vanilla commands. Chat: .we <command>");
+        super("world-edit", "Client-side WorldEdit. .we <command>");
     }
 
     @Override

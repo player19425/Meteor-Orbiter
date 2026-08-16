@@ -155,7 +155,7 @@ public class ViewBlocks extends Module {
     );
 
     public ViewBlocks() {
-        super(Orbiter.CATEGORY, "view-blocks", "ESP for invisible and custom blocks with chunk-based scanning.");
+        super(Orbiter.CATEGORY, "view-blocks", "ESP for invisible blocks.");
     }
 
     @Override public void onActivate() { reset(); }

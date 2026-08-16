@@ -40,7 +40,7 @@ public class AntiPush extends Module {
         .build());
 
     public AntiPush() {
-        super(Orbiter.CATEGORY, "anti-push", "Stops fluid and entity push only.");
+        super(Orbiter.CATEGORY, "anti-push", "Stops fluid and entity push.");
     }
 
     public boolean shouldBlock(TagKey<Fluid> fluidTag) {

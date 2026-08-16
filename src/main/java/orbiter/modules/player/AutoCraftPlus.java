@@ -183,7 +183,7 @@ public class AutoCraftPlus extends Module {
 
     public AutoCraftPlus() {
         super(Orbiter.CATEGORY, "auto-craft-plus",
-            "Automatically crafts items at max speed. Configure the recipe, enable, and watch it go.");
+            "Auto-crafts items at max speed.");
     }
 
     @Override

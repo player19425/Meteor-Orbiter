@@ -53,7 +53,7 @@ public class ClientSideMine extends Module {
     private int teleportCooldown = 0;
 
     public ClientSideMine() {
-        super(Orbiter.CATEGORY, "client-side-mine", "Instantly breaks blocks client-side with anti-rubber-band to stay in the hole you dug. Commands: .csm reset, .csm sync");
+        super(Orbiter.CATEGORY, "client-side-mine", "Instantly breaks blocks client-side.");
     }
 
     @Override

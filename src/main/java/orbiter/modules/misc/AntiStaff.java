@@ -255,7 +255,7 @@ public class AntiStaff extends Module {
 
     public AntiStaff() {
         super(Orbiter.CATEGORY, "anti-staff",
-            "Detects staff, watched players, and spectators via tab, chat, proximity. Auto-leaves, sends commands, toggles modules.");
+            "Detects staff and auto-leaves.");
     }
 
     @Override

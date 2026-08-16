@@ -285,7 +285,7 @@ public class BowAssist extends Module {
 
     public BowAssist() {
         super(Orbiter.CATEGORY_VANILLA, "bow-assist",
-            "Aims the bow with accurate projectile physics, movement prediction, and auto-fire support.");
+            "Auto-aims the bow.");
     }
 
     @Override

@@ -283,7 +283,7 @@ public class FireworkShow extends CreativeSafetyModule {
 
     public FireworkShow() {
         super("firework-show",
-                "Launch choreographed firework shows with customizable shapes, colors, and patterns.");
+                "Firework shows with shapes and colors.");
     }
 
     @Override

@@ -41,7 +41,7 @@ public final class BeaconOptimizer extends Module {
 
     public BeaconOptimizer() {
         super(Orbiter.CATEGORY, "beacon-optimizer",
-            "Reduces beacon animation-state churn without hiding visible beacon beams.");
+            "Reduces beacon lag.");
     }
 
     public float quantizeTickProgress(float tickProgress) {

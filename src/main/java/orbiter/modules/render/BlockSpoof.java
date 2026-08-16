@@ -364,7 +364,7 @@ public class BlockSpoof extends Module {
 
     public BlockSpoof() {
         super(Orbiter.CATEGORY, "block-spoof",
-            "Replace block textures/models client-side for visual deception.");
+            "Spoofs block textures client-side.");
     }
 
     @Override

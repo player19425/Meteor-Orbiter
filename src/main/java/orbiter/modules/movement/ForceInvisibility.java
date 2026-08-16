@@ -243,7 +243,7 @@ extends Module {
     private boolean packetEntityIdLookupFailed;
 
     public ForceInvisibility() {
-        super(Orbiter.CATEGORY, "force-invisibility", "Spoofs server Y and only drops to real Y when needed.");
+        super(Orbiter.CATEGORY, "force-invisibility", "Server-side invisibility.");
         this.sgGeneral = this.settings.getDefaultGroup();
         this.sgActions = this.settings.createGroup("Actions");
         this.sgEscape = this.settings.createGroup("Escape");

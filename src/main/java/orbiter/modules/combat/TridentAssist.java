@@ -279,7 +279,7 @@ public class TridentAssist extends Module {
 
     public TridentAssist() {
         super(Orbiter.CATEGORY_VANILLA, "trident-assist",
-            "Aims and throws the trident with projectile physics, enchantment detection, and melee fallback.");
+            "Auto-aims and throws the trident.");
     }
 
     @Override

@@ -81,7 +81,7 @@ public class PrecisionShot extends Module {
     private AimSolution cachedPreviewAim = null;
 
     public PrecisionShot() {
-        super(Orbiter.CATEGORY_WIP, "precision-shot", "Silent aim: moves the camera server-side so projectiles hit the block or entity you point at.");
+        super(Orbiter.CATEGORY_WIP, "precision-shot", "Silent aim at your crosshair.");
     }
 
     @Override

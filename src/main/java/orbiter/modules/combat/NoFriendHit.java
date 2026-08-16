@@ -47,7 +47,7 @@ public class NoFriendHit extends Module {
     private boolean packetTypeLookupFailed = false;
 
     public NoFriendHit() {
-        super(Orbiter.CATEGORY, "no-friend-hit", "Prevents attacking Meteor friends.");
+        super(Orbiter.CATEGORY, "no-friend-hit", "Don't hit Meteor friends.");
     }
 
     @EventHandler

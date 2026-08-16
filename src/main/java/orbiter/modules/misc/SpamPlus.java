@@ -234,7 +234,7 @@ public class SpamPlus extends Module {
     private final Random rng = new Random();
 
     public SpamPlus() {
-        super(Orbiter.CATEGORY_STUPID, "spam-plus", "Spam module with letter ladder and auto-split features.");
+        super(Orbiter.CATEGORY_STUPID, "spam-plus", "Chat spam with letter ladders.");
     }
 
     @Override

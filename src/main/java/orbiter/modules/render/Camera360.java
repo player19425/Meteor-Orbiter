@@ -34,7 +34,7 @@ public class Camera360 extends Module {
     private int syncTicks = 0;
 
     public Camera360() {
-        super(Orbiter.CATEGORY_STUPID, "360-camera", "Removes camera rotation limits for full 360°+ movement.");
+        super(Orbiter.CATEGORY_STUPID, "360-camera", "Unlimited camera rotation.");
     }
 
     @Override

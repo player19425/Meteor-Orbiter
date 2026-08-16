@@ -289,7 +289,7 @@ public class AimAssistPlus extends Module {
 
     public AimAssistPlus() {
         super(Orbiter.CATEGORY_VANILLA, "aim-assist-plus",
-                "Enhanced aim assist with prediction, sticky aim, humanization, and advanced filtering.");
+                "Aim assist with prediction.");
     }
 
     @Override

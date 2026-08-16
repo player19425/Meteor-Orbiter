@@ -216,7 +216,7 @@ public class SpearAssist extends Module {
 
     public SpearAssist() {
         super(Orbiter.CATEGORY_VANILLA, "spear-assist",
-            "Melee assist tuned for close-range combat. Supports jab attacks, charge attacks, and combo alternation.");
+            "Melee assist for close combat.");
     }
 
     @Override

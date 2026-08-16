@@ -124,7 +124,7 @@ public class AutoFarming extends Module {
     private final Deque<PendingReplant> replantQueue = new ArrayDeque<>();
 
     public AutoFarming() {
-        super(Orbiter.CATEGORY, "auto-farming", "Harvests crops/cactus/sugarcane/bamboo, breeds animals, applies bonemeal and replants with delay.");
+        super(Orbiter.CATEGORY, "auto-farming", "Auto-farms crops and animals.");
     }
 
     @Override

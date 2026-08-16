@@ -562,7 +562,7 @@ public class PeakPluginScanner extends Module {
 
     public PeakPluginScanner() {
         super(Orbiter.CATEGORY, "peak-plugin-scanner",
-            "Detects server plugins via command tree analysis, systematic probing, namespace/help probing, and channel fingerprinting.");
+            "Detects server plugins.");
     }
 
     @Override

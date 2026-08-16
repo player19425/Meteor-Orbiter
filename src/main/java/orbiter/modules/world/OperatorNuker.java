@@ -95,7 +95,7 @@ public class OperatorNuker extends CreativeSafetyModule {
 
     public OperatorNuker() {
         super("operator-nuker",
-                "Nuke blocks using /fill or /setblock commands. Requires OP permissions.");
+                "Nukes blocks with /fill. OP.");
     }
 
     @Override

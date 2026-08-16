@@ -415,7 +415,7 @@ public class Actions extends Module {
     }
 
     public Actions() {
-        super(Orbiter.CATEGORY, "actions", "Reactive trigger/action system with module toggles, commands, chat, disconnect, and conditional logic.");
+        super(Orbiter.CATEGORY, "actions", "Reactive triggers and actions.");
     }
 
     @Override

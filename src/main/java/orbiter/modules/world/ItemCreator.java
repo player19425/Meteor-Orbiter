@@ -385,7 +385,7 @@ public class ItemCreator extends CreativeSafetyModule {
 
         public ItemCreator() {
                 super("item-creator",
-                                "Create custom items with names, enchants, attributes, and entity NBT. Creative only.");
+                                "Creates custom items. Creative only.");
         }
 
         @Override

@@ -227,7 +227,7 @@ public class ItemStealer extends Module {
 
     public ItemStealer() {
         super(Orbiter.CATEGORY, "item-stealer",
-            "Clone items with pick-block (no server packet), bypass trades, auto-steal GUIs, and persist items to disk.");
+            "Steals items from GUIs.");
     }
 
     public static ItemStealer get() {

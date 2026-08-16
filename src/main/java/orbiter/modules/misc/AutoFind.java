@@ -406,7 +406,7 @@ public class AutoFind extends Module {
     private static final Color STORAGE_OTHER_LINE = new Color(150, 150, 150, 200);
 
     public AutoFind() {
-        super(Orbiter.CATEGORY, "auto-find", "Scan for stashes, bases, and storage. Level-wrapping flight scanner.");
+        super(Orbiter.CATEGORY, "auto-find", "Scans for stashes and bases.");
     }
 
     @Override

@@ -219,7 +219,7 @@ public class CrossbowAssist extends Module {
 
     public CrossbowAssist() {
         super(Orbiter.CATEGORY_VANILLA, "crossbow-assist",
-            "Aims a loaded crossbow with projectile physics, movement prediction, and auto-fire.");
+            "Auto-aims the crossbow.");
     }
 
     @Override

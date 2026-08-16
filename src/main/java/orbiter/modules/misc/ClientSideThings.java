@@ -604,7 +604,7 @@ public class ClientSideThings extends Module {
 
     public ClientSideThings() {
         super(Orbiter.CATEGORY, "client-side-things",
-            "Local visual spoof system for HUD, inventory, weather, equipment, overlays, fog, crosshair, and bossbar.");
+            "Local visual spoofs.");
     }
 
     @Override

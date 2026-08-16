@@ -128,7 +128,7 @@ public class AutoClutch extends Module {
 
     public AutoClutch() {
         super(Orbiter.CATEGORY_VANILLA, "auto-clutch",
-            "Automatically clutches to prevent fall damage using blocks, boats, water, or any fall-canceling item.");
+            "Auto-clutch to avoid fall damage.");
     }
 
     @Override

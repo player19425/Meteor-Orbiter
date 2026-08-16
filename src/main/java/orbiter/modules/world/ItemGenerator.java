@@ -247,7 +247,7 @@ public class ItemGenerator extends Module {
 
     public ItemGenerator() {
         super(Orbiter.CATEGORY_OP, "item-generator",
-                "Spawns random or specific items with optional random enchants/attributes. Requires Creative mode.");
+                "Spawns items with random enchants. Creative.");
     }
 
     @Override

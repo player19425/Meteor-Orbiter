@@ -119,7 +119,7 @@ public final class ParticleControl extends CreativeSafetyModule {
     private int tickCounter;
 
     public ParticleControl() {
-        super("particle-control", "Creates optimized rotating particle shapes around selected players with OP /particle commands.");
+        super("particle-control", "Particle shapes around a target.");
     }
 
     @Override

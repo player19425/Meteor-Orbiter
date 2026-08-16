@@ -141,7 +141,7 @@ public class MaceAssist extends Module {
     private boolean weToggledNoFall = false;
 
     public MaceAssist() {
-        super(Orbiter.CATEGORY_VANILLA, "mace-assist", "Auto-aim and strike with the Mace. Elytra swapping for critical hits on landing.");
+        super(Orbiter.CATEGORY_VANILLA, "mace-assist", "Auto-aim and strike with the Mace.");
     }
 
     @Override
