@@ -2,22 +2,23 @@ package orbiter.commands;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
-import net.minecraft.command.CommandSource;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.AttributeModifierSlot;
-import net.minecraft.component.type.AttributeModifiersComponent;
-import net.minecraft.component.type.LoreComponent;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.TypedEntityData;
-import net.minecraft.entity.attribute.EntityAttributeModifier;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.entity.EquipmentSlotGroup;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.item.component.ItemLore;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.item.component.TypedEntityData;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
+import net.minecraft.resources.Identifier;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import orbiter.mixin.OrbiterMixinPlugin;
 import orbiter.modules.misc.ServerProtect;
@@ -32,7 +33,7 @@ public class VerifyProtectCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.executes(context -> {
             if (mc.player == null) return SINGLE_SUCCESS;
 
@@ -77,8 +78,8 @@ public class VerifyProtectCommand extends Command {
 
             total++;
             ItemStack clean = new ItemStack(Items.DIAMOND, 1);
-            clean.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Diamond").setStyle(
-                Style.EMPTY.withColor(Formatting.AQUA)));
+            clean.set(DataComponents.CUSTOM_NAME, Component.literal("Diamond").setStyle(
+                Style.EMPTY.withColor(ChatFormatting.AQUA)));
             if (!orbiter.modules.misc.ServerProtect.isMaliciousItem(clean)) {
                 info("\u00a7a[PASS] \u00a77Clean item not falsely flagged");
                 passed++;
@@ -117,7 +118,7 @@ public class VerifyProtectCommand extends Command {
             ItemStack safeEgg = makeSafeSpawnEgg();
             String before = itemFingerprint(safeEgg);
             boolean malicious = ServerProtect.isMaliciousItem(safeEgg);
-            java.util.List<Text> safeTooltip = ServerProtect.createSafeItemTooltip(safeEgg);
+            java.util.List<Component> safeTooltip = ServerProtect.createSafeItemTooltip(safeEgg);
             String after = itemFingerprint(safeEgg);
             if (!malicious && safeTooltip.isEmpty() && before.equals(after)) {
                 info("§a[PASS] §7Safe custom spawn egg accepted without mutation");
@@ -129,8 +130,8 @@ public class VerifyProtectCommand extends Command {
             total++;
             ItemStack immutableBomb = makeTranslateBombEgg();
             String bombBefore = itemFingerprint(immutableBomb);
-            java.util.List<Text> replacement = ServerProtect.createSafeItemTooltip(immutableBomb);
-            Text replacementName = ServerProtect.createSafeItemName(immutableBomb);
+            java.util.List<Component> replacement = ServerProtect.createSafeItemTooltip(immutableBomb);
+            Component replacementName = ServerProtect.createSafeItemName(immutableBomb);
             String bombAfter = itemFingerprint(immutableBomb);
             if (!replacement.isEmpty() && replacementName != null && bombBefore.equals(bombAfter)) {
                 info("§a[PASS] §7Unsafe item hidden client-side without source mutation");
@@ -151,31 +152,31 @@ public class VerifyProtectCommand extends Command {
 
     private ItemStack makeTranslateBombEgg() {
         ItemStack egg = new ItemStack(Items.CAVE_SPIDER_SPAWN_EGG, 1);
-        egg.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Tesla's ICBM").setStyle(
+        egg.set(DataComponents.CUSTOM_NAME, Component.literal("Tesla's ICBM").setStyle(
             Style.EMPTY.withColor(0x8219F3)));
 
-        Text inner = Text.translatable("%1$s%1$s%1$s%1$s%1$s%1$s%1$s%1$s%1$s%1$s", "x");
-        Text mid = Text.translatable("%1$s%1$s%1$s%1$s%1$s%1$s%1$s%1$s%1$s%1$s", inner);
-        Text outer = Text.translatable("%1$s%1$s%1$s%1$s%1$s%1$s%1$s", mid);
-        egg.set(DataComponentTypes.CUSTOM_NAME, outer);
+        Component inner = Component.translatable("%1$s%1$s%1$s%1$s%1$s%1$s%1$s%1$s%1$s%1$s", "x");
+        Component mid = Component.translatable("%1$s%1$s%1$s%1$s%1$s%1$s%1$s%1$s%1$s%1$s", inner);
+        Component outer = Component.translatable("%1$s%1$s%1$s%1$s%1$s%1$s%1$s", mid);
+        egg.set(DataComponents.CUSTOM_NAME, outer);
         return egg;
     }
 
     private ItemStack makeVariantTranslateEgg() {
         ItemStack egg = new ItemStack(Items.EGG, 1);
-        Text inner = Text.translatable("%2$s%2$s%2$s%2$s%2$s%2$s%2$s%2$s%2$s%2$s", "a", "b");
-        Text outer = Text.translatable("%2$s%2$s%2$s%2$s%2$s%2$s%2$s", "a", inner);
-        egg.set(DataComponentTypes.CUSTOM_NAME, outer);
+        Component inner = Component.translatable("%2$s%2$s%2$s%2$s%2$s%2$s%2$s%2$s%2$s%2$s", "a", "b");
+        Component outer = Component.translatable("%2$s%2$s%2$s%2$s%2$s%2$s%2$s", "a", inner);
+        egg.set(DataComponents.CUSTOM_NAME, outer);
         return egg;
     }
 
     private ItemStack makeInfinityEgg() {
         ItemStack egg = new ItemStack(Items.CAVE_SPIDER_SPAWN_EGG, 1);
-        NbtCompound nbt = new NbtCompound();
+        CompoundTag nbt = new CompoundTag();
         nbt.putDouble("AbsorptionAmount", Double.POSITIVE_INFINITY);
         nbt.putString("id", "minecraft:cave_spider");
-        TypedEntityData<EntityType<?>> data = TypedEntityData.create(EntityType.CAVE_SPIDER, nbt);
-        egg.set(DataComponentTypes.ENTITY_DATA, data);
+        TypedEntityData<EntityType<?>> data = TypedEntityData.of(EntityTypes.CAVE_SPIDER, nbt);
+        egg.set(DataComponents.ENTITY_DATA, data);
         return egg;
     }
 
@@ -183,56 +184,56 @@ public class VerifyProtectCommand extends Command {
         ItemStack item = new ItemStack(Items.STICK, 1);
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 80; i++) sb.append("\u00A7k\u2588");
-        Text line = Text.literal(sb.toString()).setStyle(Style.EMPTY.withObfuscated(true));
-        item.set(DataComponentTypes.LORE, new LoreComponent(List.of(line)));
+        Component line = Component.literal(sb.toString()).setStyle(Style.EMPTY.withObfuscated(true));
+        item.set(DataComponents.LORE, new ItemLore(List.of(line)));
         return item;
     }
 
     private ItemStack makeElderGuardianEgg() {
         ItemStack egg = new ItemStack(Items.ELDER_GUARDIAN_SPAWN_EGG, 64);
-        egg.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Laggy Jumpscare").setStyle(
-            Style.EMPTY.withColor(Formatting.DARK_RED).withBold(true)));
-        NbtCompound nbt = new NbtCompound();
+        egg.set(DataComponents.CUSTOM_NAME, Component.literal("Laggy Jumpscare").setStyle(
+            Style.EMPTY.withColor(ChatFormatting.DARK_RED).withBold(true)));
+        CompoundTag nbt = new CompoundTag();
         nbt.putString("id", "minecraft:area_effect_cloud");
         nbt.putInt("Duration", 2147483627);
         nbt.putDouble("Radius", Double.POSITIVE_INFINITY);
         nbt.putInt("ReapplicationDelay", 1);
-        NbtCompound particle = new NbtCompound();
+        CompoundTag particle = new CompoundTag();
         particle.putString("type", "minecraft:elder_guardian");
         nbt.put("Particle", particle);
-        TypedEntityData<EntityType<?>> data = TypedEntityData.create(EntityType.CAVE_SPIDER, nbt);
-        egg.set(DataComponentTypes.ENTITY_DATA, data);
+        TypedEntityData<EntityType<?>> data = TypedEntityData.of(EntityTypes.CAVE_SPIDER, nbt);
+        egg.set(DataComponents.ENTITY_DATA, data);
 
-        AttributeModifiersComponent.Builder attrs = AttributeModifiersComponent.builder();
-        attrs.add(EntityAttributes.BLOCK_INTERACTION_RANGE,
-            new EntityAttributeModifier(Identifier.of("itemeditor", "generated/0"),
-                2.147483627e9, EntityAttributeModifier.Operation.ADD_VALUE),
-            AttributeModifierSlot.MAINHAND);
-        egg.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, attrs.build());
+        ItemAttributeModifiers.Builder attrs = ItemAttributeModifiers.builder();
+        attrs.add(Attributes.BLOCK_INTERACTION_RANGE,
+            new AttributeModifier(Identifier.fromNamespaceAndPath("itemeditor", "generated/0"),
+                2.147483627e9, AttributeModifier.Operation.ADD_VALUE),
+            EquipmentSlotGroup.MAINHAND);
+        egg.set(DataComponents.ATTRIBUTE_MODIFIERS, attrs.build());
         return egg;
     }
 
     private ItemStack makeExtremeAttributeItem() {
         ItemStack item = new ItemStack(Items.STICK, 1);
-        item.set(DataComponentTypes.CUSTOM_NAME, Text.literal("Extreme Stick").setStyle(
-            Style.EMPTY.withColor(Formatting.RED)));
-        AttributeModifiersComponent.Builder attrs = AttributeModifiersComponent.builder();
-        attrs.add(EntityAttributes.BLOCK_INTERACTION_RANGE,
-            new EntityAttributeModifier(Identifier.of("test", "extreme"),
-                2.147483627e9, EntityAttributeModifier.Operation.ADD_VALUE),
-            AttributeModifierSlot.MAINHAND);
-        item.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, attrs.build());
+        item.set(DataComponents.CUSTOM_NAME, Component.literal("Extreme Stick").setStyle(
+            Style.EMPTY.withColor(ChatFormatting.RED)));
+        ItemAttributeModifiers.Builder attrs = ItemAttributeModifiers.builder();
+        attrs.add(Attributes.BLOCK_INTERACTION_RANGE,
+            new AttributeModifier(Identifier.fromNamespaceAndPath("test", "extreme"),
+                2.147483627e9, AttributeModifier.Operation.ADD_VALUE),
+            EquipmentSlotGroup.MAINHAND);
+        item.set(DataComponents.ATTRIBUTE_MODIFIERS, attrs.build());
         return item;
     }
 
     private ItemStack makeSafeSpawnEgg() {
         ItemStack egg = new ItemStack(Items.ZOMBIE_SPAWN_EGG, 1);
-        NbtCompound nbt = new NbtCompound();
+        CompoundTag nbt = new CompoundTag();
         nbt.putString("id", "minecraft:zombie");
         nbt.putFloat("Health", 20.0f);
         nbt.putBoolean("NoAI", true);
         nbt.putBoolean("Glowing", true);
-        egg.set(DataComponentTypes.ENTITY_DATA, TypedEntityData.create(EntityType.ZOMBIE, nbt));
+        egg.set(DataComponents.ENTITY_DATA, TypedEntityData.of(EntityTypes.ZOMBIE, nbt));
         return egg;
     }
 

@@ -7,49 +7,53 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DynamicOps;
-import net.minecraft.advancement.AdvancementEntry;
-import net.minecraft.advancement.AdvancementProgress;
-import net.minecraft.advancement.criterion.CriterionProgress;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.client.network.ClientAdvancementManager;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
+import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.advancements.Advancement;
+import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.advancements.AdvancementProgress;
+import net.minecraft.advancements.CriterionProgress;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.entity.EntityTypeTest;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.client.multiplayer.ClientAdvancements;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtList;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
-import net.minecraft.nbt.NbtSizeTracker;
-import net.minecraft.network.packet.s2c.play.AdvancementUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.StatisticsS2CPacket;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.registry.entry.RegistryElementCodec;
-import net.minecraft.stat.Stat;
-import net.minecraft.storage.NbtWriteView;
-import net.minecraft.text.Text;
-import net.minecraft.text.TextCodecs;
-import net.minecraft.util.ErrorReporter;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.collection.DefaultedList;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.biome.Biome;
-import net.minecraft.world.biome.BiomeKeys;
-import net.minecraft.world.chunk.ChunkSection;
-import net.minecraft.world.chunk.PalettedContainer;
-import net.minecraft.world.chunk.PaletteProvider;
-import net.minecraft.world.chunk.ReadableContainer;
-import net.minecraft.world.chunk.WorldChunk;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.network.protocol.game.ClientboundUpdateAdvancementsPacket;
+import net.minecraft.network.protocol.game.ClientboundAwardStatsPacket;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.core.Holder;
+
+import net.minecraft.stats.Stat;
+import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
+import net.minecraft.util.ProblemReporter;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.RegistryOps;
+import net.minecraft.core.NonNullList;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.chunk.Strategy;
+import net.minecraft.world.level.chunk.PalettedContainerRO;
+import net.minecraft.world.level.chunk.LevelChunk;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -81,13 +85,13 @@ public class SwdSaveManager implements AutoCloseable {
     public volatile boolean isSaving = false;
     public Object lastClicked = null;
 
-    private final net.minecraft.client.MinecraftClient mc;
-    private final DynamicOps<NbtElement> ops;
+    private final net.minecraft.client.Minecraft mc;
+    private final DynamicOps<Tag> ops;
     private final SwdRegionStorage regionStorage;
     private final Path regionDir;
     private final Map<BlockPos, List<ItemStack>> blockInventoryCache = new HashMap<>();
     private final Map<UUID, List<ItemStack>> entityInventoryCache = new HashMap<>();
-    private final Map<UUID, NbtCompound> entityOverrideCache = new HashMap<>();
+    private final Map<UUID, CompoundTag> entityOverrideCache = new HashMap<>();
     private final Map<UUID, List<ItemStack>> enderChestCache = new HashMap<>();
 
     private ExecutorService diskWorker;
@@ -110,14 +114,14 @@ public class SwdSaveManager implements AutoCloseable {
     private long lastMetaFlushTimeMs;
     private UUID cachePlayerUuid;
 
-    public SwdSaveManager(net.minecraft.client.MinecraftClient mc, Path path) {
+    public SwdSaveManager(net.minecraft.client.Minecraft mc, Path path) {
         this.mc = mc;
         this.path = path;
-        this.ops = mc.world != null
-            ? mc.world.getRegistryManager().getOps(NbtOps.INSTANCE)
+        this.ops = mc.level != null
+            ? RegistryOps.create(NbtOps.INSTANCE, mc.level.registryAccess())
             : NbtOps.INSTANCE;
         this.regionDir = path.resolve("region");
-        this.regionStorage = new SwdRegionStorage(regionDir, mc.world != null ? mc.world.getRegistryKey() : net.minecraft.world.World.OVERWORLD);
+        this.regionStorage = new SwdRegionStorage(regionDir, mc.level != null ? mc.level.dimension() : net.minecraft.world.level.Level.OVERWORLD);
     }
 
     public void start(String name) {
@@ -135,7 +139,7 @@ public class SwdSaveManager implements AutoCloseable {
         statsDirty = false;
         advancementsDirty = false;
         lastMetaFlushTimeMs = 0L;
-        cachePlayerUuid = mc.player != null ? mc.player.getUuid() : null;
+        cachePlayerUuid = mc.player != null ? mc.player.getUUID() : null;
         try {
             Files.createDirectories(path);
             Files.createDirectories(regionDir);
@@ -148,8 +152,8 @@ public class SwdSaveManager implements AutoCloseable {
     }
 
     private void saveServerIcon() {
-        if (mc.getCurrentServerEntry() == null) return;
-        byte[] icon = mc.getCurrentServerEntry().getFavicon();
+        if (mc.getCurrentServer() == null) return;
+        byte[] icon = null;
         if (icon == null || icon.length == 0) return;
         try {
             Files.write(path.resolve("icon.png"), icon);
@@ -184,7 +188,7 @@ public class SwdSaveManager implements AutoCloseable {
 
     private void createLevelDat(String name) throws IOException {
         Files.createDirectories(path);
-        NbtCompound data = new NbtCompound();
+        CompoundTag data = new CompoundTag();
 
         data.putInt("DataVersion", DATA_VERSION);
         data.putString("LevelName", name);
@@ -194,7 +198,7 @@ public class SwdSaveManager implements AutoCloseable {
         data.putByte("initialized", (byte) 1);
         data.putByte("allowCommands", (byte) 1);
 
-        NbtCompound difficulty = new NbtCompound();
+        CompoundTag difficulty = new CompoundTag();
         difficulty.putString("difficulty", "normal");
         difficulty.putByte("hardcore", (byte) 0);
         difficulty.putByte("locked", (byte) 0);
@@ -203,58 +207,58 @@ public class SwdSaveManager implements AutoCloseable {
         data.putLong("Time", 0L);
         data.putLong("DayTime", 0L);
 
-        NbtCompound spawn = new NbtCompound();
+        CompoundTag spawn = new CompoundTag();
         spawn.putFloat("pitch", 0);
         spawn.putFloat("yaw", 0);
         spawn.putString("dimension", "minecraft:overworld");
         spawn.putIntArray("pos", new int[]{
-            mc.player != null ? mc.player.getBlockPos().getX() : 0,
-            mc.player != null ? mc.player.getBlockPos().getY() : 64,
-            mc.player != null ? mc.player.getBlockPos().getZ() : 0
+            mc.player != null ? mc.player.blockPosition().getX() : 0,
+            mc.player != null ? mc.player.blockPosition().getY() : 64,
+            mc.player != null ? mc.player.blockPosition().getZ() : 0
         });
         data.put("spawn", spawn);
 
-        NbtCompound version = new NbtCompound();
+        CompoundTag version = new CompoundTag();
         version.putString("Name", "1.21.11");
         version.putInt("Id", DATA_VERSION);
         version.putString("Series", "main");
         version.putByte("Snapshot", (byte) 0);
         data.put("Version", version);
 
-        NbtCompound dragonFight = new NbtCompound();
+        CompoundTag dragonFight = new CompoundTag();
         dragonFight.putByte("DragonKilled", (byte) 1);
         dragonFight.putByte("DragonPreviouslyKilled", (byte) 1);
-        dragonFight.put("EndGatewayList", new NbtList());
+        dragonFight.put("EndGatewayList", new ListTag());
         dragonFight.putIntArray("ExitPortalLocation", new int[]{0, 64, 0});
-        dragonFight.put("Gateways", new NbtList());
+        dragonFight.put("Gateways", new ListTag());
         data.put("DragonFight", dragonFight);
 
-        NbtCompound gameRules = new NbtCompound();
+        CompoundTag gameRules = new CompoundTag();
         gameRules.putByte("minecraft:do_daylight_cycle", (byte) 1);
         gameRules.putByte("minecraft:do_weather_cycle", (byte) 1);
         gameRules.putInt("minecraft:random_tick_speed", 0);
         data.put("game_rules", gameRules);
 
-        NbtCompound dataPacks = new NbtCompound();
-        NbtList enabled = new NbtList();
-        enabled.add(net.minecraft.nbt.NbtString.of("vanilla"));
+        CompoundTag dataPacks = new CompoundTag();
+        ListTag enabled = new ListTag();
+        enabled.add(net.minecraft.nbt.StringTag.valueOf("vanilla"));
         dataPacks.put("Enabled", enabled);
-        NbtList disabled = new NbtList();
+        ListTag disabled = new ListTag();
         dataPacks.put("Disabled", disabled);
         data.put("DataPacks", dataPacks);
 
-        NbtCompound worldGenSettings = new NbtCompound();
+        CompoundTag worldGenSettings = new CompoundTag();
         worldGenSettings.putByte("bonus_chest", (byte) 0);
         worldGenSettings.putByte("generate_structures", (byte) 0);
         worldGenSettings.putLong("seed", 0L);
-        NbtCompound dimensions = new NbtCompound();
+        CompoundTag dimensions = new CompoundTag();
         dimensions.put("minecraft:overworld", createDimensionEntry("minecraft:overworld", "minecraft:plains"));
         dimensions.put("minecraft:the_nether", createDimensionEntry("minecraft:the_nether", "minecraft:the_nether"));
         dimensions.put("minecraft:the_end", createDimensionEntry("minecraft:the_end", "minecraft:the_end"));
         worldGenSettings.put("dimensions", dimensions);
         data.put("WorldGenSettings", worldGenSettings);
 
-        NbtCompound root = new NbtCompound();
+        CompoundTag root = new CompoundTag();
         root.put("Data", data);
         NbtIo.writeCompressed(root, path.resolve("level.dat"));
 
@@ -263,32 +267,32 @@ public class SwdSaveManager implements AutoCloseable {
         Files.write(path.resolve("session.lock"), buf.array());
     }
 
-    private NbtCompound createDimensionEntry(String type, String biome) {
-        NbtCompound dim = new NbtCompound();
+    private CompoundTag createDimensionEntry(String type, String biome) {
+        CompoundTag dim = new CompoundTag();
         dim.putString("type", type);
 
-        NbtCompound generator = new NbtCompound();
+        CompoundTag generator = new CompoundTag();
         generator.putString("type", "minecraft:flat");
 
-        NbtCompound settings = new NbtCompound();
+        CompoundTag settings = new CompoundTag();
         settings.putByte("features", (byte) 0);
         settings.putString("biome", biome);
-        settings.put("layers", new NbtList());
+        settings.put("layers", new ListTag());
         settings.putByte("lakes", (byte) 0);
-        settings.put("structure_overrides", new NbtList());
+        settings.put("structure_overrides", new ListTag());
         generator.put("settings", settings);
 
         dim.put("generator", generator);
         return dim;
     }
 
-    public void saveChunk(WorldChunk chunk) {
+    public void saveChunk(LevelChunk chunk) {
         if (!isSaving || chunk == null) return;
 
-        if (mc.world == null) return;
+        if (mc.level == null) return;
         try {
 
-            final NbtCompound nbt = buildChunkNbt(chunk);
+            final CompoundTag nbt = buildChunkNbt(chunk);
             if (nbt == null) return;
             final ChunkPos pos = chunk.getPos();
             submitDiskWrite(() -> {
@@ -304,21 +308,21 @@ public class SwdSaveManager implements AutoCloseable {
     }
 
     public void saveChunkAt(BlockPos pos) {
-        if (mc.world == null) return;
-        WorldChunk chunk = mc.world.getChunkManager().getWorldChunk(pos.getX() >> 4, pos.getZ() >> 4);
+        if (mc.level == null) return;
+        LevelChunk chunk = mc.level.getChunkSource().getChunk(pos.getX() >> 4, pos.getZ() >> 4, false);
         if (chunk != null) saveChunk(chunk);
     }
 
-    public void saveEntitiesForChunk(WorldChunk chunk) {
+    public void saveEntitiesForChunk(LevelChunk chunk) {
         if (!isSaving || chunk == null) return;
-        if (mc.world == null) return;
+        if (mc.level == null) return;
         try {
 
-            final NbtList entityList = buildEntityListSnapshot(chunk);
+            final ListTag entityList = buildEntityListSnapshot(chunk);
             final ChunkPos pos = chunk.getPos();
             submitDiskWrite(() -> {
                 try {
-                    NbtCompound existing = regionStorage.read(pos);
+                    CompoundTag existing = regionStorage.read(pos);
                     if (existing == null) {
 
                         return;
@@ -357,29 +361,29 @@ public class SwdSaveManager implements AutoCloseable {
         }
     }
 
-    private NbtList buildEntityListSnapshot(WorldChunk chunk) {
-        NbtList list = new NbtList();
-        if (mc.world == null) return list;
+    private ListTag buildEntityListSnapshot(LevelChunk chunk) {
+        ListTag list = new ListTag();
+        if (mc.level == null) return list;
         ChunkPos pos = chunk.getPos();
-        int minY = mc.world.getBottomY();
-        int maxY = minY + mc.world.getHeight();
-        Box box = new Box(pos.getStartX(), minY, pos.getStartZ(),
-            pos.getEndX() + 1, maxY, pos.getEndZ() + 1);
-        for (Entity entity : mc.world.getEntitiesByClass(Entity.class, box, e -> !(e instanceof PlayerEntity))) {
-            NbtCompound tag = encodeEntity(entity);
+        int minY = mc.level.getMinY();
+        int maxY = minY + mc.level.getHeight();
+        AABB box = new AABB(pos.getMinBlockX(), minY, pos.getMinBlockZ(),
+            pos.getMaxBlockX() + 1, maxY, pos.getMaxBlockZ() + 1);
+        for (Entity entity : mc.level.getEntities(EntityTypeTest.forClass(Entity.class), box, e -> !(e instanceof Player))) {
+            CompoundTag tag = encodeEntity(entity);
             if (tag != null) list.add(tag);
         }
         return list;
     }
 
-    private NbtCompound buildChunkNbt(WorldChunk chunk) {
+    private CompoundTag buildChunkNbt(LevelChunk chunk) {
 
-        if (mc.world == null) return null;
-        NbtCompound nbt = new NbtCompound();
+        if (mc.level == null) return null;
+        CompoundTag nbt = new CompoundTag();
         nbt.putInt("DataVersion", DATA_VERSION);
-        nbt.putInt("xPos", chunk.getPos().x);
-        nbt.putInt("yPos", chunk.getBottomSectionCoord());
-        nbt.putInt("zPos", chunk.getPos().z);
+        nbt.putInt("xPos", chunk.getPos().getMiddleBlockX());
+        nbt.putInt("yPos", chunk.getMinSectionY());
+        nbt.putInt("zPos", chunk.getPos().getMiddleBlockZ());
         nbt.putLong("LastUpdate", 0L);
         nbt.putLong("InhabitedTime", 0L);
         nbt.putString("Status", "full");
@@ -390,40 +394,32 @@ public class SwdSaveManager implements AutoCloseable {
         return nbt;
     }
 
-    private void writeSections(WorldChunk chunk, NbtCompound nbt) {
-        Registry<Biome> biomeRegistry = mc.world != null ? mc.world.getRegistryManager().getOrThrow(RegistryKeys.BIOME) : null;
+    private void writeSections(LevelChunk chunk, CompoundTag nbt) {
+        Registry<Biome> biomeRegistry = mc.level != null ? mc.level.registryAccess().lookupOrThrow(Registries.BIOME) : null;
         if (biomeRegistry == null) return;
 
-        Codec<PalettedContainer<BlockState>> blockCodec = PalettedContainer.createPalettedContainerCodec(
-            BlockState.CODEC,
-            PaletteProvider.forBlockStates(net.minecraft.block.Block.STATE_IDS),
-            Blocks.AIR.getDefaultState()
-        );
-
-        RegistryEntry<Biome> defaultBiome = biomeRegistry.getOptional(BiomeKeys.PLAINS).orElse(null);
+        Holder<Biome> defaultBiome = biomeRegistry.getOptional(Biomes.PLAINS).map(biomeRegistry::wrapAsHolder).orElse(null);
         if (defaultBiome == null) return;
 
-        Codec<ReadableContainer<RegistryEntry<Biome>>> biomeCodec = PalettedContainer.createReadableContainerCodec(
-            RegistryElementCodec.of(RegistryKeys.BIOME, Biome.CODEC),
-            PaletteProvider.forBiomes(biomeRegistry.getIndexedEntries()),
-            defaultBiome
-        );
+        net.minecraft.world.level.chunk.PalettedContainerFactory factory = net.minecraft.world.level.chunk.PalettedContainerFactory.create(mc.level.registryAccess());
+        Codec<PalettedContainerRO<Holder<Biome>>> biomeCodec = factory.biomeContainerCodec();
+        Codec<PalettedContainer<BlockState>> blockCodec = factory.blockStatesContainerCodec();
 
-        NbtList sections = new NbtList();
-        ChunkSection[] sectionsArray = chunk.getSectionArray();
-        int bottomSection = chunk.getBottomSectionCoord();
+        ListTag sections = new ListTag();
+        LevelChunkSection[] sectionsArray = chunk.getSections();
+        int bottomSection = chunk.getMinSectionY();
         for (int i = 0; i < sectionsArray.length; i++) {
-            ChunkSection section = sectionsArray[i];
+            LevelChunkSection section = sectionsArray[i];
             if (section == null) continue;
 
-            NbtCompound sec = new NbtCompound();
+            CompoundTag sec = new CompoundTag();
             sec.putByte("Y", (byte) (bottomSection + i));
 
-            blockCodec.encodeStart(ops, section.getBlockStateContainer())
+            blockCodec.encodeStart(ops, section.getStates())
                 .result()
                 .ifPresent(tag -> sec.put("block_states", tag));
 
-            biomeCodec.encodeStart(ops, section.getBiomeContainer())
+            biomeCodec.encodeStart(ops, section.getBiomes())
                 .result()
                 .ifPresent(tag -> sec.put("biomes", tag));
 
@@ -432,11 +428,11 @@ public class SwdSaveManager implements AutoCloseable {
         nbt.put("sections", sections);
     }
 
-    private void writeBlockEntities(WorldChunk chunk, NbtCompound nbt) {
-        NbtList list = new NbtList();
+    private void writeBlockEntities(LevelChunk chunk, CompoundTag nbt) {
+        ListTag list = new ListTag();
         for (BlockEntity be : chunk.getBlockEntities().values()) {
-            NbtCompound tag = be.createNbtWithIdentifyingData(mc.world.getRegistryManager());
-            List<ItemStack> cached = blockInventoryCache.get(be.getPos());
+            CompoundTag tag = be.saveWithFullMetadata(mc.level.registryAccess());
+            List<ItemStack> cached = blockInventoryCache.get(be.getBlockPos());
             if (cached != null && !cached.isEmpty()) {
                 tag.put("Items", encodeItems(cached));
             }
@@ -445,34 +441,34 @@ public class SwdSaveManager implements AutoCloseable {
         nbt.put("block_entities", list);
     }
 
-    private void writeEntities(WorldChunk chunk, NbtCompound nbt) {
-        NbtList list = new NbtList();
-        if (mc.world == null) {
+    private void writeEntities(LevelChunk chunk, CompoundTag nbt) {
+        ListTag list = new ListTag();
+        if (mc.level == null) {
             nbt.put("Entities", list);
             return;
         }
 
         ChunkPos pos = chunk.getPos();
-        int minY = mc.world.getBottomY();
-        int maxY = minY + mc.world.getHeight();
-        Box box = new Box(pos.getStartX(), minY, pos.getStartZ(),
-            pos.getEndX() + 1, maxY, pos.getEndZ() + 1);
+        int minY = mc.level.getMinY();
+        int maxY = minY + mc.level.getHeight();
+        AABB box = new AABB(pos.getMinBlockX(), minY, pos.getMinBlockZ(),
+            pos.getMaxBlockX() + 1, maxY, pos.getMaxBlockZ() + 1);
 
-        for (Entity entity : mc.world.getEntitiesByClass(Entity.class, box, e -> !(e instanceof PlayerEntity))) {
-            NbtCompound tag = encodeEntity(entity);
+        for (Entity entity : mc.level.getEntities(EntityTypeTest.forClass(Entity.class), box, e -> !(e instanceof Player))) {
+            CompoundTag tag = encodeEntity(entity);
             if (tag != null) list.add(tag);
         }
         nbt.put("Entities", list);
     }
 
-    private NbtCompound encodeEntity(Entity entity) {
-        if (mc.world == null) return null;
-        NbtCompound tag = null;
+    private CompoundTag encodeEntity(Entity entity) {
+        if (mc.level == null) return null;
+        CompoundTag tag = null;
         boolean fullSave = false;
         try {
-            NbtWriteView view = NbtWriteView.create(ErrorReporter.EMPTY, mc.world.getRegistryManager());
-            if (entity.saveData(view)) {
-                tag = view.getNbt();
+            TagValueOutput view = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, mc.level.registryAccess());
+            if (entity.save(view)) {
+                tag = view.buildResult();
                 fullSave = true;
             }
         } catch (Exception e) {
@@ -490,71 +486,71 @@ public class SwdSaveManager implements AutoCloseable {
 
         encodeDisplayEntityData(tag, entity);
 
-        List<ItemStack> inv = entityInventoryCache.get(entity.getUuid());
+        List<ItemStack> inv = entityInventoryCache.get(entity.getUUID());
         if (inv != null && !inv.isEmpty()) tag.put("Items", encodeItems(inv));
 
-        NbtCompound override = entityOverrideCache.get(entity.getUuid());
+        CompoundTag override = entityOverrideCache.get(entity.getUUID());
         if (override != null) {
-            for (String key : override.getKeys()) tag.put(key, override.get(key));
+            for (String key : override.keySet()) tag.put(key, override.get(key));
         }
 
         return tag;
     }
 
-    private void encodeEntityExtra(NbtCompound tag, Entity entity) {
+    private void encodeEntityExtra(CompoundTag tag, Entity entity) {
         tag.putDouble("x", entity.getX());
         tag.putDouble("y", entity.getY());
         tag.putDouble("z", entity.getZ());
-        tag.putFloat("Yaw", entity.getYaw());
-        tag.putFloat("Pitch", entity.getPitch());
-        tag.putString("id", Registries.ENTITY_TYPE.getId(entity.getType()).toString());
+        tag.putFloat("Yaw", entity.getYRot());
+        tag.putFloat("Pitch", entity.getXRot());
+        tag.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString());
 
-        UUID uuid = entity.getUuid();
+        UUID uuid = entity.getUUID();
         tag.putLong("UUIDMost", uuid.getMostSignificantBits());
         tag.putLong("UUIDLeast", uuid.getLeastSignificantBits());
 
         if (entity.hasCustomName()) {
-            TextCodecs.CODEC.encodeStart(com.mojang.serialization.JsonOps.INSTANCE, entity.getCustomName())
+            ComponentSerialization.CODEC.encodeStart(com.mojang.serialization.JsonOps.INSTANCE, entity.getCustomName())
                 .result()
                 .ifPresent(json -> tag.putString("CustomName", json.toString()));
             tag.putBoolean("CustomNameVisible", true);
         }
         if (entity.isInvisible()) tag.putBoolean("Invisible", true);
         if (entity.isSilent()) tag.putBoolean("Silent", true);
-        tag.putInt("Fire", entity.getFireTicks());
-        tag.putInt("Air", entity.getAir());
-        tag.putBoolean("OnGround", entity.isOnGround());
+        tag.putInt("Fire", entity.getRemainingFireTicks());
+        tag.putInt("Air", entity.getAirSupply());
+        tag.putBoolean("OnGround", entity.onGround());
 
-        if (entity instanceof net.minecraft.entity.LivingEntity living) {
-            NbtList armorItems = new NbtList();
+        if (entity instanceof net.minecraft.world.entity.LivingEntity living) {
+            ListTag armorItems = new ListTag();
             for (EquipmentSlot slot : new EquipmentSlot[]{
                 EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD
             }) {
-                ItemStack stack = living.getEquippedStack(slot);
+                ItemStack stack = living.getItemBySlot(slot);
                 if (!stack.isEmpty()) {
                     ItemStack.CODEC.encodeStart(ops, stack).result().ifPresent(armorItems::add);
                 } else {
-                    armorItems.add(new NbtCompound());
+                    armorItems.add(new CompoundTag());
                 }
             }
             if (!armorItems.isEmpty()) tag.put("ArmorItems", armorItems);
 
-            NbtList handItems = new NbtList();
-            ItemStack mainHand = living.getEquippedStack(EquipmentSlot.MAINHAND);
-            ItemStack offHand = living.getEquippedStack(EquipmentSlot.OFFHAND);
+            ListTag handItems = new ListTag();
+            ItemStack mainHand = living.getItemBySlot(EquipmentSlot.MAINHAND);
+            ItemStack offHand = living.getItemBySlot(EquipmentSlot.OFFHAND);
             ItemStack.CODEC.encodeStart(ops, mainHand.isEmpty() ? ItemStack.EMPTY : mainHand).result().ifPresent(handItems::add);
             ItemStack.CODEC.encodeStart(ops, offHand.isEmpty() ? ItemStack.EMPTY : offHand).result().ifPresent(handItems::add);
             if (!handItems.isEmpty()) tag.put("HandItems", handItems);
         }
     }
 
-    private void encodeDisplayEntityData(NbtCompound tag, Entity entity) {
-        if (entity instanceof net.minecraft.entity.decoration.DisplayEntity.TextDisplayEntity tde) {
-            net.minecraft.entity.decoration.DisplayEntity.TextDisplayEntity.Data data = tde.getData();
+    private void encodeDisplayEntityData(CompoundTag tag, Entity entity) {
+        if (entity instanceof net.minecraft.world.entity.Display.TextDisplay tde) {
+            net.minecraft.world.entity.Display.TextDisplay.TextRenderState data = tde.textRenderState();
             if (data != null && data.text() != null) {
 
                 if (!tag.contains("text")) {
-                    TextCodecs.CODEC.encodeStart(com.mojang.serialization.JsonOps.INSTANCE, data.text())
+                    ComponentSerialization.CODEC.encodeStart(com.mojang.serialization.JsonOps.INSTANCE, data.text())
                         .result()
                         .ifPresent(json -> tag.putString("text", json.toString()));
                 }
@@ -562,32 +558,32 @@ public class SwdSaveManager implements AutoCloseable {
         }
     }
 
-    private NbtCompound encodeEntityMinimal(Entity entity) {
-        Identifier typeId = Registries.ENTITY_TYPE.getId(entity.getType());
+    private CompoundTag encodeEntityMinimal(Entity entity) {
+        Identifier typeId = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
         if (typeId == null) return null;
 
-        NbtCompound tag = new NbtCompound();
+        CompoundTag tag = new CompoundTag();
         tag.putString("id", typeId.toString());
         tag.putDouble("x", entity.getX());
         tag.putDouble("y", entity.getY());
         tag.putDouble("z", entity.getZ());
-        tag.putFloat("Yaw", entity.getYaw());
-        tag.putFloat("Pitch", entity.getPitch());
+        tag.putFloat("Yaw", entity.getYRot());
+        tag.putFloat("Pitch", entity.getXRot());
 
-        UUID uuid = entity.getUuid();
+        UUID uuid = entity.getUUID();
         tag.putLong("UUIDMost", uuid.getMostSignificantBits());
         tag.putLong("UUIDLeast", uuid.getLeastSignificantBits());
 
         if (entity.getCustomName() != null) {
-            TextCodecs.CODEC.encodeStart(com.mojang.serialization.JsonOps.INSTANCE, entity.getCustomName())
+            ComponentSerialization.CODEC.encodeStart(com.mojang.serialization.JsonOps.INSTANCE, entity.getCustomName())
                 .result()
                 .ifPresent(json -> tag.putString("CustomName", json.toString()));
         }
         return tag;
     }
 
-    private NbtList encodeItems(List<ItemStack> items) {
-        NbtList list = new NbtList();
+    private ListTag encodeItems(List<ItemStack> items) {
+        ListTag list = new ListTag();
         for (int i = 0; i < items.size(); i++) {
             ItemStack stack = items.get(i);
             if (stack.isEmpty()) continue;
@@ -595,7 +591,7 @@ public class SwdSaveManager implements AutoCloseable {
             ItemStack.CODEC.encodeStart(ops, stack)
                 .result()
                 .ifPresent(tag -> {
-                    NbtCompound c = (NbtCompound) tag;
+                    CompoundTag c = (CompoundTag) tag;
                     c.putByte("Slot", (byte) slot);
                     list.add(c);
                 });
@@ -603,18 +599,18 @@ public class SwdSaveManager implements AutoCloseable {
         return list;
     }
 
-    public void savePlayerInventory(UUID uuid, PlayerInventory inv) {
+    public void savePlayerInventory(UUID uuid, Inventory inv) {
         if (!isSaving || inv == null) return;
         try {
             Path playersDir = path.resolve("playerdata");
             Files.createDirectories(playersDir);
             Path file = playersDir.resolve(uuid + ".dat");
 
-            NbtCompound player;
+            CompoundTag player;
             if (Files.exists(file)) {
-                player = NbtIo.readCompressed(file, NbtSizeTracker.ofUnlimitedBytes());
+                player = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
             } else {
-                player = new NbtCompound();
+                player = new CompoundTag();
             }
             player.put("Inventory", encodePlayerInventory(inv));
             player.putInt("DataVersion", DATA_VERSION);
@@ -624,9 +620,9 @@ public class SwdSaveManager implements AutoCloseable {
         }
     }
 
-    private NbtList encodePlayerInventory(PlayerInventory inv) {
-        NbtList list = new NbtList();
-        DefaultedList<ItemStack> main = inv.getMainStacks();
+    private ListTag encodePlayerInventory(Inventory inv) {
+        ListTag list = new ListTag();
+        NonNullList<ItemStack> main = inv.getNonEquipmentItems();
         for (int i = 0; i < main.size(); i++) {
             ItemStack stack = main.get(i);
             if (stack.isEmpty()) continue;
@@ -634,7 +630,7 @@ public class SwdSaveManager implements AutoCloseable {
             ItemStack.CODEC.encodeStart(ops, stack)
                 .result()
                 .ifPresent(tag -> {
-                    NbtCompound c = (NbtCompound) tag;
+                    CompoundTag c = (CompoundTag) tag;
                     c.putByte("Slot", (byte) slot);
                     list.add(c);
                 });
@@ -643,13 +639,13 @@ public class SwdSaveManager implements AutoCloseable {
         for (EquipmentSlot slot : new EquipmentSlot[]{
             EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD, EquipmentSlot.OFFHAND
         }) {
-            ItemStack stack = inv.player.getEquippedStack(slot);
+            ItemStack stack = inv.player.getItemBySlot(slot);
             if (stack.isEmpty()) continue;
-            int nbtSlot = slot == EquipmentSlot.OFFHAND ? -106 : 100 + slot.getEntitySlotId();
+            int nbtSlot = slot == EquipmentSlot.OFFHAND ? -106 : 100 + slot.getIndex();
             ItemStack.CODEC.encodeStart(ops, stack)
                 .result()
                 .ifPresent(tag -> {
-                    NbtCompound c = (NbtCompound) tag;
+                    CompoundTag c = (CompoundTag) tag;
                     c.putByte("Slot", (byte) nbtSlot);
                     list.add(c);
                 });
@@ -665,7 +661,7 @@ public class SwdSaveManager implements AutoCloseable {
         entityInventoryCache.put(uuid, new ArrayList<>(items));
     }
 
-    public void cacheEntityOverride(UUID uuid, NbtCompound overlay) {
+    public void cacheEntityOverride(UUID uuid, CompoundTag overlay) {
         entityOverrideCache.put(uuid, overlay);
     }
 
@@ -680,11 +676,11 @@ public class SwdSaveManager implements AutoCloseable {
             Files.createDirectories(playersDir);
             Path file = playersDir.resolve(uuid + ".dat");
 
-            NbtCompound player;
+            CompoundTag player;
             if (Files.exists(file)) {
-                player = NbtIo.readCompressed(file, NbtSizeTracker.ofUnlimitedBytes());
+                player = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
             } else {
-                player = new NbtCompound();
+                player = new CompoundTag();
             }
             player.put("EnderItems", encodeItems(items));
             player.putInt("DataVersion", DATA_VERSION);
@@ -694,10 +690,10 @@ public class SwdSaveManager implements AutoCloseable {
         }
     }
 
-    public void cacheStatsPacket(StatisticsS2CPacket packet) {
-        if (!isSaving || path == null || mc.player == null || mc.isInSingleplayer() || mc.getCurrentServerEntry() == null) return;
+    public void cacheStatsPacket(ClientboundAwardStatsPacket packet) {
+        if (!isSaving || path == null || mc.player == null || mc.hasSingleplayerServer() || mc.getCurrentServer() == null) return;
         if (cachedStatsByType == null) cachedStatsByType = new JsonObject();
-        if (cachePlayerUuid == null) cachePlayerUuid = mc.player.getUuid();
+        if (cachePlayerUuid == null) cachePlayerUuid = mc.player.getUUID();
 
         boolean changed = false;
         for (Object2IntMap.Entry<Stat<?>> entry : packet.stats().object2IntEntrySet()) {
@@ -721,31 +717,31 @@ public class SwdSaveManager implements AutoCloseable {
         }
     }
 
-    public void cacheAdvancementPacket(AdvancementUpdateS2CPacket packet) {
-        if (!isSaving || path == null || mc.player == null || mc.isInSingleplayer() || mc.getCurrentServerEntry() == null) return;
+    public void cacheAdvancementPacket(ClientboundUpdateAdvancementsPacket packet) {
+        if (!isSaving || path == null || mc.player == null || mc.hasSingleplayerServer() || mc.getCurrentServer() == null) return;
         if (cachedAdvancements == null) cachedAdvancements = new JsonObject();
         if (removedAdvancements == null) removedAdvancements = new HashSet<>();
-        if (cachePlayerUuid == null) cachePlayerUuid = mc.player.getUuid();
+        if (cachePlayerUuid == null) cachePlayerUuid = mc.player.getUUID();
 
         boolean changed = false;
-        boolean hadProgressUpdates = !packet.getAdvancementsToProgress().isEmpty();
-        boolean hadRemovals = !packet.getAdvancementIdsToRemove().isEmpty();
+        boolean hadProgressUpdates = !packet.getProgress().isEmpty();
+        boolean hadRemovals = !packet.getRemoved().isEmpty();
 
-        if (packet.shouldClearCurrent()) {
+        if (packet.shouldReset()) {
             cachedAdvancements = new JsonObject();
             removedAdvancements.clear();
             advancementsResetThisSession = true;
             if (hadProgressUpdates || hadRemovals) changed = true;
         }
 
-        for (Identifier removedId : packet.getAdvancementIdsToRemove()) {
+        for (Identifier removedId : packet.getRemoved()) {
             String key = removedId.toString();
             cachedAdvancements.remove(key);
             removedAdvancements.add(key);
             changed = true;
         }
 
-        for (Map.Entry<Identifier, AdvancementProgress> e : packet.getAdvancementsToProgress().entrySet()) {
+        for (Map.Entry<Identifier, AdvancementProgress> e : packet.getProgress().entrySet()) {
             String key = e.getKey().toString();
             JsonObject incoming = buildAdvancementJson(e.getValue());
             JsonObject existing = getJsonObject(cachedAdvancements, key);
@@ -762,17 +758,17 @@ public class SwdSaveManager implements AutoCloseable {
 
     @SuppressWarnings("unchecked")
     private void bootstrapAdvancementsFromClientCache() {
-        if (!isSaving || mc.getNetworkHandler() == null || cachedAdvancements == null) return;
+        if (!isSaving || mc.getConnection() == null || cachedAdvancements == null) return;
         try {
-            ClientAdvancementManager advancements = mc.getNetworkHandler().getAdvancementHandler();
-            var progressField = ClientAdvancementManager.class.getDeclaredField("progress");
+            ClientAdvancements advancements = mc.getConnection().getAdvancements();
+            var progressField = ClientAdvancements.class.getDeclaredField("progress");
             progressField.setAccessible(true);
-            Map<AdvancementEntry, AdvancementProgress> progressMap =
-                (Map<AdvancementEntry, AdvancementProgress>) progressField.get(advancements);
+            Map<AdvancementHolder, AdvancementProgress> progressMap =
+                (Map<AdvancementHolder, AdvancementProgress>) progressField.get(advancements);
             if (progressMap == null || progressMap.isEmpty()) return;
 
             boolean seeded = false;
-            for (Map.Entry<AdvancementEntry, AdvancementProgress> entry : progressMap.entrySet()) {
+            for (Map.Entry<AdvancementHolder, AdvancementProgress> entry : progressMap.entrySet()) {
                 if (entry.getKey() == null || entry.getValue() == null) continue;
                 String key = entry.getKey().id().toString();
                 JsonObject existing = getJsonObject(cachedAdvancements, key);
@@ -797,7 +793,7 @@ public class SwdSaveManager implements AutoCloseable {
         if (!force && now - lastMetaFlushTimeMs < META_FLUSH_INTERVAL_MS) return;
 
         UUID target = cachePlayerUuid;
-        if (target == null && mc.player != null) target = mc.player.getUuid();
+        if (target == null && mc.player != null) target = mc.player.getUUID();
         if (target == null) return;
 
         Path playersPath = path;
@@ -874,10 +870,10 @@ public class SwdSaveManager implements AutoCloseable {
     private JsonObject buildAdvancementJson(AdvancementProgress progress) {
         JsonObject result = new JsonObject();
         JsonObject criteria = new JsonObject();
-        for (String criterionName : progress.getObtainedCriteria()) {
-            CriterionProgress cp = progress.getCriterionProgress(criterionName);
-            if (cp == null || !cp.isObtained()) continue;
-            Instant obtained = cp.getObtainedTime();
+        for (String criterionName : progress.getCompletedCriteria()) {
+            CriterionProgress cp = progress.getCriterion(criterionName);
+            if (cp == null || !cp.isDone()) continue;
+            Instant obtained = cp.getObtained();
             if (obtained != null) criteria.addProperty(criterionName, ADVANCEMENT_TIME_FORMAT.format(obtained));
         }
         result.add("criteria", criteria);
@@ -903,13 +899,13 @@ public class SwdSaveManager implements AutoCloseable {
     }
 
     private String getStatTypeId(Stat<?> stat) {
-        Identifier id = Registries.STAT_TYPE.getId(stat.getType());
+        Identifier id = BuiltInRegistries.STAT_TYPE.getKey(stat.getType());
         return id == null ? null : id.toString();
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private String getStatValueId(Stat<?> stat) {
-        Identifier id = ((Registry) stat.getType().getRegistry()).getId(stat.getValue());
+        Identifier id = (Identifier) ((Registry) stat.getType().getRegistry()).getKey(stat.getValue());
         if (id != null) return id.toString();
         Object raw = stat.getValue();
         return raw == null ? null : raw.toString();

@@ -7,19 +7,21 @@ import com.google.gson.JsonParser;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.component.Component;
-import net.minecraft.component.ComponentType;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.component.type.NbtComponent;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.client.Minecraft;
+import net.minecraft.resources.RegistryOps;
+import net.minecraft.core.component.TypedDataComponent;
+import net.minecraft.core.component.DataComponentType;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.Holder;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -85,41 +87,41 @@ public class ItemInfo extends Module {
         return m != null && m.isActive();
     }
 
-    public static void appendTooltip(ItemStack stack, List<Text> lines) {
+    public static void appendTooltip(ItemStack stack, List<Component> lines) {
         if (!isEnabled()) return;
         if (stack == null || stack.isEmpty()) return;
 
         ItemInfo m = get();
         if (m == null) return;
 
-        List<Text> additions = new ArrayList<>();
+        List<Component> additions = new ArrayList<>();
 
         if (m.showBasic.get()) {
-            additions.add(lore("ID: " + Registries.ITEM.getId(stack.getItem())));
+            additions.add(lore("ID: " + BuiltInRegistries.ITEM.getId(stack.getItem())));
             additions.add(lore("Count: " + stack.getCount()));
         }
 
-        if (m.showDurability.get() && stack.isDamageable()) {
+        if (m.showDurability.get() && stack.isDamageableItem()) {
             int max = stack.getMaxDamage();
-            int damage = stack.getDamage();
+            int damage = stack.getDamageValue();
             int remaining = max - damage;
             additions.add(lore("Durability: " + remaining + " / " + max + " (" + damage + " damaged)"));
         }
 
         if (m.showEnchantments.get()) {
-            ItemEnchantmentsComponent enchants = stack.get(DataComponentTypes.ENCHANTMENTS);
+            ItemEnchantments enchants = stack.get(DataComponents.ENCHANTMENTS);
             if (enchants != null && !enchants.isEmpty()) {
                 additions.add(lore("Enchantments:"));
-                for (Map.Entry<RegistryEntry<Enchantment>, Integer> entry : enchants.getEnchantmentEntries()) {
-                    Text name = Enchantment.getName(entry.getKey(), entry.getValue());
+                for (Map.Entry<Holder<Enchantment>, Integer> entry : enchants.entrySet()) {
+                    Component name = entry.getKey().value().description();
                     additions.add(lore("  " + name.getString()));
                 }
             }
-            ItemEnchantmentsComponent stored = stack.get(DataComponentTypes.STORED_ENCHANTMENTS);
+            ItemEnchantments stored = stack.get(DataComponents.STORED_ENCHANTMENTS);
             if (stored != null && !stored.isEmpty()) {
                 additions.add(lore("Stored Enchantments:"));
-                for (Map.Entry<RegistryEntry<Enchantment>, Integer> entry : stored.getEnchantmentEntries()) {
-                    Text name = Enchantment.getName(entry.getKey(), entry.getValue());
+                for (Map.Entry<Holder<Enchantment>, Integer> entry : stored.entrySet()) {
+                    Component name = entry.getKey().value().description();
                     additions.add(lore("  " + name.getString()));
                 }
             }
@@ -132,9 +134,9 @@ public class ItemInfo extends Module {
         if (m.showComponents.get()) {
             additions.add(lore("Components:"));
             boolean any = false;
-            for (Component<?> component : stack.getComponents()) {
+            for (net.minecraft.core.component.TypedDataComponent<?> component : stack.getComponents()) {
                 any = true;
-                ComponentType<?> type = component.type();
+                DataComponentType<?> type = component.type();
                 Object value = component.value();
                 additions.add(lore("  " + type + ": " + value));
             }
@@ -143,17 +145,23 @@ public class ItemInfo extends Module {
 
         if (m.showNbt.get()) {
             additions.add(lore("Full NBT:"));
-            ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, stack)
-                .result()
-                .ifPresentOrElse(
-                    tag -> additions.add(lore("  " + tag.toString())),
-                    () -> additions.add(lore("  <failed to encode>"))
-                );
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.level != null) {
+                RegistryOps<net.minecraft.nbt.Tag> ops = RegistryOps.create(NbtOps.INSTANCE, mc.level.registryAccess());
+                ItemStack.CODEC.encodeStart(ops, stack)
+                    .result()
+                    .ifPresentOrElse(
+                        tag -> additions.add(lore("  " + tag)),
+                        () -> additions.add(lore("  <failed to encode>"))
+                    );
+            } else {
+                additions.add(lore("  <no level>"));
+            }
         }
 
         if (!additions.isEmpty()) {
             try {
-            lines.add(Text.empty());
+            lines.add(Component.empty());
             lines.add(lore("=== Item Info ==="));
                 lines.addAll(additions);
             } catch (UnsupportedOperationException ignored) {
@@ -162,13 +170,13 @@ public class ItemInfo extends Module {
         }
     }
 
-    private static void appendPluginEnchantments(ItemStack stack, List<Text> additions) {
-        NbtComponent custom = stack.get(DataComponentTypes.CUSTOM_DATA);
+    private static void appendPluginEnchantments(ItemStack stack, List<Component> additions) {
+        CustomData custom = stack.get(DataComponents.CUSTOM_DATA);
         if (custom == null) return;
-        NbtCompound tag = custom.copyNbt();
+        CompoundTag tag = custom.copyTag();
         if (tag == null || !tag.contains("PublicBukkitValues")) return;
 
-        NbtCompound pbv = tag.getCompound("PublicBukkitValues").orElse(null);
+        CompoundTag pbv = tag.getCompound("PublicBukkitValues").orElse(null);
         if (pbv == null) return;
 
         String ceJson = pbv.getString("crazyenchantments:crazyenchants").orElse("");
@@ -218,7 +226,7 @@ public class ItemInfo extends Module {
         return out.toString();
     }
 
-    private static Text lore(String text) {
-        return Text.literal(text).formatted(Formatting.DARK_GRAY, Formatting.ITALIC);
+    private static Component lore(String text) {
+        return Component.literal(text).withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC);
     }
 }

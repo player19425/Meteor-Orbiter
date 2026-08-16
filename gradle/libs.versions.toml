@@ -2,29 +2,33 @@
 mod-version = "1.0.0"
 
 # Fabric (https://fabricmc.net/develop)
-jdk = "21"
-minecraft = "1.21.11"
-yarn-mappings = "1.21.11+build.3"
-fabric-loader = "0.18.2"
+jdk = "25"
+minecraft = "26.2"
+fabric-loader = "0.19.3"
 
 # Loom (https://github.com/FabricMC/fabric-loom)
-loom = "1.14.10"
+loom = "1.17.19"
 
 # Meteor (https://github.com/MeteorDevelopment/meteor-client/)
-meteor = "1.21.11-SNAPSHOT"
+meteor = "26.2-SNAPSHOT"
+
+# Fabric API (required at compile time by the 26.2 merged Minecraft jar)
+fabric-resource-loader = "2.0.13+9edec1269e"
 
 # Mods
 
 [libraries]
 # Fabric base
 minecraft = { module = "com.mojang:minecraft", version.ref = "minecraft" }
-yarn-mappings = { module = "net.fabricmc:yarn", version.ref = "yarn-mappings" }
 fabric-loader = { module = "net.fabricmc:fabric-loader", version.ref = "fabric-loader" }
 
 # Meteor client
 meteor-client = { module = "meteordevelopment:meteor-client", version.ref = "meteor" }
 
+# Fabric API
+fabric-resource-loader = { module = "net.fabricmc.fabric-api:fabric-resource-loader-v1", version.ref = "fabric-resource-loader" }
+
 # Mods
 
 [plugins]
-fabric-loom = { id = "net.fabricmc.fabric-loom-remap", version.ref = "loom" }
+fabric-loom = { id = "net.fabricmc.fabric-loom", version.ref = "loom" }

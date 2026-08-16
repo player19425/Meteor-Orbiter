@@ -5,8 +5,8 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import net.minecraft.command.CommandSource;
-import net.minecraft.text.Text;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
+import net.minecraft.network.chat.Component;
 
 import java.io.*;
 import java.nio.file.*;
@@ -41,7 +41,7 @@ public class UltraPanicCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.executes(ctx -> {
             showCompactStatus();
             return SINGLE_SUCCESS;
@@ -344,7 +344,7 @@ public class UltraPanicCommand extends Command {
 
     private File getMinecraftDir() {
         if (mc == null) return null;
-        File dir = mc.runDirectory;
+        File dir = mc.gameDirectory;
         return dir != null ? dir : null;
     }
 

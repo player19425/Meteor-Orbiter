@@ -2,20 +2,20 @@ package orbiter.mixin;
 
 import orbiter.modules.ClientSideThings;
 import orbiter.util.ClientSpoofState;
-import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
 
-@Mixin(MinecraftClient.class)
+@Mixin(Minecraft.class)
 public abstract class ClientUseCooldownMixin {
-    @ModifyConstant(method = "doItemUse", constant = @Constant(intValue = 4))
+    @ModifyConstant(method = "startUseItem", constant = @Constant(intValue = 4))
     private int orbiter$customItemUseCooldown(int original) {
         ClientSideThings module = ClientSpoofState.module();
-        MinecraftClient client = (MinecraftClient) (Object) this;
+        Minecraft client = (Minecraft) (Object) this;
         if (module == null || client.player == null) return original;
-        if (!client.player.getMainHandStack().isEmpty() && module.shouldOverrideUseCooldown(client.player.getMainHandStack().getItem())) return module.getCustomUseCooldownTicks();
-        if (!client.player.getOffHandStack().isEmpty() && module.shouldOverrideUseCooldown(client.player.getOffHandStack().getItem())) return module.getCustomUseCooldownTicks();
+        if (!client.player.getMainHandItem().isEmpty() && module.shouldOverrideUseCooldown(client.player.getMainHandItem().getItem())) return module.getCustomUseCooldownTicks();
+        if (!client.player.getOffhandItem().isEmpty() && module.shouldOverrideUseCooldown(client.player.getOffhandItem().getItem())) return module.getCustomUseCooldownTicks();
         return original;
     }
 }

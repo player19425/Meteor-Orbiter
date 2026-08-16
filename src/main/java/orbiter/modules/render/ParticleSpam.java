@@ -7,12 +7,12 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.projectile.ArrowEntity;
-import net.minecraft.entity.projectile.thrown.SnowballEntity;
-import net.minecraft.entity.projectile.thrown.EggEntity;
-import net.minecraft.entity.projectile.TridentEntity;
-import net.minecraft.entity.projectile.FireballEntity;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.projectile.arrow.Arrow;
+import net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball;
+import net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEgg;
+import net.minecraft.world.entity.projectile.arrow.ThrownTrident;
+import net.minecraft.world.entity.projectile.hurtingprojectile.Fireball;
 
 import java.util.Random;
 
@@ -161,7 +161,7 @@ public class ParticleSpam extends CreativeSafetyModule {
 
         @EventHandler
         private void onTick(TickEvent.Post event) {
-                if (mc.player == null || mc.player.networkHandler == null)
+                if (mc.player == null || mc.player.connection == null)
                         return;
 
                 tickCounter++;
@@ -189,18 +189,18 @@ public class ParticleSpam extends CreativeSafetyModule {
                         String cmd = CommandUtils.formatCommand("particle %s %.2f %.2f %.2f %.2f %.2f %.2f %.2f %d %s @a",
                                         particle, x, y, z, deltaX.get(), deltaY.get(), deltaZ.get(),
                                         speed.get(), emitted, forceStr);
-                        mc.player.networkHandler.sendChatCommand(cmd);
+                        mc.player.connection.sendCommand(cmd);
                         burstBudget -= emitted;
                 }
 
-                if (trailMode.get() && mc.world != null && mc.player != null && mc.player.networkHandler != null) {
+                if (trailMode.get() && mc.level != null && mc.player != null && mc.player.connection != null) {
                         String trailP = "minecraft:" + trailParticle.get().replace("minecraft:", "");
                         int trailBudget = Math.min(maxParticlesPerBurst.get(), 64);
-                        for (Entity entity : mc.world.getEntities()) {
+                        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
                                 if (trailBudget <= 0) break;
-                                if (entity instanceof ArrowEntity || entity instanceof SnowballEntity
-                                                || entity instanceof EggEntity || entity instanceof TridentEntity
-                                                || entity instanceof FireballEntity) {
+                                if (entity instanceof Arrow || entity instanceof Snowball
+                                                || entity instanceof ThrownEgg || entity instanceof ThrownTrident
+                                                || entity instanceof Fireball) {
                                         int trailLimit = Math.min(crispTrails.get() ? 1 : trailDensity.get(), trailBudget);
                                         for (int t = 0; t < trailLimit; t++) {
                                                 String trailCmd = CommandUtils.formatCommand(
@@ -209,7 +209,7 @@ public class ParticleSpam extends CreativeSafetyModule {
                                                                 crispTrails.get() ? "0.02" : "0.1",
                                                                 crispTrails.get() ? "0.02" : "0.1",
                                                                 crispTrails.get() ? "0.02" : "0.1");
-                                                mc.player.networkHandler.sendChatCommand(trailCmd);
+                                                mc.player.connection.sendCommand(trailCmd);
                                                 trailBudget--;
                                         }
                                 }

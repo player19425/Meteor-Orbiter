@@ -4,9 +4,9 @@ build/
 out/
 classes/
 
-# Freebuff / AI tooling
 .freebuff/
 .mimocode/
+ui-utils-262/
 
 # Fabric
 run/

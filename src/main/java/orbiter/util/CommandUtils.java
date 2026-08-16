@@ -1,7 +1,7 @@
 package orbiter.util;
 
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -81,14 +81,14 @@ public final class CommandUtils {
         String[] cached = entityIdsCache;
         if (cached != null) return cached.clone();
 
-        if (Registries.ENTITY_TYPE == null) return new String[0];
+        if (BuiltInRegistries.ENTITY_TYPE == null) return new String[0];
 
         synchronized (CommandUtils.class) {
             cached = entityIdsCache;
             if (cached != null) return cached.clone();
 
             List<String> ids = new ArrayList<>();
-            for (Identifier id : Registries.ENTITY_TYPE.getIds()) ids.add(id.toString());
+            for (Identifier id : BuiltInRegistries.ENTITY_TYPE.keySet()) ids.add(id.toString());
             ids.sort(Comparator.naturalOrder());
 
             String[] result = ids.toArray(String[]::new);

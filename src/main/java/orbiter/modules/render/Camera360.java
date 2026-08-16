@@ -6,8 +6,8 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.util.Mth;
 
 public class Camera360 extends Module {
 
@@ -39,14 +39,14 @@ public class Camera360 extends Module {
 
     @Override
     public void onActivate() {
-        if (!ConfigModifier.get().stupidModules.get()) {
+        if (!ConfigModifier.get().stupidModulesEnabled()) {
             info("Stupid Modules is disabled. Enable it in Meteor Config → Orbiter → Stupid Modules");
             toggle();
             return;
         }
         if (mc.player != null) {
-            rawPitch = mc.player.getPitch();
-            rawYaw = mc.player.getYaw();
+            rawPitch = mc.player.getXRot();
+            rawYaw = mc.player.getYRot();
         }
         syncTicks = 0;
     }
@@ -55,7 +55,7 @@ public class Camera360 extends Module {
     public void onDeactivate() {
         if (mc.player != null) {
 
-            mc.player.setPitch(MathHelper.clamp(mc.player.getPitch(), -90f, 90f));
+            mc.player.setXRot(Mth.clamp(mc.player.getXRot(), -90f, 90f));
         }
     }
 
@@ -63,14 +63,14 @@ public class Camera360 extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null) return;
 
-        if (!ConfigModifier.get().stupidModules.get()) {
+        if (!ConfigModifier.get().stupidModulesEnabled()) {
             info("Stupid Modules was disabled • 360 Camera auto-disabled.");
             toggle();
             return;
         }
 
-        rawPitch = mc.player.getPitch();
-        rawYaw = mc.player.getYaw();
+        rawPitch = mc.player.getXRot();
+        rawYaw = mc.player.getYRot();
 
         if (serverSync.get()) {
             syncTicks++;
@@ -82,12 +82,12 @@ public class Camera360 extends Module {
     }
 
     private void sendSyncPacket() {
-        if (mc.getNetworkHandler() == null || mc.player == null) return;
+        if (mc.getConnection() == null || mc.player == null) return;
 
-        float syncYaw = MathHelper.wrapDegrees(rawYaw);
-        float syncPitch = MathHelper.clamp(rawPitch, -90f, 90f);
+        float syncYaw = Mth.wrapDegrees(rawYaw);
+        float syncPitch = Mth.clamp(rawPitch, -90f, 90f);
 
-        mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(syncYaw, syncPitch, mc.player.isOnGround(), mc.player.horizontalCollision));
+        mc.getConnection().send(new ServerboundMovePlayerPacket.Rot(syncYaw, syncPitch, mc.player.onGround(), mc.player.horizontalCollision));
     }
 
     public boolean shouldUnlockPitch() { return isActive() && noLimitPitch.get(); }

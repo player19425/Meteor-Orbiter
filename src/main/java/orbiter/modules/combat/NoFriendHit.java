@@ -10,10 +10,10 @@ import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.world.World;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.world.level.Level;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -57,7 +57,7 @@ public class NoFriendHit extends Module {
 
     @EventHandler
     private void onPacketSend(PacketEvent.Send event) {
-        if (!(event.packet instanceof PlayerInteractEntityC2SPacket packet)) return;
+        if (!(event.packet instanceof ServerboundInteractPacket packet)) return;
 
         if (!shouldBlockPacket(packet, false)) return;
         event.cancel();
@@ -68,24 +68,24 @@ public class NoFriendHit extends Module {
         }
     }
 
-    public boolean shouldBlockPacket(PlayerInteractEntityC2SPacket packet, boolean forceStrict) {
-        if (mc.player == null || mc.world == null) return false;
+    public boolean shouldBlockPacket(ServerboundInteractPacket packet, boolean forceStrict) {
+        if (mc.player == null || mc.level == null) return false;
 
         Entity target = resolvePacketEntity(packet);
-        if (!(target instanceof PlayerEntity playerTarget)) return false;
+        if (!(target instanceof Player playerTarget)) return false;
         if (Friends.get().shouldAttack(playerTarget)) return false;
 
         if (forceStrict || mode.get() == Mode.AllInteractions) return true;
         return isAttackPacket(packet);
     }
 
-    private Entity resolvePacketEntity(PlayerInteractEntityC2SPacket packet) {
-        if (mc.world == null) return mc.targetedEntity;
+    private Entity resolvePacketEntity(ServerboundInteractPacket packet) {
+        if (mc.level == null) return mc.crosshairPickEntity;
 
         Method method = getPacketGetEntityMethod();
         if (method != null) {
             try {
-                Object result = method.invoke(packet, mc.world);
+                Object result = method.invoke(packet, mc.level);
                 if (result instanceof Entity entity) return entity;
             } catch (Throwable ignored) {
             }
@@ -95,13 +95,13 @@ public class NoFriendHit extends Module {
         if (idField != null) {
             try {
                 int entityId = idField.getInt(packet);
-                Entity entity = mc.world.getEntityById(entityId);
+                Entity entity = mc.level.getEntity(entityId);
                 if (entity != null) return entity;
             } catch (Throwable ignored) {
             }
         }
 
-        return mc.targetedEntity;
+        return mc.crosshairPickEntity;
     }
 
     private Method getPacketGetEntityMethod() {
@@ -109,7 +109,7 @@ public class NoFriendHit extends Module {
         if (packetGetEntityMethod != null) return packetGetEntityMethod;
 
         try {
-            packetGetEntityMethod = PlayerInteractEntityC2SPacket.class.getMethod("getEntity", World.class);
+            packetGetEntityMethod = ServerboundInteractPacket.class.getMethod("getEntity", Level.class);
             packetGetEntityMethod.setAccessible(true);
             return packetGetEntityMethod;
         } catch (Throwable ignored) {
@@ -123,7 +123,7 @@ public class NoFriendHit extends Module {
         if (packetEntityIdField != null) return packetEntityIdField;
 
         try {
-            packetEntityIdField = PlayerInteractEntityC2SPacket.class.getDeclaredField("entityId");
+            packetEntityIdField = ServerboundInteractPacket.class.getDeclaredField("entityId");
             packetEntityIdField.setAccessible(true);
             return packetEntityIdField;
         } catch (Throwable ignored) {
@@ -132,7 +132,7 @@ public class NoFriendHit extends Module {
         }
     }
 
-    private boolean isAttackPacket(PlayerInteractEntityC2SPacket packet) {
+    private boolean isAttackPacket(ServerboundInteractPacket packet) {
         Field typeField = getPacketTypeField();
         if (typeField != null) {
             try {
@@ -146,7 +146,7 @@ public class NoFriendHit extends Module {
             }
         }
 
-        return mc.options != null && mc.options.attackKey != null && mc.options.attackKey.isPressed();
+        return mc.options != null && mc.options.keyAttack != null && mc.options.keyAttack.isDown();
     }
 
     private Field getPacketTypeField() {
@@ -154,7 +154,7 @@ public class NoFriendHit extends Module {
         if (packetTypeField != null) return packetTypeField;
 
         try {
-            packetTypeField = PlayerInteractEntityC2SPacket.class.getDeclaredField("type");
+            packetTypeField = ServerboundInteractPacket.class.getDeclaredField("type");
             packetTypeField.setAccessible(true);
             return packetTypeField;
         } catch (Throwable ignored) {

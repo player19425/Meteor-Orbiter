@@ -2,22 +2,22 @@ package orbiter.commands;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
-import net.minecraft.command.CommandSource;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.AttributeModifierSlot;
-import net.minecraft.component.type.AttributeModifiersComponent;
-import net.minecraft.component.type.ItemEnchantmentsComponent;
-import net.minecraft.entity.attribute.EntityAttribute;
-import net.minecraft.entity.attribute.EntityAttributeModifier;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.CreativeInventoryActionC2SPacket;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.entity.EquipmentSlotGroup;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.world.entity.ai.attributes.Attribute;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.core.Holder;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
+import net.minecraft.resources.Identifier;
 
 import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 
@@ -27,17 +27,17 @@ public class ItemCrashCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.executes(context -> {
             if (mc.player == null)
                 return SINGLE_SUCCESS;
 
-            if (!mc.player.getAbilities().creativeMode) {
+            if (!mc.player.getAbilities().instabuild) {
                 error("You must be in Creative mode!");
                 return SINGLE_SUCCESS;
             }
 
-            ItemStack stack = mc.player.getMainHandStack();
+            ItemStack stack = mc.player.getMainHandItem();
             if (stack.isEmpty()) {
                 error("Hold an item first!");
                 return SINGLE_SUCCESS;
@@ -45,42 +45,43 @@ public class ItemCrashCommand extends Command {
 
             info("Overloading item with extreme data...");
 
-            if (mc.world != null) {
-                var registry = mc.world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
-                ItemEnchantmentsComponent.Builder enchBuilder = new ItemEnchantmentsComponent.Builder(
-                        ItemEnchantmentsComponent.DEFAULT);
+            if (mc.level != null) {
+                var registry = mc.level.registryAccess().getOrThrow(Registries.ENCHANTMENT);
+                ItemEnchantments.Mutable enchBuilder = new ItemEnchantments.Mutable(
+                        ItemEnchantments.EMPTY);
 
-                registry.streamEntries().forEach(ref -> enchBuilder.add(ref, 255));
-                stack.set(DataComponentTypes.ENCHANTMENTS, enchBuilder.build());
+                var reg = registry.value();
+                reg.stream().forEach(e -> enchBuilder.set(reg.wrapAsHolder(e), 255));
+                stack.set(DataComponents.ENCHANTMENTS, enchBuilder.toImmutable());
             }
 
-            AttributeModifiersComponent.Builder attrBuilder = AttributeModifiersComponent.builder();
-            addCrashAttr(attrBuilder, EntityAttributes.ATTACK_DAMAGE, 0);
-            addCrashAttr(attrBuilder, EntityAttributes.ATTACK_SPEED, 1);
-            addCrashAttr(attrBuilder, EntityAttributes.MAX_HEALTH, 2);
-            addCrashAttr(attrBuilder, EntityAttributes.MOVEMENT_SPEED, 3);
-            addCrashAttr(attrBuilder, EntityAttributes.ARMOR, 4);
-            addCrashAttr(attrBuilder, EntityAttributes.ARMOR_TOUGHNESS, 5);
-            addCrashAttr(attrBuilder, EntityAttributes.KNOCKBACK_RESISTANCE, 6);
-            addCrashAttr(attrBuilder, EntityAttributes.LUCK, 7);
-            addCrashAttr(attrBuilder, EntityAttributes.ATTACK_KNOCKBACK, 8);
-            addCrashAttr(attrBuilder, EntityAttributes.FLYING_SPEED, 9);
-            addCrashAttr(attrBuilder, EntityAttributes.FOLLOW_RANGE, 10);
-            stack.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, attrBuilder.build());
+            ItemAttributeModifiers.Builder attrBuilder = ItemAttributeModifiers.builder();
+            addCrashAttr(attrBuilder, Attributes.ATTACK_DAMAGE, 0);
+            addCrashAttr(attrBuilder, Attributes.ATTACK_SPEED, 1);
+            addCrashAttr(attrBuilder, Attributes.MAX_HEALTH, 2);
+            addCrashAttr(attrBuilder, Attributes.MOVEMENT_SPEED, 3);
+            addCrashAttr(attrBuilder, Attributes.ARMOR, 4);
+            addCrashAttr(attrBuilder, Attributes.ARMOR_TOUGHNESS, 5);
+            addCrashAttr(attrBuilder, Attributes.KNOCKBACK_RESISTANCE, 6);
+            addCrashAttr(attrBuilder, Attributes.LUCK, 7);
+            addCrashAttr(attrBuilder, Attributes.ATTACK_KNOCKBACK, 8);
+            addCrashAttr(attrBuilder, Attributes.FLYING_SPEED, 9);
+            addCrashAttr(attrBuilder, Attributes.FOLLOW_RANGE, 10);
+            stack.set(DataComponents.ATTRIBUTE_MODIFIERS, attrBuilder.build());
 
             StringBuilder nameSb = new StringBuilder();
             for (int i = 0; i < 50; i++) {
                 nameSb.append("\u00A7k\u2588\u2588\u2588\u2588");
             }
-            stack.set(DataComponentTypes.CUSTOM_NAME,
-                    Text.literal(nameSb.toString()).setStyle(
-                            Style.EMPTY.withColor(Formatting.RED).withBold(true).withObfuscated(true)));
+            stack.set(DataComponents.CUSTOM_NAME,
+                    Component.literal(nameSb.toString()).setStyle(
+                            Style.EMPTY.withColor(ChatFormatting.RED).withBold(true).withObfuscated(true)));
 
-            stack.set(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true);
+            stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
 
-            if (mc.getNetworkHandler() != null) {
+            if (mc.getConnection() != null) {
                 int slot = mc.player.getInventory().getSelectedSlot();
-                mc.getNetworkHandler().sendPacket(new CreativeInventoryActionC2SPacket(36 + slot, stack));
+                mc.getConnection().send(new ServerboundSetCreativeModeSlotPacket(36 + slot, stack));
             }
 
             info("Item overloaded! (Enchants: ALL@255, Attributes: ALL@999999999)");
@@ -88,12 +89,12 @@ public class ItemCrashCommand extends Command {
         });
     }
 
-    private void addCrashAttr(AttributeModifiersComponent.Builder builder,
-            RegistryEntry<EntityAttribute> attr, int index) {
-        EntityAttributeModifier mod = new EntityAttributeModifier(
-                Identifier.of("orbiter", "crash_attr_" + index),
+    private void addCrashAttr(ItemAttributeModifiers.Builder builder,
+            Holder<Attribute> attr, int index) {
+        AttributeModifier mod = new AttributeModifier(
+                Identifier.fromNamespaceAndPath("orbiter", "crash_attr_" + index),
                 999999999.0,
-                EntityAttributeModifier.Operation.ADD_VALUE);
-        builder.add(attr, mod, AttributeModifierSlot.ANY);
+                AttributeModifier.Operation.ADD_VALUE);
+        builder.add(attr, mod, EquipmentSlotGroup.ANY);
     }
 }

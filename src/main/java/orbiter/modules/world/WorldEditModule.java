@@ -8,18 +8,18 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.CreativeInventoryActionC2SPacket;
-import net.minecraft.registry.Registries;
-import net.minecraft.state.property.Property;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.resources.Identifier;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -202,7 +202,7 @@ public class WorldEditModule extends CreativeSafetyModule {
         loadClipboard();
         resolveSelectionToolItem(true);
 
-        if (mc.player != null && autoGiveWand.get() && mc.player.getAbilities().creativeMode) ensureSelectionToolInHotbar();
+        if (mc.player != null && autoGiveWand.get() && mc.player.getAbilities().instabuild) ensureSelectionToolInHotbar();
         applySpeedPreset();
 
         info("WorldEdit module active.");
@@ -223,7 +223,7 @@ public class WorldEditModule extends CreativeSafetyModule {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.player.connection == null) return;
         List<ExecutionStep> commands = pendingCommands;
         if (commands == null) return;
 
@@ -273,8 +273,8 @@ public class WorldEditModule extends CreativeSafetyModule {
                 continue;
             }
 
-            if (step instanceof CommandStep command && mc.player != null && mc.player.networkHandler != null) {
-                mc.player.networkHandler.sendChatCommand(command.command());
+            if (step instanceof CommandStep command && mc.player != null && mc.player.connection != null) {
+                mc.player.connection.sendCommand(command.command());
             }
             cmdIndex++;
             sent++;
@@ -284,7 +284,7 @@ public class WorldEditModule extends CreativeSafetyModule {
     @EventHandler
     private void onStartBreakingBlock(StartBreakingBlockEvent event) {
         if (mc.player == null) return;
-        if (!isSelectionTool(mc.player.getMainHandStack())) return;
+        if (!isSelectionTool(mc.player.getMainHandItem())) return;
 
         event.cancel();
         pos1 = event.blockPos;
@@ -294,7 +294,7 @@ public class WorldEditModule extends CreativeSafetyModule {
     @EventHandler
     private void onInteractBlock(InteractBlockEvent event) {
         if (mc.player == null) return;
-        if (!isSelectionTool(mc.player.getMainHandStack())) return;
+        if (!isSelectionTool(mc.player.getMainHandItem())) return;
 
         event.cancel();
         pos2 = event.result.getBlockPos();
@@ -338,7 +338,7 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private void handleCommand(String[] parts) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         String action = parts[0].toLowerCase(Locale.ROOT);
 
@@ -367,12 +367,12 @@ public class WorldEditModule extends CreativeSafetyModule {
             switch (action) {
                 case "pos1", "p1" -> {
                     if (parts.length >= 4) pos1 = new BlockPos(parseInt(parts[1], 0), parseInt(parts[2], 0), parseInt(parts[3], 0));
-                    else pos1 = mc.player.getBlockPos();
+                    else pos1 = mc.player.blockPosition();
                     info("Pos1 set to: " + formatPos(pos1) + selectionInfo());
                 }
                 case "pos2", "p2" -> {
                     if (parts.length >= 4) pos2 = new BlockPos(parseInt(parts[1], 0), parseInt(parts[2], 0), parseInt(parts[3], 0));
-                    else pos2 = mc.player.getBlockPos();
+                    else pos2 = mc.player.blockPosition();
                     info("Pos2 set to: " + formatPos(pos2) + selectionInfo());
                 }
                 case "hpos1" -> {
@@ -394,9 +394,9 @@ public class WorldEditModule extends CreativeSafetyModule {
                     info("Pos2 set to looked-at block: " + formatPos(pos2) + selectionInfo());
                 }
                 case "chunk" -> {
-                    ChunkPos chunk = mc.player.getChunkPos();
-                    pos1 = new BlockPos(chunk.getStartX(), mc.world.getBottomY(), chunk.getStartZ());
-                    pos2 = new BlockPos(chunk.getEndX(), worldTopY(), chunk.getEndZ());
+                    ChunkPos chunk = ChunkPos.containing(mc.player.blockPosition());
+                    pos1 = new BlockPos(chunk.getMinBlockX(), mc.level.getMinY(), chunk.getMinBlockZ());
+                    pos2 = new BlockPos(chunk.getMaxBlockX(), worldTopY(), chunk.getMaxBlockZ());
                     info("Selection set to current chunk: " + selectionInfo());
                 }
                 case "set" -> {
@@ -499,8 +499,8 @@ public class WorldEditModule extends CreativeSafetyModule {
                     String block = parts[1];
                     if (parseBlockPattern(block) == null) return;
                     int r = parseInt(parts[2], 5);
-                    BlockPos c = mc.player.getBlockPos();
-                    OperationBounds b = new OperationBounds(c.add(-r, -r, -r), c.add(r, r, r));
+                    BlockPos c = mc.player.blockPosition();
+                    OperationBounds b = new OperationBounds(c.offset(-r, -r, -r), c.offset(r, r, r));
                     maybeExecute(new OperationRequest("sphere " + block + " r=" + r, buildSphereCommands(c, r, block), b.volume(), b, c, true));
                 }
                 case "hsphere" -> {
@@ -511,8 +511,8 @@ public class WorldEditModule extends CreativeSafetyModule {
                     String block = parts[1];
                     if (parseBlockPattern(block) == null) return;
                     int r = parseInt(parts[2], 5);
-                    BlockPos c = mc.player.getBlockPos();
-                    OperationBounds b = new OperationBounds(c.add(-r, -r, -r), c.add(r, r, r));
+                    BlockPos c = mc.player.blockPosition();
+                    OperationBounds b = new OperationBounds(c.offset(-r, -r, -r), c.offset(r, r, r));
                     maybeExecute(new OperationRequest("hsphere " + block + " r=" + r, buildHollowSphereCommands(c, r, block), b.volume(), b, c, true));
                 }
                 case "cyl", "cylinder" -> {
@@ -524,8 +524,8 @@ public class WorldEditModule extends CreativeSafetyModule {
                     if (parseBlockPattern(block) == null) return;
                     int r = parseInt(parts[2], 5);
                     int h = parseInt(parts[3], 10);
-                    BlockPos base = mc.player.getBlockPos();
-                    OperationBounds b = new OperationBounds(base.add(-r, 0, -r), base.add(r, h - 1, r));
+                    BlockPos base = mc.player.blockPosition();
+                    OperationBounds b = new OperationBounds(base.offset(-r, 0, -r), base.offset(r, h - 1, r));
                     maybeExecute(new OperationRequest("cyl " + block + " r=" + r + " h=" + h, buildCylinderCommands(base, r, h, block), b.volume(), b, b.center(), true));
                 }
                 case "hcyl" -> {
@@ -537,8 +537,8 @@ public class WorldEditModule extends CreativeSafetyModule {
                     if (parseBlockPattern(block) == null) return;
                     int r = parseInt(parts[2], 5);
                     int h = parseInt(parts[3], 10);
-                    BlockPos base = mc.player.getBlockPos();
-                    OperationBounds b = new OperationBounds(base.add(-r, 0, -r), base.add(r, h - 1, r));
+                    BlockPos base = mc.player.blockPosition();
+                    OperationBounds b = new OperationBounds(base.offset(-r, 0, -r), base.offset(r, h - 1, r));
                     maybeExecute(new OperationRequest("hcyl " + block + " r=" + r + " h=" + h, buildHollowCylinderCommands(base, r, h, block), b.volume(), b, b.center(), true));
                 }
                 case "pyramid" -> {
@@ -549,8 +549,8 @@ public class WorldEditModule extends CreativeSafetyModule {
                     String block = parts[1];
                     if (parseBlockPattern(block) == null) return;
                     int size = parseInt(parts[2], 5);
-                    BlockPos base = mc.player.getBlockPos();
-                    OperationBounds b = new OperationBounds(base.add(-size, 0, -size), base.add(size, Math.max(0, size - 1), size));
+                    BlockPos base = mc.player.blockPosition();
+                    OperationBounds b = new OperationBounds(base.offset(-size, 0, -size), base.offset(size, Math.max(0, size - 1), size));
                     maybeExecute(new OperationRequest("pyramid " + block + " s=" + size, buildPyramidCommands(base, size, block, false), b.volume(), b, b.center(), true));
                 }
                 case "hpyramid" -> {
@@ -561,15 +561,15 @@ public class WorldEditModule extends CreativeSafetyModule {
                     String block = parts[1];
                     if (parseBlockPattern(block) == null) return;
                     int size = parseInt(parts[2], 5);
-                    BlockPos base = mc.player.getBlockPos();
-                    OperationBounds b = new OperationBounds(base.add(-size, 0, -size), base.add(size, Math.max(0, size - 1), size));
+                    BlockPos base = mc.player.blockPosition();
+                    OperationBounds b = new OperationBounds(base.offset(-size, 0, -size), base.offset(size, Math.max(0, size - 1), size));
                     maybeExecute(new OperationRequest("hpyramid " + block + " s=" + size, buildPyramidCommands(base, size, block, true), b.volume(), b, b.center(), true));
                 }
                 case "cut" -> {
                     if (!requireSelection()) return;
                     clipboardMin = getMin();
                     clipboardMax = getMax();
-                    clipboardOrigin = mc.player.getBlockPos();
+                    clipboardOrigin = mc.player.blockPosition();
                     saveClipboard();
                     OperationBounds b = new OperationBounds(clipboardMin, clipboardMax);
                     maybeExecute(new OperationRequest("cut", buildFillCommands(b.min, b.max, "minecraft:air"), b.volume(), b, b.center(), true));
@@ -579,7 +579,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                     if (!requireSelection()) return;
                     clipboardMin = getMin();
                     clipboardMax = getMax();
-                    clipboardOrigin = mc.player.getBlockPos();
+                    clipboardOrigin = mc.player.blockPosition();
                     saveClipboard();
                     info("Copied to clipboard (" + getVolume() + " blocks).");
                 }
@@ -588,12 +588,12 @@ public class WorldEditModule extends CreativeSafetyModule {
                         error("Nothing in clipboard. Use .we copy or .we cut first.");
                         return;
                     }
-                    BlockPos offset = mc.player.getBlockPos();
+                    BlockPos offset = mc.player.blockPosition();
                     int dx = offset.getX() - clipboardOrigin.getX();
                     int dy = offset.getY() - clipboardOrigin.getY();
                     int dz = offset.getZ() - clipboardOrigin.getZ();
-                    BlockPos dstMin = clipboardMin.add(dx, dy, dz);
-                    BlockPos dstMax = clipboardMax.add(dx, dy, dz);
+                    BlockPos dstMin = clipboardMin.offset(dx, dy, dz);
+                    BlockPos dstMax = clipboardMax.offset(dx, dy, dz);
                     OperationBounds b = new OperationBounds(dstMin, dstMax);
                     List<String> cmds = buildCloneCommandsChunked(clipboardMin, clipboardMax, dstMin, true, false);
                     maybeExecute(new OperationRequest("paste", cmds, b.volume(), b, b.center(), true));
@@ -623,7 +623,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                     BlockPos min = getMin();
                     BlockPos max = getMax();
                     OperationBounds b = computeStackBounds(min, max, count, dir);
-                    maybeExecute(new OperationRequest("stack " + count + " " + dir, buildStackCommands(min, max, count, dir), b == null ? -1 : b.volume(), b, b == null ? mc.player.getBlockPos() : b.center(), true));
+                    maybeExecute(new OperationRequest("stack " + count + " " + dir, buildStackCommands(min, max, count, dir), b == null ? -1 : b.volume(), b, b == null ? mc.player.blockPosition() : b.center(), true));
                 }
                 case "move" -> {
                     if (!requireSelection()) return;
@@ -636,12 +636,12 @@ public class WorldEditModule extends CreativeSafetyModule {
                     BlockPos min = getMin();
                     BlockPos max = getMax();
                     OperationBounds b = computeMoveBounds(min, max, dist, dir);
-                    maybeExecute(new OperationRequest("move " + dist + " " + dir, buildMoveCommands(min, max, dist, dir), b == null ? -1 : b.volume(), b, b == null ? mc.player.getBlockPos() : b.center(), true));
+                    maybeExecute(new OperationRequest("move " + dist + " " + dir, buildMoveCommands(min, max, dist, dir), b == null ? -1 : b.volume(), b, b == null ? mc.player.blockPosition() : b.center(), true));
                 }
                 case "drain" -> {
                     int r = parts.length >= 2 ? parseInt(parts[1], 10) : 10;
-                    BlockPos c = mc.player.getBlockPos();
-                    OperationBounds b = new OperationBounds(c.add(-r, -r, -r), c.add(r, r, r));
+                    BlockPos c = mc.player.blockPosition();
+                    OperationBounds b = new OperationBounds(c.offset(-r, -r, -r), c.offset(r, r, r));
                     List<String> cmds = new ArrayList<>();
                     cmds.addAll(buildReplaceCommands(b.min, b.max, "minecraft:water", "minecraft:air"));
                     cmds.addAll(buildReplaceCommands(b.min, b.max, "minecraft:lava", "minecraft:air"));
@@ -658,8 +658,8 @@ public class WorldEditModule extends CreativeSafetyModule {
                     int r = parseInt(parts[1], 10);
                     String from = parts[2];
                     String to = parts[3];
-                    BlockPos c = mc.player.getBlockPos();
-                    OperationBounds b = new OperationBounds(c.add(-r, -r, -r), c.add(r, r, r));
+                    BlockPos c = mc.player.blockPosition();
+                    OperationBounds b = new OperationBounds(c.offset(-r, -r, -r), c.offset(r, r, r));
                     maybeExecute(new OperationRequest("replacenear " + from + " -> " + to + " r=" + r, buildReplaceCommands(b.min, b.max, from, to), b.volume(), b, c, true));
                 }
                 case "line" -> {
@@ -710,7 +710,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                     }
                     String normalized = normalizeBlock(parts[1]);
                     Identifier id = parseBlockIdentifier(normalized);
-                    if (id == null || !Registries.BLOCK.containsId(id)) {
+                    if (id == null || !BuiltInRegistries.BLOCK.containsKey(id)) {
                         error("Invalid block: " + parts[1]);
                         return;
                     }
@@ -785,7 +785,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                         info("Current selection tool: " + getSelectionToolItemId());
                         return;
                     }
-                    if (setSelectionTool(parts[1]) && autoGiveWand.get() && mc.player != null && mc.player.getAbilities().creativeMode) ensureSelectionToolInHotbar();
+                    if (setSelectionTool(parts[1]) && autoGiveWand.get() && mc.player != null && mc.player.getAbilities().instabuild) ensureSelectionToolInHotbar();
                 }
                 case "undo" -> performUndo(parts.length >= 2 ? Math.max(1, parseInt(parts[1], 1)) : 1);
                 case "redo" -> performRedo(parts.length >= 2 ? Math.max(1, parseInt(parts[1], 1)) : 1);
@@ -936,7 +936,7 @@ public class WorldEditModule extends CreativeSafetyModule {
         pendingHistoryEntry = null;
     }
     private boolean verifyTeleport(BlockPos target) {
-        double distSq = mc.player.squaredDistanceTo(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
+        double distSq = mc.player.distanceToSqr(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
         return !abortIfZoneTpFails.get() || distSq <= 100;
     }
 
@@ -944,7 +944,7 @@ public class WorldEditModule extends CreativeSafetyModule {
         List<ExecutionStep> wrapped = new ArrayList<>();
         if (commands == null || commands.isEmpty()) return wrapped;
 
-        if (!preventUnloadedZoneError.get() || mc.player == null || mc.world == null) {
+        if (!preventUnloadedZoneError.get() || mc.player == null || mc.level == null) {
             for (String command : commands) wrapped.add(new CommandStep(command));
             return wrapped;
         }
@@ -955,12 +955,12 @@ public class WorldEditModule extends CreativeSafetyModule {
             return wrapped;
         }
 
-        BlockPos origin = mc.player.getBlockPos();
+        BlockPos origin = mc.player.blockPosition();
         for (BlockPos target : preloadTargets) {
             wrapped.add(new CommandStep(formatTeleportCommand(target)));
             int waitTicks = Math.max(0, zoneTpDelay.get());
             if (waitTicks > 0) wrapped.add(new WaitStep(waitTicks));
-            if (abortIfZoneTpFails.get()) wrapped.add(new VerifyTeleportStep(target.toImmutable()));
+            if (abortIfZoneTpFails.get()) wrapped.add(new VerifyTeleportStep(target.immutable()));
         }
 
         for (String command : commands) wrapped.add(new CommandStep(command));
@@ -978,12 +978,12 @@ public class WorldEditModule extends CreativeSafetyModule {
 
     private List<BlockPos> collectZonePreloadTargets(OperationBounds bounds, BlockPos targetCenter) {
         List<BlockPos> targets = new ArrayList<>();
-        if (mc.world == null || mc.player == null) return targets;
+        if (mc.level == null || mc.player == null) return targets;
 
         int y = clampTpY(targetCenter != null ? targetCenter.getY() : mc.player.getBlockY());
 
         if (bounds == null) {
-            BlockPos center = targetCenter != null ? targetCenter : mc.player.getBlockPos();
+            BlockPos center = targetCenter != null ? targetCenter : mc.player.blockPosition();
             if (!isChunkLoaded(center)) targets.add(new BlockPos(center.getX(), y, center.getZ()));
             return targets;
         }
@@ -1008,15 +1008,15 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private int clampTpY(int y) {
-        if (mc.world == null) return y;
-        int minY = mc.world.getBottomY() + 2;
+        if (mc.level == null) return y;
+        int minY = mc.level.getMinY() + 2;
         int maxY = worldTopY() - 2;
         return Math.max(minY, Math.min(maxY, y));
     }
 
     private void addUnloadedChunkTarget(List<BlockPos> targets, int chunkX, int chunkZ, int y) {
-        if (mc.world == null || mc.world.getChunkManager() == null) return;
-        if (mc.world.getChunkManager().isChunkLoaded(chunkX, chunkZ)) return;
+        if (mc.level == null || mc.level.getChunkSource() == null) return;
+        if (mc.level.getChunkSource().hasChunk(chunkX, chunkZ)) return;
 
         BlockPos pos = new BlockPos((chunkX << 4) + 8, y, (chunkZ << 4) + 8);
         for (BlockPos existing : targets) {
@@ -1027,25 +1027,25 @@ public class WorldEditModule extends CreativeSafetyModule {
 
     private List<String> createUndoSnapshotCommands(OperationBounds bounds) {
         List<String> cmds = new ArrayList<>();
-        if (mc.world == null || bounds == null) return cmds;
+        if (mc.level == null || bounds == null) return cmds;
         if (!isBoundsLoaded(bounds)) {
             warning("Cannot capture undo snapshot: bounds include unloaded chunks.");
             return cmds;
         }
 
-        BlockPos.Mutable mutable = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
         for (int y = bounds.min.getY(); y <= bounds.max.getY(); y++) {
             for (int z = bounds.min.getZ(); z <= bounds.max.getZ(); z++) {
                 int x = bounds.min.getX();
                 while (x <= bounds.max.getX()) {
                     mutable.set(x, y, z);
-                    String state = toCommandBlockState(mc.world.getBlockState(mutable));
+                    String state = toCommandBlockState(mc.level.getBlockState(mutable));
                     int startX = x;
                     x++;
 
                     while (x <= bounds.max.getX()) {
                         mutable.set(x, y, z);
-                        String next = toCommandBlockState(mc.world.getBlockState(mutable));
+                        String next = toCommandBlockState(mc.level.getBlockState(mutable));
                         if (!state.equals(next)) break;
                         x++;
                     }
@@ -1061,10 +1061,11 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private String toCommandBlockState(BlockState state) {
-        Identifier id = Registries.BLOCK.getId(state.getBlock());
+        Identifier id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
         StringBuilder sb = new StringBuilder(id.toString());
 
-        Map<Property<?>, Comparable<?>> entries = state.getEntries();
+        Map<Property<?>, Comparable<?>> entries = new HashMap<>();
+        state.getValues().forEach(v -> entries.put(v.property(), v.value()));
         if (!entries.isEmpty()) {
             sb.append('[');
             boolean first = true;
@@ -1081,7 +1082,7 @@ public class WorldEditModule extends CreativeSafetyModule {
 
     @SuppressWarnings({ "rawtypes", "unchecked" })
     private String getPropertyName(Property<?> property, Comparable<?> value) {
-        return ((Property) property).name((Comparable) value);
+        return ((Property) property).getName((Comparable) value);
     }
 
     private void expandSelection(int amount, String dir) {
@@ -1110,7 +1111,7 @@ public class WorldEditModule extends CreativeSafetyModule {
         if (!requireSelection()) return;
         BlockPos min = getMin();
         BlockPos max = getMax();
-        pos1 = new BlockPos(min.getX(), mc.world.getBottomY(), min.getZ());
+        pos1 = new BlockPos(min.getX(), mc.level.getMinY(), min.getZ());
         pos2 = new BlockPos(max.getX(), worldTopY(), max.getZ());
         info("Selection expanded vertically" + selectionInfo());
     }
@@ -1135,16 +1136,16 @@ public class WorldEditModule extends CreativeSafetyModule {
             }
         }
 
-        pos1 = pos1.add(ox, oy, oz);
-        pos2 = pos2.add(ox, oy, oz);
+        pos1 = pos1.offset(ox, oy, oz);
+        pos2 = pos2.offset(ox, oy, oz);
         info("Selection shifted " + amount + " " + dir + selectionInfo());
     }
 
     private void insetSelection(int amount) {
         BlockPos min = getMin();
         BlockPos max = getMax();
-        BlockPos newMin = min.add(amount, amount, amount);
-        BlockPos newMax = max.add(-amount, -amount, -amount);
+        BlockPos newMin = min.offset(amount, amount, amount);
+        BlockPos newMax = max.offset(-amount, -amount, -amount);
 
         if (newMin.getX() > newMax.getX() || newMin.getY() > newMax.getY() || newMin.getZ() > newMax.getZ()) {
             error("Inset amount is too large for current selection.");
@@ -1159,15 +1160,15 @@ public class WorldEditModule extends CreativeSafetyModule {
     private void outsetSelection(int amount) {
         BlockPos min = getMin();
         BlockPos max = getMax();
-        pos1 = min.add(-amount, -amount, -amount);
-        pos2 = max.add(amount, amount, amount);
+        pos1 = min.offset(-amount, -amount, -amount);
+        pos2 = max.offset(amount, amount, amount);
         info("Selection outset by " + amount + selectionInfo());
     }
 
     private String getFacingDirection() {
         if (mc.player == null) return "north";
 
-        float yaw = mc.player.getYaw() % 360;
+        float yaw = mc.player.getYRot() % 360;
         if (yaw < 0) yaw += 360;
 
         if (yaw >= 315 || yaw < 45) return "south";
@@ -1177,7 +1178,7 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private void ascend(int levels) {
-        BlockPos cursor = mc.player.getBlockPos();
+        BlockPos cursor = mc.player.blockPosition();
         int moved = 0;
         for (int i = 0; i < levels; i++) {
             BlockPos next = findStandableAbove(cursor);
@@ -1194,7 +1195,7 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private void descend(int levels) {
-        BlockPos cursor = mc.player.getBlockPos();
+        BlockPos cursor = mc.player.blockPosition();
         int moved = 0;
         for (int i = 0; i < levels; i++) {
             BlockPos next = findStandableBelow(cursor);
@@ -1211,12 +1212,12 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private void teleportToCeiling(int clearance) {
-        BlockPos playerPos = mc.player.getBlockPos();
+        BlockPos playerPos = mc.player.blockPosition();
         int topY = worldTopY();
 
         for (int y = playerPos.getY() + 1; y <= topY; y++) {
             BlockPos ceilingBlock = new BlockPos(playerPos.getX(), y, playerPos.getZ());
-            if (!mc.world.getBlockState(ceilingBlock).isAir()) {
+            if (!mc.level.getBlockState(ceilingBlock).isAir()) {
                 int targetFeetY = y - clearance - 2;
                 BlockPos target = new BlockPos(playerPos.getX(), targetFeetY, playerPos.getZ());
                 if (canStandAt(target)) {
@@ -1233,8 +1234,8 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private void attemptThru() {
-        BlockPos start = mc.player.getBlockPos();
-        double yawRad = Math.toRadians(mc.player.getYaw());
+        BlockPos start = mc.player.blockPosition();
+        double yawRad = Math.toRadians(mc.player.getYRot());
         double dirX = -Math.sin(yawRad);
         double dirZ = Math.cos(yawRad);
 
@@ -1269,7 +1270,7 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private BlockPos findStandableBelow(BlockPos origin) {
-        int minY = mc.world.getBottomY() + 1;
+        int minY = mc.level.getMinY() + 1;
         for (int y = origin.getY() - 1; y >= minY; y--) {
             BlockPos candidate = new BlockPos(origin.getX(), y, origin.getZ());
             if (canStandAt(candidate)) return candidate;
@@ -1278,14 +1279,14 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private boolean canStandAt(BlockPos feet) {
-        if (mc.world == null) return false;
+        if (mc.level == null) return false;
         if (!isChunkLoaded(feet)) return false;
 
-        BlockState feetState = mc.world.getBlockState(feet);
-        BlockState headState = mc.world.getBlockState(feet.up());
-        BlockState floorState = mc.world.getBlockState(feet.down());
+        BlockState feetState = mc.level.getBlockState(feet);
+        BlockState headState = mc.level.getBlockState(feet.above());
+        BlockState floorState = mc.level.getBlockState(feet.below());
 
-        return feetState.isAir() && headState.isAir() && floorState.isSolidBlock(mc.world, feet.down());
+        return feetState.isAir() && headState.isAir() && floorState.isSolid();
     }
     private Identifier normalizeItemIdentifier(String raw) {
         if (raw == null) return null;
@@ -1298,7 +1299,7 @@ public class WorldEditModule extends CreativeSafetyModule {
 
     private Item resolveSelectionToolItem(boolean warn) {
         Identifier id = normalizeItemIdentifier(selectionToolItem.get());
-        if (id == null || !Registries.ITEM.containsId(id)) {
+        if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) {
             if (warn && !warnedInvalidToolItem) {
                 warning("Invalid selection-tool-item: " + selectionToolItem.get() + ". Falling back to minecraft:stone_axe.");
                 warnedInvalidToolItem = true;
@@ -1307,12 +1308,12 @@ public class WorldEditModule extends CreativeSafetyModule {
         }
 
         warnedInvalidToolItem = false;
-        return Registries.ITEM.get(id);
+        return BuiltInRegistries.ITEM.getValue(id);
     }
 
     private boolean setSelectionTool(String raw) {
         Identifier id = normalizeItemIdentifier(raw);
-        if (id == null || !Registries.ITEM.containsId(id)) {
+        if (id == null || !BuiltInRegistries.ITEM.containsKey(id)) {
             error("Invalid item ID: " + raw);
             return false;
         }
@@ -1324,7 +1325,7 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private String getSelectionToolItemId() {
-        return Registries.ITEM.getId(resolveSelectionToolItem(false)).toString();
+        return BuiltInRegistries.ITEM.getKey(resolveSelectionToolItem(false)).toString();
     }
 
     private boolean isSelectionTool(ItemStack stack) {
@@ -1332,17 +1333,16 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private void ensureSelectionToolInHotbar() {
-        if (mc.player == null || mc.player.networkHandler == null || mc.player.getInventory() == null) return;
+        if (mc.player == null || mc.player.connection == null || mc.player.getInventory() == null) return;
 
         Item tool = resolveSelectionToolItem(true);
-        for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getStack(i).getItem() == tool) return;
-        }
+        int slot = mc.player.getInventory().getSelectedSlot();
+        if (mc.player.getInventory().getItem(slot).getItem() == tool) return;
 
         ItemStack toolStack = new ItemStack(tool, 1);
-        mc.player.networkHandler.sendPacket(new CreativeInventoryActionC2SPacket(36, toolStack));
-        mc.player.getInventory().setStack(0, toolStack);
-        info("Gave selection tool: " + Registries.ITEM.getId(tool));
+        mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(36 + slot, toolStack));
+        mc.player.getInventory().setItem(slot, toolStack);
+        info("Gave selection tool: " + BuiltInRegistries.ITEM.getId(tool));
     }
 
     private List<String> buildFillCommands(BlockPos min, BlockPos max, String blockSpec) {
@@ -1400,7 +1400,7 @@ public class WorldEditModule extends CreativeSafetyModule {
 
         String from = normalizeSingleBlock(fromSpec);
         Identifier fromId = parseBlockIdentifier(from);
-        if (fromId == null || !Registries.BLOCK.containsId(fromId)) {
+        if (fromId == null || !BuiltInRegistries.BLOCK.containsKey(fromId)) {
             error("Invalid source block for replace: " + fromSpec);
             return cmds;
         }
@@ -1459,8 +1459,8 @@ public class WorldEditModule extends CreativeSafetyModule {
         List<String> cmds = new ArrayList<>();
         cmds.addAll(buildFillCommands(min, max, block));
 
-        BlockPos innerMin = min.add(thickness, thickness, thickness);
-        BlockPos innerMax = max.add(-thickness, -thickness, -thickness);
+        BlockPos innerMin = min.offset(thickness, thickness, thickness);
+        BlockPos innerMax = max.offset(-thickness, -thickness, -thickness);
         if (innerMin.getX() <= innerMax.getX() && innerMin.getY() <= innerMax.getY() && innerMin.getZ() <= innerMax.getZ()) {
             cmds.addAll(buildFillCommands(innerMin, innerMax, "minecraft:air"));
         }
@@ -1576,7 +1576,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                 default -> oz = dz * i;
             }
 
-            cmds.addAll(buildCloneCommandsChunked(min, max, min.add(ox, oy, oz), true, false));
+            cmds.addAll(buildCloneCommandsChunked(min, max, min.offset(ox, oy, oz), true, false));
         }
 
         return cmds;
@@ -1619,7 +1619,7 @@ public class WorldEditModule extends CreativeSafetyModule {
 
     private List<String> buildFlipCommands(BlockPos min, BlockPos max, int axis) {
         List<String> cmds = new ArrayList<>();
-        if (mc.world == null) return cmds;
+        if (mc.level == null) return cmds;
 
         OperationBounds bounds = new OperationBounds(min, max);
         if (!isBoundsLoaded(bounds)) {
@@ -1627,7 +1627,7 @@ public class WorldEditModule extends CreativeSafetyModule {
             return cmds;
         }
 
-        BlockPos.Mutable mutable = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
         for (int x = min.getX(); x <= max.getX(); x++) {
             for (int y = min.getY(); y <= max.getY(); y++) {
                 for (int z = min.getZ(); z <= max.getZ(); z++) {
@@ -1640,7 +1640,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                     else tz = max.getZ() - (z - min.getZ());
 
                     mutable.set(x, y, z);
-                    String state = toCommandBlockState(mc.world.getBlockState(mutable));
+                    String state = toCommandBlockState(mc.level.getBlockState(mutable));
                     cmds.add(String.format("setblock %d %d %d %s", tx, ty, tz, state));
                 }
             }
@@ -1668,8 +1668,8 @@ public class WorldEditModule extends CreativeSafetyModule {
 
         cmds.add(String.format("clone %d %d %d %d %d %d %d %d %d replace move", min.getX(), min.getY(), min.getZ(), max.getX(), max.getY(), max.getZ(), min.getX() + ox, min.getY() + oy, min.getZ() + oz));
 
-        pos1 = min.add(ox, oy, oz);
-        pos2 = max.add(ox, oy, oz);
+        pos1 = min.offset(ox, oy, oz);
+        pos2 = max.offset(ox, oy, oz);
 
         return cmds;
     }
@@ -1678,8 +1678,8 @@ public class WorldEditModule extends CreativeSafetyModule {
         List<String> cmds = new ArrayList<>();
         for (int layer = 0; layer < size; layer++) {
             int r = size - layer;
-            BlockPos layerMin = base.add(-r, layer, -r);
-            BlockPos layerMax = base.add(r, layer, r);
+            BlockPos layerMin = base.offset(-r, layer, -r);
+            BlockPos layerMax = base.offset(r, layer, r);
 
             if (hollow && layer > 0 && layer < size - 1) cmds.addAll(buildWallsCommands(layerMin, layerMax, block));
             else cmds.addAll(buildFillCommands(layerMin, layerMax, block));
@@ -1754,7 +1754,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                 default -> oz = dz * i;
             }
 
-            OperationBounds current = new OperationBounds(min.add(ox, oy, oz), max.add(ox, oy, oz));
+            OperationBounds current = new OperationBounds(min.offset(ox, oy, oz), max.offset(ox, oy, oz));
             total = total == null ? current : total.union(current);
         }
 
@@ -1778,7 +1778,7 @@ public class WorldEditModule extends CreativeSafetyModule {
         }
 
         OperationBounds original = new OperationBounds(min, max);
-        OperationBounds moved = new OperationBounds(min.add(ox, oy, oz), max.add(ox, oy, oz));
+        OperationBounds moved = new OperationBounds(min.offset(ox, oy, oz), max.offset(ox, oy, oz));
         return original.union(moved);
     }
 
@@ -1816,17 +1816,17 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private int worldTopY() {
-        if (mc.world == null || mc.world.getDimension() == null) return 319;
-        return mc.world.getBottomY() + mc.world.getDimension().height() - 1;
+        if (mc.level == null || mc.level.dimension() == null) return 319;
+        return mc.level.getMinY() + mc.level.dimensionType().height() - 1;
     }
 
     private boolean isChunkLoaded(BlockPos pos) {
-        if (mc.world == null || pos == null || mc.world.getChunkManager() == null) return false;
-        return mc.world.getChunkManager().isChunkLoaded(pos.getX() >> 4, pos.getZ() >> 4);
+        if (mc.level == null || pos == null || mc.level.getChunkSource() == null) return false;
+        return mc.level.getChunkSource().hasChunk(pos.getX() >> 4, pos.getZ() >> 4);
     }
 
     private boolean isBoundsLoaded(OperationBounds bounds) {
-        if (mc.world == null || bounds == null || mc.world.getChunkManager() == null) return false;
+        if (mc.level == null || bounds == null || mc.level.getChunkSource() == null) return false;
 
         int minChunkX = bounds.min.getX() >> 4;
         int maxChunkX = bounds.max.getX() >> 4;
@@ -1835,7 +1835,7 @@ public class WorldEditModule extends CreativeSafetyModule {
 
         for (int cx = minChunkX; cx <= maxChunkX; cx++) {
             for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
-                if (!mc.world.getChunkManager().isChunkLoaded(cx, cz)) return false;
+                if (!mc.level.getChunkSource().hasChunk(cx, cz)) return false;
             }
         }
 
@@ -1843,17 +1843,17 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private long countBlocksInBounds(OperationBounds bounds, Identifier blockId) {
-        if (mc.world == null || bounds == null) return 0;
+        if (mc.level == null || bounds == null) return 0;
 
         long count = 0;
-        BlockPos.Mutable mutable = new BlockPos.Mutable();
+        BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
 
         for (int x = bounds.min.getX(); x <= bounds.max.getX(); x++) {
             for (int y = bounds.min.getY(); y <= bounds.max.getY(); y++) {
                 for (int z = bounds.min.getZ(); z <= bounds.max.getZ(); z++) {
                     mutable.set(x, y, z);
-                    BlockState state = mc.world.getBlockState(mutable);
-                    if (Registries.BLOCK.getId(state.getBlock()).equals(blockId)) count++;
+                    BlockState state = mc.level.getBlockState(mutable);
+                    if (BuiltInRegistries.BLOCK.getKey(state.getBlock()).equals(blockId)) count++;
                 }
             }
         }
@@ -1864,7 +1864,7 @@ public class WorldEditModule extends CreativeSafetyModule {
     private BlockPos getCrosshairBlockPos() {
         if (mc.player == null) return null;
 
-        HitResult hit = mc.player.raycast(256.0, 0.0f, false);
+        HitResult hit = mc.player.pick(256.0, 0.0f, false);
         if (hit == null || hit.getType() != HitResult.Type.BLOCK) return null;
         return ((BlockHitResult) hit).getBlockPos();
     }
@@ -1924,7 +1924,7 @@ public class WorldEditModule extends CreativeSafetyModule {
 
             String normalized = normalizeSingleBlock(blockPart);
             Identifier id = parseBlockIdentifier(normalized);
-            if (id == null || !Registries.BLOCK.containsId(id)) {
+            if (id == null || !BuiltInRegistries.BLOCK.containsKey(id)) {
                 error("Invalid block in pattern: " + blockPart);
                 return null;
             }

@@ -13,14 +13,14 @@ import meteordevelopment.meteorclient.settings.StringSetting;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.network.packet.Packet;
-import net.minecraft.network.packet.c2s.common.CommonPongC2SPacket;
-import net.minecraft.network.packet.c2s.common.KeepAliveC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.c2s.play.VehicleMoveC2SPacket;
-import net.minecraft.network.packet.s2c.play.EntityStatusS2CPacket;
-import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.common.ServerboundPongPacket;
+import net.minecraft.network.protocol.common.ServerboundKeepAlivePacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
+import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 
 import java.io.File;
 import java.io.FileReader;
@@ -400,9 +400,9 @@ public class PingSpoof extends Module {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     private void onPacketSend(PacketEvent.Send event) {
-        if (sendingInternally || mc.player == null || mc.getNetworkHandler() == null) return;
+        if (sendingInternally || mc.player == null || mc.getConnection() == null) return;
 
-        if (disableInInventory.get() && mc.currentScreen != null) {
+        if (disableInInventory.get() && mc.gui.screen() != null) {
             return;
         }
 
@@ -420,7 +420,7 @@ public class PingSpoof extends Module {
         updateRampState();
         handleProfileToggles();
 
-        if (mode.get() == Mode.DynamicAdaptive && mc.world != null) {
+        if (mode.get() == Mode.DynamicAdaptive && mc.level != null) {
             lastKnownTps = meteordevelopment.meteorclient.utils.world.TickRate.INSTANCE.getTickRate();
         }
 
@@ -429,14 +429,14 @@ public class PingSpoof extends Module {
         }
 
         if (disableInInventory.get()) {
-            boolean inventoryOpen = mc.currentScreen != null;
+            boolean inventoryOpen = mc.gui.screen() != null;
             if (inventoryOpen && !wasInventoryOpen) {
                 flushAllNow();
             }
             wasInventoryOpen = inventoryOpen;
         }
 
-        if (mc.getNetworkHandler() == null || delayedPackets.isEmpty()) return;
+        if (mc.getConnection() == null || delayedPackets.isEmpty()) return;
 
         long now = System.currentTimeMillis();
         int sent = 0;
@@ -481,7 +481,7 @@ public class PingSpoof extends Module {
         }
 
         long safeDelay = clampDelay(delayMs);
-        if (antiTimeout.get() && packet instanceof KeepAliveC2SPacket) {
+        if (antiTimeout.get() && packet instanceof ServerboundKeepAlivePacket) {
             safeDelay = Math.min(safeDelay, KEEPALIVE_SAFETY_CAP_MS);
         }
 
@@ -489,7 +489,7 @@ public class PingSpoof extends Module {
     }
 
     private boolean isCombatPacket(Packet<?> packet) {
-        return packet instanceof EntityStatusS2CPacket || packet instanceof EntityVelocityUpdateS2CPacket;
+        return packet instanceof ClientboundEntityEventPacket || packet instanceof net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
     }
 
     private long getPacketDelayMs(Packet<?> packet) {
@@ -501,7 +501,7 @@ public class PingSpoof extends Module {
             return clampDelay(combatDelayMs.get());
         }
 
-        if (packet instanceof KeepAliveC2SPacket) {
+        if (packet instanceof ServerboundKeepAlivePacket) {
             if (!supportsPingDelay() || !delayKeepAlive.get()) return -1L;
             if (isCompetitiveMode()) {
                 int base = jitterDelay(Math.max(0, competitiveLatencyMs.get()), Math.max(0, competitiveJitterMs.get()));
@@ -521,7 +521,7 @@ public class PingSpoof extends Module {
             return result;
         }
 
-        if (packet instanceof CommonPongC2SPacket) {
+        if (packet instanceof net.minecraft.network.protocol.common.ServerboundPongPacket) {
             if (!supportsPingDelay() || !delayPong.get()) return -1L;
             if (isCompetitiveMode()) {
                 int base = jitterDelay(Math.max(0, competitiveLatencyMs.get()), Math.max(0, competitiveJitterMs.get()));
@@ -541,7 +541,7 @@ public class PingSpoof extends Module {
         if (!supportsMovementDelay() || !delayMovement.get()) return -1L;
         if (movementOnlyWhileMoving.get() && !isPlayerMoving()) return -1L;
 
-        if (disableInInventory.get() && mc.currentScreen != null) return -1L;
+        if (disableInInventory.get() && mc.gui.screen() != null) return -1L;
 
         if (isCompetitiveMode()) {
             movementPacketCounter++;
@@ -664,15 +664,15 @@ public class PingSpoof extends Module {
     }
 
     private boolean isMovementPacket(Packet<?> packet) {
-        return packet instanceof PlayerMoveC2SPacket || packet instanceof VehicleMoveC2SPacket;
+        return packet instanceof ServerboundMovePlayerPacket || packet instanceof net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
     }
 
     private boolean isPlayerMoving() {
         if (mc.player == null) return false;
 
-        double vx = mc.player.getVelocity().x;
-        double vy = mc.player.getVelocity().y;
-        double vz = mc.player.getVelocity().z;
+        double vx = mc.player.getDeltaMovement().x;
+        double vy = mc.player.getDeltaMovement().y;
+        double vz = mc.player.getDeltaMovement().z;
         double horizontalSq = vx * vx + vz * vz;
 
         return horizontalSq > MOVE_SPEED_THRESHOLD_SQ || Math.abs(vy) > 0.03;
@@ -749,7 +749,7 @@ public class PingSpoof extends Module {
     }
 
     private void flushAllNow() {
-        if (mc.getNetworkHandler() == null || delayedPackets.isEmpty()) return;
+        if (mc.getConnection() == null || delayedPackets.isEmpty()) return;
 
         while (!delayedPackets.isEmpty()) {
             DelayedPacket delayed = delayedPackets.poll();
@@ -758,11 +758,11 @@ public class PingSpoof extends Module {
     }
 
     private void sendNow(Packet<?> packet) {
-        if (mc.getNetworkHandler() == null) return;
+        if (mc.getConnection() == null) return;
 
         sendingInternally = true;
         try {
-            mc.getNetworkHandler().sendPacket(packet);
+            mc.getConnection().send(packet);
         } finally {
             sendingInternally = false;
         }
@@ -868,7 +868,7 @@ public class PingSpoof extends Module {
 
     @Override
     public String getInfoString() {
-        if (mc.player == null || mc.getNetworkHandler() == null) return null;
+        if (mc.player == null || mc.getConnection() == null) return null;
 
         int queued = delayedPackets.size();
         int effectivePing = estimateEffectivePing();
@@ -887,7 +887,7 @@ public class PingSpoof extends Module {
     }
 
     private int estimateEffectivePing() {
-        if (mc.player == null || mc.getNetworkHandler() == null) return 0;
+        if (mc.player == null || mc.getConnection() == null) return 0;
 
         DelayedPacket front = delayedPackets.peek();
         if (front == null) return 0;

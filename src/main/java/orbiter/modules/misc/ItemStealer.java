@@ -8,27 +8,27 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import meteordevelopment.meteorclient.settings.ItemListSetting;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
-import net.minecraft.nbt.NbtSizeTracker;
-import net.minecraft.network.packet.c2s.play.ClickSlotC2SPacket;
-import net.minecraft.network.packet.c2s.play.CreativeInventoryActionC2SPacket;
-import net.minecraft.screen.MerchantScreenHandler;
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.screen.slot.Slot;
-import net.minecraft.screen.slot.SlotActionType;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.village.TradeOfferList;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
+import net.minecraft.world.inventory.MerchantMenu;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.item.trading.MerchantOffers;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -65,7 +65,7 @@ public class ItemStealer extends Module {
 
     private final Setting<Boolean> creativeGive = sgGeneral.add(new BoolSetting.Builder()
         .name("creative-give")
-        .description("When in creative mode, also send the cloned item via CreativeInventoryActionC2SPacket so it actually appears in your inventory server-side.")
+        .description("When in creative mode, also send the cloned item via ServerboundSetCreativeModeSlotPacket so it actually appears in your inventory server-side.")
         .defaultValue(true)
         .build()
     );
@@ -79,7 +79,7 @@ public class ItemStealer extends Module {
 
     private final Setting<Boolean> cloneOnAnyGui = sgGeneral.add(new BoolSetting.Builder()
         .name("clone-on-any-gui")
-        .description("Pick-block clone works on ANY HandledScreen, not just specific GUI types.")
+        .description("Pick-block clone works on ANY AbstractContainerScreen, not just specific GUI types.")
         .defaultValue(true)
         .build()
     );
@@ -266,14 +266,14 @@ public class ItemStealer extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (pickBlockCooldown > 0) pickBlockCooldown--;
 
-        if (pickBlockClone.get() && pickBlockCooldown <= 0 && mc.options.pickItemKey.isPressed()) {
+        if (pickBlockClone.get() && pickBlockCooldown <= 0 && mc.options.keyPickItem.isDown()) {
             pickBlockCooldown = 4;
 
-            if (mc.currentScreen instanceof HandledScreen<?>) return;
+            if (mc.gui.screen() instanceof AbstractContainerScreen<?>) return;
 
             cloneWorldItem();
         }
@@ -287,7 +287,7 @@ public class ItemStealer extends Module {
         }
 
         if (villagerTradeDump.get() && mc.player != null) {
-            if (mc.player.currentScreenHandler instanceof MerchantScreenHandler merchant) {
+            if (mc.player.containerMenu instanceof MerchantMenu merchant) {
 
                 String dumpId = "merchant@" + System.identityHashCode(merchant);
                 if (!dumpId.equals(lastContainerSnapshotId)) {
@@ -297,9 +297,9 @@ public class ItemStealer extends Module {
             }
         }
 
-        if (containerSnapshot.get() && mc.player != null && mc.currentScreen instanceof HandledScreen<?> handled) {
-            String snapId = "container@" + System.identityHashCode(mc.player.currentScreenHandler);
-            if (!snapId.equals(lastContainerSnapshotId) && !(mc.player.currentScreenHandler instanceof MerchantScreenHandler)) {
+        if (containerSnapshot.get() && mc.player != null && mc.gui.screen() instanceof AbstractContainerScreen<?> handled) {
+            String snapId = "container@" + System.identityHashCode(mc.player.containerMenu);
+            if (!snapId.equals(lastContainerSnapshotId) && !(mc.player.containerMenu instanceof MerchantMenu)) {
                 lastContainerSnapshotId = snapId;
                 runContainerSnapshot(handled);
             }
@@ -309,31 +309,31 @@ public class ItemStealer extends Module {
     private void cloneWorldItem() {
         ItemStack target = null;
 
-        if (mc.crosshairTarget instanceof EntityHitResult eh) {
+        if (mc.hitResult instanceof EntityHitResult eh) {
             if (eh.getEntity() instanceof ItemEntity itemEntity) {
-                target = perfectClone(itemEntity.getStack());
+                target = perfectClone(itemEntity.getItem());
             }
         }
 
-        if (target == null && mc.crosshairTarget instanceof BlockHitResult bh) {
-            var state = mc.world.getBlockState(bh.getBlockPos());
+        if (target == null && mc.hitResult instanceof BlockHitResult bh) {
+            var state = mc.level.getBlockState(bh.getBlockPos());
             if (!state.isAir()) {
-                target = state.getBlock().asItem().getDefaultStack();
+                target = state.getBlock().asItem().getDefaultInstance();
             }
         }
 
         if (target == null || target.isEmpty()) return;
         injectClonedIntoInventory(target);
-        if (notify.get()) info("Cloned: " + target.getName().getString() + " x" + target.getCount());
+        if (notify.get()) info("Cloned: " + target.getItemName().getString() + " x" + target.getCount());
     }
 
     public static boolean cloneGuiSlot(Slot slot) {
-        if (slot == null || !slot.hasStack()) return false;
+        if (slot == null || !slot.hasItem()) return false;
         ItemStealer m = get();
         if (m == null || !m.isActive() || !m.pickBlockClone.get()) return false;
         if (!m.cloneOnAnyGui.get()) return false;
 
-        ItemStack original = slot.getStack();
+        ItemStack original = slot.getItem();
         if (original.isEmpty()) return false;
 
         if (!m.passesFilter(original)) return false;
@@ -342,15 +342,15 @@ public class ItemStealer extends Module {
         m.lastClonedItem = clone;
 
         m.injectClonedIntoInventory(clone);
-        if (m.notify.get()) m.info("Cloned: " + clone.getName().getString() + " x" + clone.getCount());
+        if (m.notify.get()) m.info("Cloned: " + clone.getItemName().getString() + " x" + clone.getCount());
         return true;
     }
 
     private void runAutoSteal() {
-        if (!(mc.currentScreen instanceof HandledScreen<?> handled)) return;
-        if (mc.player == null || mc.player.currentScreenHandler == null) return;
+        if (!(mc.gui.screen() instanceof AbstractContainerScreen<?> handled)) return;
+        if (mc.player == null || mc.player.containerMenu == null) return;
 
-        ScreenHandler handler = mc.player.currentScreenHandler;
+        AbstractContainerMenu handler = mc.player.containerMenu;
         int containerSlots = handler.slots.size() - 36;
         if (containerSlots < 0) containerSlots = handler.slots.size();
 
@@ -360,9 +360,9 @@ public class ItemStealer extends Module {
 
             if (autoStealSkipPlayerInv.get() && i >= containerSlots) continue;
 
-            if (autoStealSkipEmpty.get() && !slot.hasStack()) continue;
+            if (autoStealSkipEmpty.get() && !slot.hasItem()) continue;
 
-            ItemStack original = slot.getStack();
+            ItemStack original = slot.getItem();
             if (original == null || original.isEmpty()) continue;
 
             if (!passesFilter(original)) continue;
@@ -379,15 +379,15 @@ public class ItemStealer extends Module {
     }
 
     public int stealAllSlots() {
-        if (mc.player == null || mc.player.currentScreenHandler == null) return 0;
+        if (mc.player == null || mc.player.containerMenu == null) return 0;
 
-        ScreenHandler handler = mc.player.currentScreenHandler;
+        AbstractContainerMenu handler = mc.player.containerMenu;
         int cloned = 0;
         for (int i = 0; i < handler.slots.size(); i++) {
             Slot slot = handler.getSlot(i);
-            if (!slot.hasStack()) continue;
+            if (!slot.hasItem()) continue;
 
-            ItemStack original = slot.getStack();
+            ItemStack original = slot.getItem();
             if (original == null || original.isEmpty()) continue;
 
             if (!passesFilter(original)) continue;
@@ -401,18 +401,18 @@ public class ItemStealer extends Module {
     }
 
     public int stealSlotRange(int start, int end) {
-        if (mc.player == null || mc.player.currentScreenHandler == null) return 0;
+        if (mc.player == null || mc.player.containerMenu == null) return 0;
 
-        ScreenHandler handler = mc.player.currentScreenHandler;
+        AbstractContainerMenu handler = mc.player.containerMenu;
         int lo = Math.max(0, start);
         int hi = Math.min(handler.slots.size() - 1, end);
         int cloned = 0;
 
         for (int i = lo; i <= hi; i++) {
             Slot slot = handler.getSlot(i);
-            if (!slot.hasStack()) continue;
+            if (!slot.hasItem()) continue;
 
-            ItemStack original = slot.getStack();
+            ItemStack original = slot.getItem();
             if (original == null || original.isEmpty()) continue;
 
             if (!passesFilter(original)) continue;
@@ -425,18 +425,18 @@ public class ItemStealer extends Module {
         return cloned;
     }
 
-    public static boolean onShiftClickSlot(int slotIndex, int button, SlotActionType actionType) {
+    public static boolean onShiftClickSlot(int slotIndex, int button, ContainerInput actionType) {
         ItemStealer m = get();
         if (m == null || !m.isActive() || !m.shiftClickSteal.get()) return false;
-        if (actionType != SlotActionType.QUICK_MOVE) return false;
+        if (actionType != ContainerInput.QUICK_MOVE) return false;
 
-        if (m.mc.player == null || m.mc.player.currentScreenHandler == null) return false;
-        if (slotIndex < 0 || slotIndex >= m.mc.player.currentScreenHandler.slots.size()) return false;
+        if (m.mc.player == null || m.mc.player.containerMenu == null) return false;
+        if (slotIndex < 0 || slotIndex >= m.mc.player.containerMenu.slots.size()) return false;
 
-        Slot slot = m.mc.player.currentScreenHandler.getSlot(slotIndex);
-        if (!slot.hasStack()) return false;
+        Slot slot = m.mc.player.containerMenu.getSlot(slotIndex);
+        if (!slot.hasItem()) return false;
 
-        ItemStack original = slot.getStack();
+        ItemStack original = slot.getItem();
         if (original.isEmpty()) return false;
 
         if (!m.passesFilter(original)) return false;
@@ -445,7 +445,7 @@ public class ItemStealer extends Module {
         m.injectClonedIntoInventory(clone);
         m.lastClonedItem = clone;
 
-        if (m.notify.get()) m.info("Shift-clone: " + clone.getName().getString() + " x" + clone.getCount());
+        if (m.notify.get()) m.info("Shift-clone: " + clone.getItemName().getString() + " x" + clone.getCount());
 
         if (m.shiftClickCancelPacket.get()) {
             m.pendingShiftCancel = true;
@@ -460,14 +460,14 @@ public class ItemStealer extends Module {
         return was;
     }
 
-    private void runTradeDump(MerchantScreenHandler merchant) {
+    private void runTradeDump(MerchantMenu merchant) {
         try {
-            TradeOfferList offers = merchant.getRecipes();
+            MerchantOffers offers = merchant.getOffers();
             if (offers == null || offers.isEmpty()) return;
 
             int cloned = 0;
             for (var offer : offers) {
-                ItemStack result = offer.getSellItem();
+                ItemStack result = offer.getResult();
                 if (result == null || result.isEmpty()) continue;
 
                 if (!passesFilter(result)) continue;
@@ -486,14 +486,14 @@ public class ItemStealer extends Module {
     }
 
     public int dumpTrades() {
-        if (mc.player == null || !(mc.player.currentScreenHandler instanceof MerchantScreenHandler merchant)) return -1;
+        if (mc.player == null || !(mc.player.containerMenu instanceof MerchantMenu merchant)) return -1;
 
-        TradeOfferList offers = merchant.getRecipes();
+        MerchantOffers offers = merchant.getOffers();
         if (offers == null || offers.isEmpty()) return 0;
 
         int cloned = 0;
         for (var offer : offers) {
-            ItemStack result = offer.getSellItem();
+            ItemStack result = offer.getResult();
             if (result == null || result.isEmpty()) continue;
             if (!passesFilter(result)) continue;
 
@@ -505,11 +505,11 @@ public class ItemStealer extends Module {
         return cloned;
     }
 
-    private void runContainerSnapshot(HandledScreen<?> handled) {
+    private void runContainerSnapshot(AbstractContainerScreen<?> handled) {
         try {
-            if (mc.player == null || mc.player.currentScreenHandler == null) return;
+            if (mc.player == null || mc.player.containerMenu == null) return;
 
-            ScreenHandler handler = mc.player.currentScreenHandler;
+            AbstractContainerMenu handler = mc.player.containerMenu;
             String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").format(Instant.now());
             String screenName = handled.getClass().getSimpleName();
             String snapshotId = "snapshot_" + screenName + "_" + timestamp;
@@ -517,7 +517,7 @@ public class ItemStealer extends Module {
             Path dir = storageDir().resolve("snapshots");
             Files.createDirectories(dir);
 
-            NbtCompound root = new NbtCompound();
+            CompoundTag root = new CompoundTag();
             root.putString("source", screenName);
             root.putString("timestamp", Instant.now().toString());
             root.putInt("slotCount", handler.slots.size());
@@ -525,15 +525,15 @@ public class ItemStealer extends Module {
             int savedCount = 0;
             for (int i = 0; i < handler.slots.size(); i++) {
                 Slot slot = handler.getSlot(i);
-                if (!slot.hasStack()) continue;
+                if (!slot.hasItem()) continue;
 
-                ItemStack stack = slot.getStack();
+                ItemStack stack = slot.getItem();
                 if (stack == null || stack.isEmpty()) continue;
 
                 var encoded = ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, stack);
                 if (encoded.isSuccess()) {
-                    NbtCompound itemTag = (NbtCompound) encoded.getOrThrow();
-                    NbtCompound entry = new NbtCompound();
+                    CompoundTag itemTag = (CompoundTag) encoded.getOrThrow();
+                    CompoundTag entry = new CompoundTag();
                     entry.putInt("slotIndex", i);
                     entry.put("item", itemTag);
                     root.put("slot_" + i, entry);
@@ -564,8 +564,8 @@ public class ItemStealer extends Module {
         if (nameRegex != null && !nameRegex.isEmpty()) {
             try {
                 Pattern pattern = Pattern.compile(nameRegex, Pattern.CASE_INSENSITIVE);
-                String displayName = stack.getName().getString();
-                String itemId = net.minecraft.registry.Registries.ITEM.getId(stack.getItem()).toString();
+                String displayName = stack.getItemName().getString();
+                String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
                 nameOk = pattern.matcher(displayName).find() || pattern.matcher(itemId).find();
             } catch (PatternSyntaxException e) {
 
@@ -590,7 +590,7 @@ public class ItemStealer extends Module {
 
             var result = ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, original);
             if (result.isSuccess()) {
-                NbtCompound tag = (NbtCompound) result.getOrThrow();
+                CompoundTag tag = (CompoundTag) result.getOrThrow();
                 var parsed = ItemStack.CODEC.parse(NbtOps.INSTANCE, tag);
                 if (parsed.isSuccess()) {
                     ItemStack clone = parsed.resultOrPartial(s -> {}).orElse(null);
@@ -605,17 +605,17 @@ public class ItemStealer extends Module {
     }
 
     public boolean injectClonedIntoInventory(ItemStack stack) {
-        ClientPlayerEntity player = mc.player;
+        LocalPlayer player = mc.player;
         if (player == null || stack == null || stack.isEmpty()) return false;
 
         ItemStack clone = stack.copy();
 
-        if (!player.getInventory().insertStack(clone)) {
-            ItemEntity entity = new ItemEntity(mc.world, player.getX(), player.getY(), player.getZ(), clone);
-            mc.world.spawnEntity(entity);
+        if (!player.getInventory().add(clone)) {
+            ItemEntity entity = new ItemEntity(mc.level, player.getX(), player.getY(), player.getZ(), clone);
+            mc.level.addEntity(entity);
         }
 
-        if (creativeGive.get() && player.getAbilities().creativeMode && mc.getNetworkHandler() != null) {
+        if (creativeGive.get() && player.getAbilities().instabuild && mc.getConnection() != null) {
             giveInCreative(clone);
         }
 
@@ -623,26 +623,26 @@ public class ItemStealer extends Module {
     }
 
     public boolean injectIntoInventory(ItemStack stack) {
-        ClientPlayerEntity player = mc.player;
+        LocalPlayer player = mc.player;
         if (player == null || stack == null || stack.isEmpty()) return false;
         ItemStack copy = stack.copy();
-        if (!player.getInventory().insertStack(copy)) {
-            ItemEntity entity = new ItemEntity(mc.world, player.getX(), player.getY(), player.getZ(), copy);
-            mc.world.spawnEntity(entity);
+        if (!player.getInventory().add(copy)) {
+            ItemEntity entity = new ItemEntity(mc.level, player.getX(), player.getY(), player.getZ(), copy);
+            mc.level.addEntity(entity);
         }
         return true;
     }
 
     private void giveInCreative(ItemStack stack) {
-        if (mc.player == null || mc.getNetworkHandler() == null) return;
-        if (!mc.player.getAbilities().creativeMode) return;
+        if (mc.player == null || mc.getConnection() == null) return;
+        if (!mc.player.getAbilities().instabuild) return;
 
         int slot = findEmptySlot();
         if (slot < 0) slot = 36 + mc.player.getInventory().getSelectedSlot();
 
-        mc.getNetworkHandler().sendPacket(new CreativeInventoryActionC2SPacket(slot, stack));
-        if (mc.player.currentScreenHandler != null && slot < mc.player.currentScreenHandler.slots.size()) {
-            mc.player.currentScreenHandler.getSlot(slot).setStack(stack);
+        mc.getConnection().send(new ServerboundSetCreativeModeSlotPacket(slot, stack));
+        if (mc.player.containerMenu != null && slot < mc.player.containerMenu.slots.size()) {
+            mc.player.containerMenu.getSlot(slot).set(stack);
         }
     }
 
@@ -650,33 +650,33 @@ public class ItemStealer extends Module {
         if (mc.player == null) return -1;
 
         for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getStack(i).isEmpty()) return 36 + i;
+            if (mc.player.getInventory().getItem(i).isEmpty()) return 36 + i;
         }
 
         for (int i = 9; i < 36; i++) {
-            if (mc.player.getInventory().getStack(i).isEmpty()) return i;
+            if (mc.player.getInventory().getItem(i).isEmpty()) return i;
         }
         return -1;
     }
 
     public static boolean bypassTrade(Slot slot) {
-        if (slot == null || slot.id != 2) return false;
-        MinecraftClient mc = MinecraftClient.getInstance();
-        if (mc.player == null || !(mc.player.currentScreenHandler instanceof MerchantScreenHandler)) return false;
+        if (slot == null || slot.index != 2) return false;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || !(mc.player.containerMenu instanceof MerchantMenu)) return false;
 
         ItemStealer m = get();
         if (m == null || !m.isActive()) return false;
 
-        boolean pickPressed = mc.options.pickItemKey.isPressed();
+        boolean pickPressed = mc.options.keyPickItem.isDown();
         if (!m.tradeBypass.get() && !(m.tradeBypassOnPick.get() && pickPressed)) return false;
 
-        MerchantScreenHandler merchant = (MerchantScreenHandler) mc.player.currentScreenHandler;
-        ItemStack result = merchant.getSlot(2).getStack();
+        MerchantMenu merchant = (MerchantMenu) mc.player.containerMenu;
+        ItemStack result = merchant.getSlot(2).getItem();
         if (result == null || result.isEmpty()) return false;
 
         ItemStack copy = m.perfectClone(result);
         m.injectClonedIntoInventory(copy);
-        if (m.notify.get()) m.info("Trade bypassed: " + copy.getName().getString() + " x" + copy.getCount());
+        if (m.notify.get()) m.info("Trade bypassed: " + copy.getItemName().getString() + " x" + copy.getCount());
         m.bypassedThisClick = true;
         return true;
     }
@@ -699,16 +699,16 @@ public class ItemStealer extends Module {
 
         if (!tradeBypass.get() && !tradeBypassOnPick.get()) return;
         if (mc.player == null) return;
-        if (!(event.packet instanceof ClickSlotC2SPacket click)) return;
-        if (!(mc.player.currentScreenHandler instanceof MerchantScreenHandler merchant)) return;
-        if (click.slot() != 2) return;
+        if (!(event.packet instanceof net.minecraft.network.protocol.game.ServerboundContainerClickPacket click)) return;
+        if (!(mc.player.containerMenu instanceof MerchantMenu merchant)) return;
+        if (click.slotNum() != 2) return;
 
-        if (shiftClickSteal.get() && click.actionType() == SlotActionType.QUICK_MOVE) {
-            ItemStack result = merchant.getSlot(2).getStack();
+        if (shiftClickSteal.get() && click.containerInput() == ContainerInput.QUICK_MOVE) {
+            ItemStack result = merchant.getSlot(2).getItem();
             if (result != null && !result.isEmpty()) {
                 ItemStack copy = perfectClone(result);
                 injectClonedIntoInventory(copy);
-                if (notify.get()) info("Shift-clone trade: " + copy.getName().getString() + " x" + copy.getCount());
+                if (notify.get()) info("Shift-clone trade: " + copy.getItemName().getString() + " x" + copy.getCount());
                 if (shiftClickCancelPacket.get()) {
                     event.cancel();
                     return;
@@ -716,18 +716,18 @@ public class ItemStealer extends Module {
             }
         }
 
-        ItemStack result = merchant.getSlot(2).getStack();
+        ItemStack result = merchant.getSlot(2).getItem();
         if (result == null || result.isEmpty()) return;
 
         ItemStack copy = perfectClone(result);
         injectClonedIntoInventory(copy);
-        if (notify.get()) info("Trade bypassed: " + copy.getName().getString() + " x" + copy.getCount());
+        if (notify.get()) info("Trade bypassed: " + copy.getItemName().getString() + " x" + copy.getCount());
 
         event.cancel();
     }
 
     public boolean givePresetItem(String presetName) {
-        if (mc.player == null || !mc.player.getAbilities().creativeMode) return false;
+        if (mc.player == null || !mc.player.getAbilities().instabuild) return false;
         if (!creativePresets.get()) return false;
 
         try {
@@ -783,7 +783,7 @@ public class ItemStealer extends Module {
 
         ItemStack[] hotbar = new ItemStack[9];
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             hotbar[i] = stack.isEmpty() ? ItemStack.EMPTY : perfectClone(stack);
         }
 
@@ -793,7 +793,7 @@ public class ItemStealer extends Module {
             Path dir = storageDir().resolve("hotbar-presets");
             Files.createDirectories(dir);
 
-            NbtCompound root = new NbtCompound();
+            CompoundTag root = new CompoundTag();
             root.putString("name", name);
             root.putString("savedAt", Instant.now().toString());
             for (int i = 0; i < 9; i++) {
@@ -801,7 +801,7 @@ public class ItemStealer extends Module {
                 if (stack.isEmpty()) continue;
                 var encoded = ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, stack);
                 if (encoded.isSuccess()) {
-                    NbtCompound itemTag = (NbtCompound) encoded.getOrThrow();
+                    CompoundTag itemTag = (CompoundTag) encoded.getOrThrow();
                     root.put("slot_" + i, itemTag);
                 }
             }
@@ -828,7 +828,7 @@ public class ItemStealer extends Module {
                 return false;
             }
 
-            NbtCompound root = NbtIo.readCompressed(file, NbtSizeTracker.ofUnlimitedBytes());
+            CompoundTag root = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
             ItemStack[] hotbar = new ItemStack[9];
             for (int i = 0; i < 9; i++) {
                 if (root.contains("slot_" + i)) {
@@ -856,10 +856,10 @@ public class ItemStealer extends Module {
             if (stack == null || stack.isEmpty()) continue;
 
             ItemStack clone = perfectClone(stack);
-            if (creativeGive.get() && mc.player.getAbilities().creativeMode && mc.getNetworkHandler() != null) {
-                mc.getNetworkHandler().sendPacket(new CreativeInventoryActionC2SPacket(36 + i, clone));
+            if (creativeGive.get() && mc.player.getAbilities().instabuild && mc.getConnection() != null) {
+                mc.getConnection().send(new ServerboundSetCreativeModeSlotPacket(36 + i, clone));
             }
-            mc.player.getInventory().setStack(i, clone);
+            mc.player.getInventory().setItem(i, clone);
         }
 
         if (notify.get()) info("Hotbar preset loaded: " + preset.name());
@@ -900,8 +900,8 @@ public class ItemStealer extends Module {
             Files.createDirectories(dir);
             var result = ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, stack);
             if (result.isError()) return false;
-            NbtCompound tag = (NbtCompound) result.getOrThrow();
-            NbtCompound wrapper = new NbtCompound();
+            CompoundTag tag = (CompoundTag) result.getOrThrow();
+            CompoundTag wrapper = new CompoundTag();
             wrapper.put("item", tag);
             wrapper.putString("savedAt", java.time.Instant.now().toString());
             wrapper.putString("id", id);
@@ -917,12 +917,12 @@ public class ItemStealer extends Module {
         try {
             Path file = storageDir().resolve(sanitizeId(id) + ".dat");
             if (!Files.exists(file)) return null;
-            NbtCompound wrapper = NbtIo.readCompressed(file, NbtSizeTracker.ofUnlimitedBytes());
+            CompoundTag wrapper = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
             if (wrapper == null || !wrapper.contains("item")) return null;
             ItemStack loaded = ItemStack.CODEC.parse(NbtOps.INSTANCE, wrapper.get("item")).result().orElse(null);
             if (loaded != null && !loaded.isEmpty()) {
 
-                if (creativeGive.get() && mc.player != null && mc.player.getAbilities().creativeMode) {
+                if (creativeGive.get() && mc.player != null && mc.player.getAbilities().instabuild) {
                     giveInCreative(loaded.copy());
                 }
             }
@@ -955,7 +955,7 @@ public class ItemStealer extends Module {
     }
 
     public static Path storageDir() {
-        return MinecraftClient.getInstance().runDirectory.toPath().resolve("orbiter-stolen-items");
+        return Minecraft.getInstance().gameDirectory.toPath().resolve("orbiter-stolen-items");
     }
 
     private static String sanitizeId(String id) {
@@ -980,11 +980,11 @@ public class ItemStealer extends Module {
             Path file = storageDir().resolve("snapshots").resolve(sanitizeId(id) + ".dat");
             if (!Files.exists(file)) return "Snapshot not found: " + id;
 
-            NbtCompound root = NbtIo.readCompressed(file, NbtSizeTracker.ofUnlimitedBytes());
-            String source = root.getString("source", "unknown");
-            String timestamp = root.getString("timestamp", "unknown");
-            int savedCount = root.getInt("savedCount", 0);
-            int slotCount = root.getInt("slotCount", 0);
+            CompoundTag root = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
+            String source = root.getStringOr("source", "unknown");
+            String timestamp = root.getStringOr("timestamp", "unknown");
+            int savedCount = root.getIntOr("savedCount", 0);
+            int slotCount = root.getIntOr("slotCount", 0);
 
             return String.format("Snapshot '%s': source=%s, time=%s, items=%d/%d slots", id, source, timestamp, savedCount, slotCount);
         } catch (Exception e) {
@@ -993,11 +993,11 @@ public class ItemStealer extends Module {
     }
 
     public boolean isInGui() {
-        return mc.currentScreen instanceof HandledScreen<?>;
+        return mc.gui.screen() instanceof AbstractContainerScreen<?>;
     }
 
-    public ScreenHandler getCurrentHandler() {
+    public AbstractContainerMenu getCurrentHandler() {
         if (mc.player == null) return null;
-        return mc.player.currentScreenHandler;
+        return mc.player.containerMenu;
     }
 }

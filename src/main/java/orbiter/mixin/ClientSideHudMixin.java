@@ -1,27 +1,27 @@
 package orbiter.mixin;
 
+import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.Hud;
+import net.minecraft.network.chat.Component;
 import orbiter.modules.ClientSideThings;
 import orbiter.util.ClientSpoofState;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.hud.InGameHud;
-import net.minecraft.client.render.RenderTickCounter;
-import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(InGameHud.class)
+@Mixin(Hud.class)
 public abstract class ClientSideHudMixin {
-    @Inject(method = "renderCrosshair", at = @At("HEAD"), cancellable = true)
-    private void orbiter$renderCrosshair(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
+    @Inject(method = "extractCrosshair(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("HEAD"), cancellable = true)
+    private void orbiter$renderCrosshair(GuiGraphicsExtractor context, DeltaTracker tickCounter, CallbackInfo ci) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.isCrosshairOverrideActive()) return;
 
-        int cx = context.getScaledWindowWidth() / 2;
-        int cy = context.getScaledWindowHeight() / 2;
+        int cx = context.guiWidth() / 2;
+        int cy = context.guiHeight() / 2;
         ClientSideThings.CrosshairStyle style = module.getCrosshairStyle();
         if (style != ClientSideThings.CrosshairStyle.None) {
             int size = Math.max(2, (int) Math.round(4 * module.getCrosshairScale()));
@@ -37,14 +37,16 @@ public abstract class ClientSideHudMixin {
         ci.cancel();
     }
 
-    @Inject(method = "render", at = @At("RETURN"))
-    private void orbiter$renderFakeDeath(DrawContext context, RenderTickCounter tickCounter, CallbackInfo ci) {
+    @Inject(method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("RETURN"))
+    private void orbiter$renderFakeDeath(GuiGraphicsExtractor context, DeltaTracker tickCounter, CallbackInfo ci) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.isShowingFakeDeath()) return;
         int alpha = Math.max(0, Math.min(255, Math.round(module.getFakeDeathAlpha() * module.getFakeDeathBgOpacity())));
-        context.fill(0, 0, context.getScaledWindowWidth(), context.getScaledWindowHeight(), alpha << 24);
-        TextRenderer renderer = MinecraftClient.getInstance().textRenderer;
-        context.drawCenteredTextWithShadow(renderer, Text.literal(module.getFakeDeathMessageText()), context.getScaledWindowWidth() / 2, context.getScaledWindowHeight() / 2 - 20, 0xFFFFFFFF);
-        context.drawCenteredTextWithShadow(renderer, Text.literal("Press the module toggle to dismiss"), context.getScaledWindowWidth() / 2, context.getScaledWindowHeight() / 2 + 4, 0xFFAAAAAA);
+        context.fill(0, 0, context.guiWidth(), context.guiHeight(), alpha << 24);
+        Font renderer = Minecraft.getInstance().font;
+        String title = module.getFakeDeathMessageText();
+        context.text(renderer, Component.literal(title), context.guiWidth() / 2 - renderer.width(title) / 2, context.guiHeight() / 2 - 20, 0xFFFFFFFF);
+        String hint = "Press the module toggle to dismiss";
+        context.text(renderer, Component.literal(hint), context.guiWidth() / 2 - renderer.width(hint) / 2, context.guiHeight() / 2 + 4, 0xFFAAAAAA);
     }
 }

@@ -4,9 +4,9 @@ import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import meteordevelopment.meteorclient.systems.modules.Category;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.util.Pair;
+import com.mojang.datafixers.util.Pair;
 import orbiter.Orbiter;
-import orbiter.modules.misc.StupidModules;
+import orbiter.util.ConfigModifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
@@ -19,8 +19,7 @@ import java.util.stream.Collectors;
 public abstract class ModulesMixin {
 
     private static boolean orbiter$isStupidEnabled() {
-        StupidModules mod = StupidModules.get();
-        return mod != null && mod.stupidEnabled();
+        return ConfigModifier.get().stupidModulesEnabled();
     }
 
     @ModifyReturnValue(method = "loopCategories", at = @At("RETURN"))
@@ -39,7 +38,7 @@ public abstract class ModulesMixin {
         if (orbiter$isStupidEnabled()) return original;
         return original.stream()
             .filter(entry -> {
-                Module m = (Module) ((Pair<?, ?>) entry).getLeft();
+                Module m = (Module) ((Pair<?, ?>) entry).getFirst();
                 return m.category != Orbiter.CATEGORY_STUPID;
             })
             .collect(Collectors.toList());

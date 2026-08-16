@@ -7,9 +7,9 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(net.minecraft.world.World.class)
+@Mixin(net.minecraft.world.level.Level.class)
 public abstract class WorldWeatherMixin {
-    @Inject(method = "getRainGradient", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getRainLevel", at = @At("HEAD"), cancellable = true)
     private void orbiter$getRainGradient(float tickDelta, CallbackInfoReturnable<Float> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null) return;
@@ -18,7 +18,7 @@ public abstract class WorldWeatherMixin {
         if (value >= 0.0f) cir.setReturnValue(value);
     }
 
-    @Inject(method = "getThunderGradient", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getThunderLevel", at = @At("HEAD"), cancellable = true)
     private void orbiter$getThunderGradient(float tickDelta, CallbackInfoReturnable<Float> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null) return;
@@ -37,7 +37,7 @@ public abstract class WorldWeatherMixin {
         else if (mode == ClientSideThings.WeatherMode.Rain || mode == ClientSideThings.WeatherMode.Snow) cir.setReturnValue(true);
     }
 
-    @Inject(method = "getTimeOfDay", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getOverworldClockTime", at = @At("HEAD"), cancellable = true)
     private void orbiter$getTimeOfDay(CallbackInfoReturnable<Long> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldFakeTime()) return;

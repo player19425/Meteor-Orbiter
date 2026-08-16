@@ -9,12 +9,12 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.chunk.Chunk;
-import net.minecraft.world.chunk.ChunkSection;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 
 import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -188,7 +188,7 @@ public class ViewBlocks extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         scanTickCounter++;
         if (scanTickCounter < scanInterval.get()) return;
@@ -202,10 +202,10 @@ public class ViewBlocks extends Module {
 
         int r = radius.get();
         int chunkRadius = (r >> 4) + 1;
-        ChunkPos center = new ChunkPos(mc.player.getBlockPos());
-        int playerX = mc.player.getBlockPos().getX();
-        int playerY = mc.player.getBlockPos().getY();
-        int playerZ = mc.player.getBlockPos().getZ();
+        ChunkPos center = ChunkPos.containing(mc.player.blockPosition());
+        int playerX = mc.player.blockPosition().getX();
+        int playerY = mc.player.blockPosition().getY();
+        int playerZ = mc.player.blockPosition().getZ();
         int rSq = r * r;
         int fOp = fillOpacity.get();
         int lOp = lineOpacity.get();
@@ -223,11 +223,11 @@ public class ViewBlocks extends Module {
 
         for (int cx = -chunkRadius; cx <= chunkRadius; cx++) {
             for (int cz = -chunkRadius; cz <= chunkRadius; cz++) {
-                int chunkX = center.x + cx;
-                int chunkZ = center.z + cz;
-                long chunkLong = ChunkPos.toLong(chunkX, chunkZ);
+                int chunkX = center.x() + cx;
+                int chunkZ = center.z() + cz;
+                long chunkLong = ChunkPos.pack(chunkX, chunkZ);
 
-                if (!mc.world.isChunkLoaded(chunkX, chunkZ)) continue;
+                if (!mc.level.hasChunk(chunkX, chunkZ)) continue;
                 if (scannedChunks.contains(chunkLong)) {
 
                     if (globalScanTick % 20 != 0) continue;
@@ -235,13 +235,13 @@ public class ViewBlocks extends Module {
                 scannedChunks.add(chunkLong);
                 chunkCount++;
 
-                Chunk chunk = mc.world.getChunk(chunkX, chunkZ);
-                ChunkSection[] sections = chunk.getSectionArray();
-                int baseY = chunk.getBottomY();
+                ChunkAccess chunk = mc.level.getChunk(chunkX, chunkZ);
+                LevelChunkSection[] sections = chunk.getSections();
+                int baseY = chunk.getMinY();
 
                 for (int si = 0; si < sections.length; si++) {
-                    ChunkSection section = sections[si];
-                    if (section == null || section.isEmpty()) continue;
+                    LevelChunkSection section = sections[si];
+                    if (section == null || section.hasOnlyAir()) continue;
 
                     int sectionY = baseY + (si << 4);
 
@@ -301,7 +301,7 @@ public class ViewBlocks extends Module {
 
     @EventHandler
     private void onRender3D(Render3DEvent event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         double maxDist = getEffectiveRenderDistance();
         double maxDistSq = maxDist * maxDist;
@@ -364,8 +364,8 @@ public class ViewBlocks extends Module {
     }
 
     private double getEffectiveRenderDistance() {
-        if (mc.options == null || mc.options.getViewDistance() == null) return 128.0;
-        return mc.options.getViewDistance().getValue() * 16.0 * distanceCull.get();
+        if (mc.options == null || mc.options.renderDistance() == null) return 128.0;
+        return mc.options.renderDistance().get() * 16.0 * distanceCull.get();
     }
 
     private Color[] getBlockColors(Block block, int fOp, int lOp) {

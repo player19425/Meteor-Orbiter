@@ -8,17 +8,17 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -141,9 +141,9 @@ public class ISellWand extends Module {
 
     @EventHandler
     private void onInteractBlock(InteractBlockEvent event) {
-        if (!recordMode.get() || mc.world == null) return;
+        if (!recordMode.get() || mc.level == null) return;
         BlockPos pos = event.result.getBlockPos();
-        if (!isTargetContainer(mc.world.getBlockState(pos))) return;
+        if (!isTargetContainer(mc.level.getBlockState(pos))) return;
 
         if (listContainsPos(pos) || adjacentChestRecorded(pos)) return;
 
@@ -155,7 +155,7 @@ public class ISellWand extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
+        if (mc.player == null || mc.level == null || mc.gameMode == null) return;
 
         if (recordMode.get()) return;
 
@@ -184,28 +184,28 @@ public class ISellWand extends Module {
 
         Target t = targets.get(targetIndex);
 
-        if (!isTargetContainer(mc.world.getBlockState(t.pos))) {
+        if (!isTargetContainer(mc.level.getBlockState(t.pos))) {
             targetIndex++;
             tickWaiter = 0;
             return;
         }
 
-        if (mc.currentScreen != null) {
-            mc.player.closeHandledScreen();
+        if (mc.gui.screen() != null) {
+            mc.player.closeContainer();
             tickWaiter = 2;
             return;
         }
 
         if (!equipWand()) {
-            warning("Sell wand (" + sellWandItem.get().getName().getString() + ") not found in inventory.");
+            warning("Sell wand (" + sellWandItem.get().getName(net.minecraft.world.item.ItemStack.EMPTY).getString() + ") not found in inventory.");
             tickWaiter = 20;
             if (!loop.get()) toggle();
             return;
         }
 
-        BlockHitResult hit = new BlockHitResult(Vec3d.ofCenter(t.pos), Direction.UP, t.pos, false);
-        mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
-        mc.player.swingHand(Hand.MAIN_HAND);
+        BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(t.pos), Direction.UP, t.pos, false);
+        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
+        mc.player.swing(InteractionHand.MAIN_HAND);
 
         targetIndex++;
         tickWaiter = Math.max(1, t.delay);
@@ -227,14 +227,14 @@ public class ISellWand extends Module {
             return;
         }
 
-        BlockPos p = mc.player.getBlockPos();
+        BlockPos p = mc.player.blockPosition();
         int r = range.get();
         Set<BlockPos> added = new HashSet<>();
         for (int x = -r; x <= r; x++) {
             for (int y = -3; y <= 3; y++) {
                 for (int z = -r; z <= r; z++) {
-                    BlockPos pos = p.add(x, y, z);
-                    if (!isTargetContainer(mc.world.getBlockState(pos))) continue;
+                    BlockPos pos = p.offset(x, y, z);
+                    if (!isTargetContainer(mc.level.getBlockState(pos))) continue;
                     if (adjacentChestAdded(pos, added)) continue;
                     int delay = listedDelays.getOrDefault(pos, globalDelay.get());
                     targets.add(new Target(pos, delay));
@@ -245,7 +245,7 @@ public class ISellWand extends Module {
     }
 
     private boolean equipWand() {
-        ItemStack main = mc.player.getMainHandStack();
+        ItemStack main = mc.player.getMainHandItem();
         if (!main.isEmpty() && main.getItem() == sellWandItem.get()) return true;
 
         FindItemResult result = InvUtils.find(sellWandItem.get());
@@ -269,15 +269,15 @@ public class ISellWand extends Module {
 
     private void selectHotbarSlot(int slot) {
         mc.player.getInventory().setSelectedSlot(slot);
-        if (mc.getNetworkHandler() != null) {
-            mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+        if (mc.getConnection() != null) {
+            mc.getConnection().send(new ServerboundSetCarriedItemPacket(slot));
         }
     }
 
     private boolean isTargetContainer(BlockState bs) {
-        return (useChests.get() && bs.isOf(Blocks.CHEST))
-            || (useTrappedChests.get() && bs.isOf(Blocks.TRAPPED_CHEST))
-            || (useBarrels.get() && bs.isOf(Blocks.BARREL));
+        return (useChests.get() && bs.is(Blocks.CHEST))
+            || (useTrappedChests.get() && bs.is(Blocks.TRAPPED_CHEST))
+            || (useBarrels.get() && bs.is(Blocks.BARREL));
     }
 
     private boolean listContainsPos(BlockPos p) {
@@ -290,15 +290,15 @@ public class ISellWand extends Module {
 
     private boolean adjacentChestRecorded(BlockPos pos) {
         for (Direction d : HORIZONTALS) {
-            BlockPos n = pos.offset(d);
-            if (mc.world != null && isTargetContainer(mc.world.getBlockState(n)) && listContainsPos(n)) return true;
+            BlockPos n = pos.offset(d.getStepX(), d.getStepY(), d.getStepZ());
+            if (mc.level != null && isTargetContainer(mc.level.getBlockState(n)) && listContainsPos(n)) return true;
         }
         return false;
     }
 
     private boolean adjacentChestAdded(BlockPos pos, Set<BlockPos> added) {
         for (Direction d : HORIZONTALS) {
-            if (added.contains(pos.offset(d))) return true;
+            if (added.contains(pos.offset(d.getStepX(), d.getStepY(), d.getStepZ()))) return true;
         }
         return false;
     }

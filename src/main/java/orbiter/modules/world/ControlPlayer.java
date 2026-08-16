@@ -3,7 +3,7 @@ package orbiter.modules.world;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.network.PlayerListEntry;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import orbiter.modules.CreativeSafetyModule;
 import orbiter.util.CommandUtils;
 
@@ -66,7 +66,7 @@ public final class ControlPlayer extends CreativeSafetyModule {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.level == null || mc.player.connection == null) return;
         angle = wrapDegrees(angle + speed.get());
         if (++tickCounter < updateDelay.get()) return;
         tickCounter = 0;
@@ -91,7 +91,7 @@ public final class ControlPlayer extends CreativeSafetyModule {
     }
 
     private List<String> resolveNamedTargets() {
-        List<PlayerListEntry> entries = new ArrayList<>(mc.player.networkHandler.getPlayerList());
+        List<PlayerInfo> entries = new ArrayList<>(mc.player.connection.getOnlinePlayers());
         String self = mc.player.getGameProfile().name();
         if (targetMode.get() == TargetMode.NameList) {
             List<String> requested = new ArrayList<>();
@@ -104,10 +104,10 @@ public final class ControlPlayer extends CreativeSafetyModule {
 
         entries.removeIf(entry -> excludeSelf.get() && entry.getProfile().name().equalsIgnoreCase(self));
         entries.removeIf(entry -> {
-            if (mc.world.getPlayerByUuid(entry.getProfile().id()) == null) return true;
-            return mc.world.getPlayerByUuid(entry.getProfile().id()).squaredDistanceTo(mc.player) > searchRange.get() * searchRange.get();
+            if (orbiter$findPlayer(entry.getProfile().id()) == null) return true;
+            return orbiter$findPlayer(entry.getProfile().id()).distanceToSqr(mc.player) > searchRange.get() * searchRange.get();
         });
-        entries.sort(Comparator.comparingDouble(entry -> mc.world.getPlayerByUuid(entry.getProfile().id()).squaredDistanceTo(mc.player)));
+        entries.sort(Comparator.comparingDouble(entry -> orbiter$findPlayer(entry.getProfile().id()).distanceToSqr(mc.player)));
         return entries.stream().limit(maxPlayers.get()).map(entry -> entry.getProfile().name()).toList();
     }
 
@@ -130,7 +130,7 @@ public final class ControlPlayer extends CreativeSafetyModule {
                 mc.player.getX() + dx, mc.player.getY() + height.get(), mc.player.getZ() + dz
             );
         }
-        mc.player.networkHandler.sendChatCommand(command);
+        mc.player.connection.sendCommand(command);
     }
 
     private String safePlayerName(String value) {
@@ -158,5 +158,11 @@ public final class ControlPlayer extends CreativeSafetyModule {
     private double wrapDegrees(double value) {
         value %= 360.0;
         return value < 0 ? value + 360.0 : value;
+    }
+
+    private net.minecraft.world.entity.player.Player orbiter$findPlayer(java.util.UUID uuid) {
+        if (mc.level == null) return null;
+        net.minecraft.world.entity.Entity e = ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().get(uuid);
+        return e instanceof net.minecraft.world.entity.player.Player p ? p : null;
     }
 }

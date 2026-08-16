@@ -6,9 +6,9 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import orbiter.Orbiter;
 import orbiter.util.ConfigModifier;
-import net.minecraft.block.Blocks;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 
 public class SlimeJump extends Module {
 
@@ -26,11 +26,11 @@ public class SlimeJump extends Module {
 
     private final Setting<Double> maxVelocity = sgGeneral.add(new DoubleSetting.Builder()
         .name("max-velocity")
-        .description("Maximum upward velocity cap to prevent anti-cheat flags.")
-        .defaultValue(5.0)
+        .description("Maximum upward velocity cap. Raise it to bounce super high.")
+        .defaultValue(10.0)
         .min(0.5)
-        .max(20.0)
-        .sliderRange(1.0, 10.0)
+        .max(50.0)
+        .sliderRange(1.0, 30.0)
         .build()
     );
 
@@ -62,7 +62,7 @@ public class SlimeJump extends Module {
 
     @Override
     public void onActivate() {
-        if (!ConfigModifier.get().stupidModules.get()) {
+        if (!ConfigModifier.get().stupidModulesEnabled()) {
             info("Stupid Modules is disabled. Enable it in Meteor Config → Orbiter → Stupid Modules");
             toggle();
             return;
@@ -80,9 +80,9 @@ public class SlimeJump extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
-        if (!ConfigModifier.get().stupidModules.get()) {
+        if (!ConfigModifier.get().stupidModulesEnabled()) {
             info("Stupid Modules was disabled. SlimeJump turning off.");
             toggle();
             return;
@@ -92,14 +92,16 @@ public class SlimeJump extends Module {
 
         if (onSlime) {
             offSlimeTicks = 0;
-        } else {
+        } else if (mc.player.onGround()) {
             offSlimeTicks++;
             if (offSlimeTicks >= resetTicks.get()) {
                 bounceCount = 0;
             }
+        } else {
+            offSlimeTicks = 0;
         }
 
-        double yVel = mc.player.getVelocity().y;
+        double yVel = mc.player.getDeltaMovement().y;
         boolean falling = yVel < -0.1;
 
         if (wasFalling && onSlime && !falling) {
@@ -107,7 +109,7 @@ public class SlimeJump extends Module {
             performBounce(yVel);
         }
 
-        if (autoBounce.get() && onSlime && mc.player.isOnGround() && yVel == 0) {
+        if (autoBounce.get() && onSlime && mc.player.onGround() && yVel == 0) {
             performBounce(-0.5);
         }
 
@@ -124,17 +126,17 @@ public class SlimeJump extends Module {
 
         newVel = Math.min(newVel, maxVelocity.get());
 
-        Vec3d vel = mc.player.getVelocity();
-        mc.player.setVelocity(vel.x, newVel, vel.z);
+        Vec3 vel = mc.player.getDeltaMovement();
+        mc.player.setDeltaMovement(vel.x, newVel, vel.z);
 
         info("Bounce #" + bounceCount + " • velocity: " + String.format("%.2f", newVel));
     }
 
     private boolean isOnSlime() {
-        BlockPos pos = mc.player.getBlockPos();
+        BlockPos pos = mc.player.blockPosition();
 
-        return mc.world.getBlockState(pos).isOf(Blocks.SLIME_BLOCK)
-            || mc.world.getBlockState(pos.down()).isOf(Blocks.SLIME_BLOCK);
+        return mc.level.getBlockState(pos).is(Blocks.SLIME_BLOCK)
+            || mc.level.getBlockState(pos.below()).is(Blocks.SLIME_BLOCK);
     }
 
     @Override

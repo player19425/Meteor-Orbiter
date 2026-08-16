@@ -7,9 +7,9 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.registry.Registries;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -97,8 +97,8 @@ public class PlaySoundSpam extends CreativeSafetyModule {
         soundIndex = 0;
 
         allSounds = new ArrayList<>();
-        for (SoundEvent sound : Registries.SOUND_EVENT) {
-            Identifier id = Registries.SOUND_EVENT.getId(sound);
+        for (SoundEvent sound : BuiltInRegistries.SOUND_EVENT) {
+            Identifier id = BuiltInRegistries.SOUND_EVENT.getKey(sound);
             if (id != null) {
                 allSounds.add(id.toString());
             }
@@ -109,7 +109,7 @@ public class PlaySoundSpam extends CreativeSafetyModule {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.player.networkHandler == null || allSounds == null || allSounds.isEmpty())
+        if (mc.player == null || mc.player.connection == null || allSounds == null || allSounds.isEmpty())
             return;
 
         tickCounter++;
@@ -131,7 +131,7 @@ public class PlaySoundSpam extends CreativeSafetyModule {
 
             String cmd = CommandUtils.formatCommand("playsound %s %s %s ~ ~ ~ %.2f %.2f",
                     sound, sourceStr, target.get(), volume.get(), p);
-            mc.player.networkHandler.sendChatCommand(cmd);
+            mc.player.connection.sendCommand(cmd);
         }
     }
 

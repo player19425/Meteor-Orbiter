@@ -7,7 +7,7 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -267,7 +267,7 @@ public class WorldEraser extends CreativeSafetyModule {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.player.connection == null) return;
 
         if (lazyMode) {
             if (tickDelay > 0) { tickDelay--; return; }
@@ -280,7 +280,7 @@ public class WorldEraser extends CreativeSafetyModule {
                     toggle();
                     return;
                 }
-                mc.player.networkHandler.sendChatCommand(lazyIterator.next());
+                mc.player.connection.sendCommand(lazyIterator.next());
                 lazyGeneratedCount++;
                 sent++;
             }
@@ -313,7 +313,7 @@ public class WorldEraser extends CreativeSafetyModule {
 
         int sent = 0;
         while (commandIndex < pendingCommands.size() && sent < commandsPerTick.get()) {
-            mc.player.networkHandler.sendChatCommand(pendingCommands.get(commandIndex));
+            mc.player.connection.sendCommand(pendingCommands.get(commandIndex));
             commandIndex++;
             sent++;
         }
@@ -335,8 +335,8 @@ public class WorldEraser extends CreativeSafetyModule {
     }
 
     private void startLazyGeneration() {
-        if (mc.world == null || mc.player == null) return;
-        BlockPos center = mc.player.getBlockPos();
+        if (mc.level == null || mc.player == null) return;
+        BlockPos center = mc.player.blockPosition();
         int r = radius.get();
         lazyBlock = "minecraft:" + fillBlock.get().replace("minecraft:", "").trim();
 
@@ -346,7 +346,7 @@ public class WorldEraser extends CreativeSafetyModule {
 
             lazyMinX = center.getX() - r;
             lazyMaxX = center.getX() + r;
-            lazyMinY = Math.max(mc.world.getBottomY(), center.getY() - r);
+            lazyMinY = Math.max(mc.level.getMinY(), center.getY() - r);
             lazyMaxY = Math.min(worldTopY(), center.getY() + r);
             lazyMinZ = center.getZ() - r;
             lazyMaxZ = center.getZ() + r;
@@ -365,11 +365,11 @@ public class WorldEraser extends CreativeSafetyModule {
     }
 
     private String validatePreflight() {
-        if (mc.world == null || mc.player == null) return "world is unavailable";
+        if (mc.level == null || mc.player == null) return "world is unavailable";
         int r = radius.get();
         if (r < 1 || r > ABSOLUTE_MAX_RADIUS) return "radius must be between 1 and " + ABSOLUTE_MAX_RADIUS;
 
-        BlockPos center = mc.player.getBlockPos();
+        BlockPos center = mc.player.blockPosition();
         long minX = (long) center.getX() - r;
         long maxX = (long) center.getX() + r;
         long minZ = (long) center.getZ() - r;
@@ -382,7 +382,7 @@ public class WorldEraser extends CreativeSafetyModule {
         long height = shape.get() == EraseShape.Cylinder
             ? cylinderHeight.get()
             : Math.min((long) worldTopY(), (long) center.getY() + r)
-                - Math.max((long) mc.world.getBottomY(), (long) center.getY() - r) + 1L;
+                - Math.max((long) mc.level.getMinY(), (long) center.getY() - r) + 1L;
         long diameter = Math.addExact(Math.multiplyExact(2L, r), 1L);
         long boundingVolume;
         try {
@@ -412,8 +412,8 @@ public class WorldEraser extends CreativeSafetyModule {
 
     private List<String> buildVanillaCommands() {
         List<String> commands = new ArrayList<>();
-        if (mc.world == null || mc.player == null) return commands;
-        BlockPos center = mc.player.getBlockPos();
+        if (mc.level == null || mc.player == null) return commands;
+        BlockPos center = mc.player.blockPosition();
         int r = radius.get();
         String block = "minecraft:" + fillBlock.get().replace("minecraft:", "").trim();
 
@@ -428,7 +428,7 @@ public class WorldEraser extends CreativeSafetyModule {
     private void buildCubeCommands(List<String> commands, BlockPos center, int r, String block) {
         int minX = center.getX() - r;
         int maxX = center.getX() + r;
-        int minY = Math.max(mc.world.getBottomY(), center.getY() - r);
+        int minY = Math.max(mc.level.getMinY(), center.getY() - r);
         int maxY = Math.min(worldTopY(), center.getY() + r);
         int minZ = center.getZ() - r;
         int maxZ = center.getZ() + r;
@@ -464,7 +464,7 @@ public class WorldEraser extends CreativeSafetyModule {
                 ? center.getY() + cylinderHeight.get() - 1
                 : center.getY() + r;
 
-        minY = Math.max(mc.world.getBottomY(), minY);
+        minY = Math.max(mc.level.getMinY(), minY);
         maxY = Math.min(worldTopY(), maxY);
         if (minY > maxY) return;
 
@@ -641,7 +641,7 @@ public class WorldEraser extends CreativeSafetyModule {
     }
 
     private void executeWorldEdit() {
-        if (mc.player == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.player.connection == null) return;
 
         int r = radius.get();
         String block = fillBlock.get().replace("minecraft:", "");
@@ -667,14 +667,14 @@ public class WorldEraser extends CreativeSafetyModule {
     }
 
     private void sendWorldEditCommand(String command) {
-        if (mc.player == null || mc.player.networkHandler == null) return;
-        mc.player.networkHandler.sendChatCommand(command);
+        if (mc.player == null || mc.player.connection == null) return;
+        mc.player.connection.sendCommand(command);
     }
 
     private boolean hasCommandPermission() {
-        if (mc.player == null || mc.player.networkHandler == null) return false;
+        if (mc.player == null || mc.player.connection == null) return false;
 
-        var dispatcher = mc.player.networkHandler.getCommandDispatcher();
+        var dispatcher = mc.player.connection.getCommands();
         if (dispatcher == null || dispatcher.getRoot() == null) return false;
 
         return dispatcher.getRoot().getChild("fill") != null
@@ -687,7 +687,7 @@ public class WorldEraser extends CreativeSafetyModule {
     }
 
     private int worldTopY() {
-        return mc.world.getBottomY() + mc.world.getDimension().height() - 1;
+        return mc.level.getMinY() + mc.level.dimensionType().height() - 1;
     }
     public enum EraseShape {
         Cube,
