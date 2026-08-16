@@ -80,7 +80,6 @@ Everything is organized into four in-game categories:
 
 | Module | Description |
 |---|---|
-| **Auto Build** | Litematica Printer: automatically places blocks from loaded schematics with full rotation support. Requires Litematica. |
 | **Auto Farming** | Harvests crops/cactus/sugarcane/bamboo, breeds animals, applies bonemeal and replants with delay. |
 | **Command Block Placer** | Places command blocks with set commands. Requires Creative + OP. |
 | **Control Player** | Uses owner-authorized OP commands to rotate selected players around you. |
@@ -131,7 +130,6 @@ Everything is organized into four in-game categories:
 | **Ping Spoof** | Advanced ping/movement spoof with bypass, spoof, adaptive, competitive, and dynamic adaptive modes. |
 | **Server Protect** | Comprehensive anti-abuse module. Blocks crash packets, entity spam, malicious items, and more. |
 | **Spam Plus** | Spam module with letter-ladder and auto-split features. |
-| **Stupid Modules** | Master toggle for joke / experimental / stupid modules. |
 
 # Commands:
 

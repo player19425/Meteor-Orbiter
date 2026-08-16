@@ -9,6 +9,7 @@ import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.core.BlockPos;
@@ -335,6 +336,17 @@ public class BlockSpoof extends Module {
         return self.replacementMap.get(original);
     }
 
+    public static BlockState applySpoof(BlockState original, BlockPos pos) {
+        BlockSpoof self = getActive();
+        if (self == null || original == null) return original;
+        if (!self.hasActiveReplacements()) return original;
+        if (pos != null && !self.isPositionInRange(pos)) return original;
+
+        Block replacement = self.getSpoofedBlock(original.getBlock());
+        if (replacement != null) return replacement.defaultBlockState();
+        return original;
+    }
+
     public static boolean isWithinRange(BlockPos pos) {
         BlockSpoof self = getActive();
         if (self == null) return false;
@@ -363,6 +375,7 @@ public class BlockSpoof extends Module {
         pulsePhase = 0.0f;
         oreScanTickCounter = 0;
         blockIdCache.clear();
+        requestWorldRendererRefresh();
     }
 
     @Override
@@ -499,7 +512,9 @@ public class BlockSpoof extends Module {
     }
 
     private void scheduleChunkRefresh() {
-
+        if (!isActive()) return;
+        needsChunkRefresh = true;
+        refreshTimer = refreshDelay.get();
     }
 
     @EventHandler
@@ -507,6 +522,13 @@ public class BlockSpoof extends Module {
         if (mc.player == null || mc.level == null) return;
 
         handleToggleKey();
+
+        if (needsChunkRefresh) {
+            if (--refreshTimer <= 0) {
+                needsChunkRefresh = false;
+                requestWorldRendererRefresh();
+            }
+        }
 
         if (oreHighlight.get() == OreHighlightMode.PulseOutline) {
             pulsePhase += 0.05f;
@@ -711,20 +733,15 @@ public class BlockSpoof extends Module {
     }
 
     private void requestWorldRendererRefresh() {
-        if (mc.levelRenderer != null) {
-            try {
-                
-                if (debugPositions.get()) {
-                    info("Scheduled world renderer terrain update.");
-                }
-            } catch (Exception e) {
+        if (mc.levelRenderer == null || mc.level == null || mc.player == null) return;
+        try {
+            mc.levelRenderer.invalidateCompiledGeometry(mc.level, mc.options, mc.gameRenderer.mainCamera(), mc.getBlockColors());
 
-                try {
-                    
-                } catch (Exception ignored) {
-                    warning("Failed to request world renderer refresh.");
-                }
+            if (debugPositions.get()) {
+                info("Scheduled world renderer terrain update.");
             }
+        } catch (Exception e) {
+            warning("Failed to request world renderer refresh: " + e.getMessage());
         }
     }
 

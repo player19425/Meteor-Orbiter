@@ -7,6 +7,8 @@ import com.google.gson.JsonParser;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
+import net.minecraft.client.Minecraft;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.core.component.TypedDataComponent;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.component.DataComponents;
@@ -143,12 +145,18 @@ public class ItemInfo extends Module {
 
         if (m.showNbt.get()) {
             additions.add(lore("Full NBT:"));
-            ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, stack)
-                .result()
-                .ifPresentOrElse(
-                    tag -> additions.add(lore("  " + tag.toString())),
-                    () -> additions.add(lore("  <failed to encode>"))
-                );
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.level != null) {
+                RegistryOps<net.minecraft.nbt.Tag> ops = RegistryOps.create(NbtOps.INSTANCE, mc.level.registryAccess());
+                ItemStack.CODEC.encodeStart(ops, stack)
+                    .result()
+                    .ifPresentOrElse(
+                        tag -> additions.add(lore("  " + tag)),
+                        () -> additions.add(lore("  <failed to encode>"))
+                    );
+            } else {
+                additions.add(lore("  <no level>"));
+            }
         }
 
         if (!additions.isEmpty()) {

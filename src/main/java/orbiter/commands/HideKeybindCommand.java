@@ -25,17 +25,19 @@ public class HideKeybindCommand extends Command {
     private static volatile boolean permanent = false;
 
     public HideKeybindCommand() {
-        super("hidekeybind", "Hides Meteor keybinds from the Controls screen.");
+        super("hidekeybind", "Hides Meteor keybinds from the Controls screen.", "hidekeybinds");
         loadState();
     }
 
     @Override
     public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.then(literal("enable")
+            .executes(ctx -> apply(true, false))
             .then(literal("permanent").executes(ctx -> apply(true, true)))
             .then(literal("temp").executes(ctx -> apply(true, false))));
 
         builder.then(literal("disable")
+            .executes(ctx -> apply(false, false))
             .then(literal("permanent").executes(ctx -> apply(false, true)))
             .then(literal("temp").executes(ctx -> apply(false, false))));
 

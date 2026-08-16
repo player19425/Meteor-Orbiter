@@ -32,6 +32,11 @@ public abstract class Camera360Mixin {
         return mod != null && mod.isActive();
     }
 
+    private boolean orbiter$shouldUnlockPitch() {
+        Camera360 mod = (Camera360) Modules.get().get("360-camera");
+        return mod != null && mod.shouldUnlockPitch();
+    }
+
     private boolean orbiter$shouldInvertMouse() {
         Camera360 mod = (Camera360) Modules.get().get("360-camera");
         return mod != null && mod.isActive() && mod.shouldInvertMouse();
@@ -73,9 +78,8 @@ public abstract class Camera360Mixin {
         at = @At(value = "INVOKE", target = "Ljava/lang/Math;clamp(FFF)F")
     )
     private float orbiter$unlockPitchSet(float value, float min, float max, Operation<Float> original) {
-        if (orbiter$is360Active()) {
-            float pitch = ((Entity)(Object)this).getXRot();
-            return ((pitch + 180) % 360 + 360) % 360 - 180;
+        if (orbiter$shouldUnlockPitch()) {
+            return ((value + 180) % 360 + 360) % 360 - 180;
         }
         return original.call(value, min, max);
     }

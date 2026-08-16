@@ -6,7 +6,7 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import com.mojang.datafixers.util.Pair;
 import orbiter.Orbiter;
-import orbiter.modules.misc.StupidModules;
+import orbiter.util.ConfigModifier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
@@ -19,8 +19,7 @@ import java.util.stream.Collectors;
 public abstract class ModulesMixin {
 
     private static boolean orbiter$isStupidEnabled() {
-        StupidModules mod = StupidModules.get();
-        return mod != null && mod.stupidEnabled();
+        return ConfigModifier.get().stupidModules.get();
     }
 
     @ModifyReturnValue(method = "loopCategories", at = @At("RETURN"))
