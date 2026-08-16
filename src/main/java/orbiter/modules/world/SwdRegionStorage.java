@@ -1,12 +1,12 @@
 package orbiter.modules.world;
 
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.util.math.ChunkPos;
-import net.minecraft.world.World;
-import net.minecraft.world.storage.RegionFile;
-import net.minecraft.world.storage.StorageKey;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.storage.RegionFile;
+import net.minecraft.world.level.chunk.storage.RegionStorageInfo;
 
 import java.io.DataInput;
 import java.io.DataInputStream;
@@ -20,29 +20,29 @@ import java.util.Map;
 public class SwdRegionStorage implements AutoCloseable {
 
     private final Path directory;
-    private final StorageKey storageKey;
+    private final RegionStorageInfo storageKey;
     private final Map<Long, RegionFile> regionCache = new HashMap<>();
 
-    public SwdRegionStorage(Path directory, RegistryKey<World> dimension) {
+    public SwdRegionStorage(Path directory, ResourceKey<Level> dimension) {
         this.directory = directory;
-        this.storageKey = new StorageKey("orbiter", dimension, "chunk");
+        this.storageKey = new RegionStorageInfo("orbiter", dimension, "chunk");
         try {
             java.nio.file.Files.createDirectories(directory);
         } catch (IOException ignored) {}
     }
 
-    public void write(ChunkPos pos, NbtCompound nbt) throws IOException {
+    public void write(ChunkPos pos, CompoundTag nbt) throws IOException {
         RegionFile rf = getOrOpenRegion(pos);
-        try (DataOutputStream out = rf.getChunkOutputStream(pos)) {
+        try (DataOutputStream out = rf.getChunkDataOutputStream(pos)) {
             NbtIo.write(nbt, (DataOutput) out);
         }
     }
 
-    public NbtCompound read(ChunkPos pos) throws IOException {
+    public CompoundTag read(ChunkPos pos) throws IOException {
         RegionFile rf = getOrOpenRegion(pos);
-        try (DataInputStream in = rf.getChunkInputStream(pos)) {
+        try (DataInputStream in = rf.getChunkDataInputStream(pos)) {
             if (in == null) return null;
-            return NbtIo.readCompound((DataInput) in);
+            return NbtIo.read((DataInput) in);
         }
     }
 

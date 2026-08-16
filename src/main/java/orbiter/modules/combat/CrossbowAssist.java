@@ -8,19 +8,20 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.ChargedProjectilesComponent;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.entity.projectile.ProjectileUtil;
-import net.minecraft.item.CrossbowItem;
-import net.minecraft.item.Items;
-import net.minecraft.util.hit.EntityHitResult;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.RaycastContext;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.component.ChargedProjectiles;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.ClipContext;
 import orbiter.Orbiter;
 import orbiter.util.ComboTracker;
 
@@ -93,6 +94,12 @@ public class CrossbowAssist extends Module {
     private final Setting<Boolean> playersOnly = sgTarget.add(new BoolSetting.Builder()
         .name("players-only")
         .defaultValue(false)
+        .build()
+    );
+
+    private final Setting<Set<EntityType<?>>> entities = sgTarget.add(new EntityTypeListSetting.Builder()
+        .name("entities")
+        .description("Which entity types to target. Empty targets all living entities.")
         .build()
     );
 
@@ -200,12 +207,12 @@ public class CrossbowAssist extends Module {
 
     private LivingEntity currentTarget;
     private long lastTargetSwitchTime;
-    private final List<Vec3d> trajectoryPoints = new ArrayList<>();
+    private final List<Vec3> trajectoryPoints = new ArrayList<>();
     private int tickCounter = 0;
     private int burstCounter = 0;
 
-    private final Map<UUID, Vec3d> prevVelocities = new HashMap<>();
-    private final Map<UUID, Vec3d> smoothedVelocities = new HashMap<>();
+    private final Map<UUID, Vec3> prevVelocities = new HashMap<>();
+    private final Map<UUID, Vec3> smoothedVelocities = new HashMap<>();
     private static final double VEL_SMOOTH_ALPHA = 0.3;
 
     private boolean hasFireworkLoaded = false;
@@ -237,10 +244,10 @@ public class CrossbowAssist extends Module {
 
     @EventHandler(priority = EventPriority.HIGH)
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         tickCounter++;
 
-        if (mc.player.getMainHandStack().getItem() != Items.CROSSBOW) {
+        if (mc.player.getMainHandItem().getItem() != Items.CROSSBOW) {
             currentTarget = null;
             trajectoryPoints.clear();
             return;
@@ -264,8 +271,8 @@ public class CrossbowAssist extends Module {
             return;
         }
 
-        Vec3d targetPos = getTargetPosition(currentTarget);
-        Vec3d origin = mc.player.getEyePos();
+        Vec3 targetPos = getTargetPosition(currentTarget);
+        Vec3 origin = mc.player.getEyePosition();
 
         if (predictMovement.get()) {
             targetPos = predictTargetPosition(currentTarget, targetPos, origin);
@@ -288,8 +295,8 @@ public class CrossbowAssist extends Module {
 
     private void handleFireLogic(AimSolution solution) {
 
-        float yawDiff = Math.abs(MathHelper.wrapDegrees(solution.yaw - mc.player.getYaw()));
-        float pitchDiff = Math.abs(solution.pitch - mc.player.getPitch());
+        float yawDiff = Math.abs(Mth.wrapDegrees(solution.yaw - mc.player.getYRot()));
+        float pitchDiff = Math.abs(solution.pitch - mc.player.getXRot());
         boolean aimedClose = yawDiff < 5.0f && pitchDiff < 5.0f;
 
         switch (fireMode.get()) {
@@ -315,12 +322,12 @@ public class CrossbowAssist extends Module {
     }
 
     private void fireCrossbow() {
-        if (mc.player == null || mc.getNetworkHandler() == null) return;
+        if (mc.player == null || mc.getConnection() == null) return;
 
         mc.player.stopUsingItem();
 
         if (currentTarget != null) {
-            ComboTracker.registerHit(currentTarget.getUuid());
+            ComboTracker.registerHit(currentTarget.getUUID());
         }
 
         if (autoReload.get()) {
@@ -330,33 +337,33 @@ public class CrossbowAssist extends Module {
 
     private boolean isCrossbowLoaded() {
         if (mc.player == null) return false;
-        ChargedProjectilesComponent charged = mc.player.getMainHandStack()
-            .get(DataComponentTypes.CHARGED_PROJECTILES);
-        return charged != null && !charged.getProjectiles().isEmpty();
+        ChargedProjectiles charged = mc.player.getMainHandItem()
+            .get(DataComponents.CHARGED_PROJECTILES);
+        return charged != null && !charged.itemCopies().isEmpty();
     }
 
     private boolean isFireworkLoaded() {
         if (mc.player == null) return false;
-        ChargedProjectilesComponent charged = mc.player.getMainHandStack()
-            .get(DataComponentTypes.CHARGED_PROJECTILES);
-        if (charged == null || charged.getProjectiles().isEmpty()) return false;
-        return charged.getProjectiles().get(0).getItem() == Items.FIREWORK_ROCKET;
+        ChargedProjectiles charged = mc.player.getMainHandItem()
+            .get(DataComponents.CHARGED_PROJECTILES);
+        if (charged == null || charged.itemCopies().isEmpty()) return false;
+        return charged.itemCopies().get(0).getItem() == Items.FIREWORK_ROCKET;
     }
 
     private void trackVelocities() {
         Set<UUID> alive = new HashSet<>();
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof LivingEntity living)) continue;
-            UUID id = living.getUuid();
+            UUID id = living.getUUID();
             alive.add(id);
 
-            Vec3d currentVel = living.getVelocity();
-            Vec3d prevVel = prevVelocities.get(id);
+            Vec3 currentVel = living.getDeltaMovement();
+            Vec3 prevVel = prevVelocities.get(id);
 
             if (prevVel != null) {
 
-                Vec3d prevSmoothed = smoothedVelocities.getOrDefault(id, prevVel);
-                Vec3d smoothed = new Vec3d(
+                Vec3 prevSmoothed = smoothedVelocities.getOrDefault(id, prevVel);
+                Vec3 smoothed = new Vec3(
                     prevSmoothed.x * (1 - VEL_SMOOTH_ALPHA) + currentVel.x * VEL_SMOOTH_ALPHA,
                     prevSmoothed.y * (1 - VEL_SMOOTH_ALPHA) + currentVel.y * VEL_SMOOTH_ALPHA,
                     prevSmoothed.z * (1 - VEL_SMOOTH_ALPHA) + currentVel.z * VEL_SMOOTH_ALPHA
@@ -388,10 +395,10 @@ public class CrossbowAssist extends Module {
     }
 
     private LivingEntity findBestTarget() {
-        Vec3d eyes = mc.player.getEyePos();
+        Vec3 eyes = mc.player.getEyePosition();
         List<LivingEntity> candidates = new ArrayList<>();
 
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (!isValidTarget(living)) continue;
             if (!isInRange(living)) continue;
@@ -414,52 +421,53 @@ public class CrossbowAssist extends Module {
         if (entity == null || !entity.isAlive() || entity.isSpectator()) return false;
         if (entity == mc.player) return false;
         if (!entity.isAttackable()) return false;
-        if (entity instanceof PlayerEntity p) {
+        if (entity instanceof Player p) {
             if (ignoreFriends.get() && Friends.get().isFriend(p)) return false;
-            if (ignoreCreative.get() && p.getAbilities().creativeMode) return false;
+            if (ignoreCreative.get() && p.getAbilities().instabuild) return false;
         }
-        if (playersOnly.get() && !(entity instanceof PlayerEntity)) return false;
+        if (playersOnly.get() && !(entity instanceof Player)) return false;
+        if (!entities.get().isEmpty() && !entities.get().contains(entity.getType())) return false;
         if (ignoreInvisibles.get() && entity.isInvisible()) return false;
         return true;
     }
 
     private boolean isInRange(LivingEntity entity) {
-        return mc.player.getEyePos().distanceTo(entity.getBoundingBox().getCenter()) <= range.get();
+        return mc.player.getEyePosition().distanceTo(entity.getBoundingBox().getCenter()) <= range.get();
     }
 
     private double getAngleToEntity(LivingEntity entity) {
-        Vec3d playerEyes = mc.player.getEyePos();
-        Vec3d targetCenter = entity.getBoundingBox().getCenter();
-        Vec3d diff = targetCenter.subtract(playerEyes).normalize();
-        float yaw = mc.player.getYaw() * ((float) Math.PI / 180f);
-        float pitch = mc.player.getPitch() * ((float) Math.PI / 180f);
-        Vec3d look = new Vec3d(
-            -MathHelper.sin(yaw) * MathHelper.cos(pitch),
-            -MathHelper.sin(pitch),
-            MathHelper.cos(yaw) * MathHelper.cos(pitch)
+        Vec3 playerEyes = mc.player.getEyePosition();
+        Vec3 targetCenter = entity.getBoundingBox().getCenter();
+        Vec3 diff = targetCenter.subtract(playerEyes).normalize();
+        float yaw = mc.player.getYRot() * ((float) Math.PI / 180f);
+        float pitch = mc.player.getXRot() * ((float) Math.PI / 180f);
+        Vec3 look = new Vec3(
+            -Mth.sin(yaw) * Mth.cos(pitch),
+            -Mth.sin(pitch),
+            Mth.cos(yaw) * Mth.cos(pitch)
         ).normalize();
-        double dot = look.dotProduct(diff);
-        return Math.toDegrees(Math.acos(MathHelper.clamp(dot, -1.0, 1.0)));
+        double dot = look.dot(diff);
+        return Math.toDegrees(Math.acos(Mth.clamp(dot, -1.0, 1.0)));
     }
 
-    private boolean hasLineOfSight(Vec3d from, LivingEntity target) {
-        Vec3d to = target.getBoundingBox().getCenter();
-        if (mc.world == null) return true;
-        var result = mc.world.raycast(new RaycastContext(
-            from, to, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
+    private boolean hasLineOfSight(Vec3 from, LivingEntity target) {
+        Vec3 to = target.getBoundingBox().getCenter();
+        if (mc.level == null) return true;
+        var result = mc.level.clip(new ClipContext(
+            from, to, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
         return result.getType() == HitResult.Type.MISS;
     }
 
-    private Vec3d getTargetPosition(LivingEntity target) {
+    private Vec3 getTargetPosition(LivingEntity target) {
         if (aimAtHead.get()) {
-            return new Vec3d(target.getX(), target.getEyeY(), target.getZ());
+            return new Vec3(target.getX(), target.getEyeY(), target.getZ());
         }
         return target.getBoundingBox().getCenter();
     }
 
-    private Vec3d predictTargetPosition(LivingEntity target, Vec3d currentPos, Vec3d origin) {
-        Vec3d targetVel = smoothedVelocities.getOrDefault(target.getUuid(), target.getVelocity());
-        if (targetVel.lengthSquared() < 0.001) return currentPos;
+    private Vec3 predictTargetPosition(LivingEntity target, Vec3 currentPos, Vec3 origin) {
+        Vec3 targetVel = smoothedVelocities.getOrDefault(target.getUUID(), target.getDeltaMovement());
+        if (targetVel.lengthSqr() < 0.001) return currentPos;
 
         double dist = origin.distanceTo(currentPos);
         double speed = hasFireworkLoaded ? 3.15 : boltSpeed.get();
@@ -469,15 +477,15 @@ public class CrossbowAssist extends Module {
         double flightTime = dist / speed;
         flightTime = Math.min(flightTime, predictionSteps.get());
 
-        Vec3d predicted = currentPos.add(targetVel.multiply(flightTime));
-        if (mc.world != null && predicted.y < mc.world.getBottomY()) {
-            predicted = new Vec3d(predicted.x, mc.world.getBottomY(), predicted.z);
+        Vec3 predicted = currentPos.add(targetVel.scale(flightTime));
+        if (mc.level != null && predicted.y < mc.level.getMinY()) {
+            predicted = new Vec3(predicted.x, mc.level.getMinY(), predicted.z);
         }
         return predicted;
     }
 
-    private AimSolution solveAim(Vec3d origin, Vec3d target) {
-        Vec3d delta = target.subtract(origin);
+    private AimSolution solveAim(Vec3 origin, Vec3 target) {
+        Vec3 delta = target.subtract(origin);
         double dx = delta.x;
         double dy = delta.y;
         double dz = delta.z;
@@ -505,7 +513,7 @@ public class CrossbowAssist extends Module {
         return new AimSolution(yaw, pitch);
     }
 
-    private float refinePitchWithSimulation(Vec3d origin, Vec3d target, float initialPitch, double speed, double g) {
+    private float refinePitchWithSimulation(Vec3 origin, Vec3 target, float initialPitch, double speed, double g) {
         float bestPitch = initialPitch;
         double bestError = simulateError(origin, target, bestPitch, speed, g);
 
@@ -522,71 +530,71 @@ public class CrossbowAssist extends Module {
         return bestPitch;
     }
 
-    private double simulateError(Vec3d origin, Vec3d target, float pitch, double speed, double g) {
-        Vec3d pos = origin;
-        Vec3d vel = Vec3d.fromPolar(pitch, lastCalculatedYawForSim).multiply(speed);
-        double bestDist = pos.squaredDistanceTo(target);
+    private double simulateError(Vec3 origin, Vec3 target, float pitch, double speed, double g) {
+        Vec3 pos = origin;
+        Vec3 vel = Vec3.directionFromRotation(pitch, lastCalculatedYawForSim).scale(speed);
+        double bestDist = pos.distanceToSqr(target);
         int maxSteps = Math.min(simSteps.get(), 120);
 
         for (int i = 0; i < maxSteps; i++) {
-            Vec3d next = pos.add(vel);
-            double d = next.squaredDistanceTo(target);
+            Vec3 next = pos.add(vel);
+            double d = next.distanceToSqr(target);
             if (d < bestDist) bestDist = d;
             pos = next;
-            vel = vel.multiply(boltDrag.get());
+            vel = vel.scale(boltDrag.get());
             vel = vel.add(0, -g, 0);
-            if (pos.y < mc.world.getBottomY() - 4) break;
+            if (pos.y < mc.level.getMinY() - 4) break;
         }
         return bestDist;
     }
 
     private float lastCalculatedYawForSim;
 
-    private void simulateTrajectory(Vec3d origin, float yaw, float pitch, List<Vec3d> out) {
+    private void simulateTrajectory(Vec3 origin, float yaw, float pitch, List<Vec3> out) {
         out.clear();
         lastCalculatedYawForSim = yaw;
 
         double speed = hasFireworkLoaded ? 1.6 : boltSpeed.get();
         double g = hasFireworkLoaded ? 0.0 : boltGravity.get();
-        Vec3d pos = origin;
-        Vec3d vel = Vec3d.fromPolar(pitch, yaw).multiply(speed);
+        Vec3 pos = origin;
+        Vec3 vel = Vec3.directionFromRotation(pitch, yaw).scale(speed);
 
         out.add(pos);
 
         int maxSteps = Math.min(simSteps.get(), 150);
         for (int i = 0; i < maxSteps; i++) {
-            Vec3d next = pos.add(vel);
+            Vec3 next = pos.add(vel);
 
-            if (mc.world != null) {
-                var result = mc.world.raycast(new RaycastContext(
-                    pos, next, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player));
+            if (mc.level != null) {
+                var result = mc.level.clip(new ClipContext(
+                    pos, next, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, mc.player));
                 if (result.getType() == HitResult.Type.BLOCK) {
-                    out.add(result.getPos());
+                    out.add(result.getLocation());
                     break;
                 }
             }
 
             out.add(next);
             pos = next;
-            vel = vel.multiply(boltDrag.get());
+            vel = vel.scale(boltDrag.get());
             vel = vel.add(0, -g, 0);
-            if (pos.y < mc.world.getBottomY() - 4) break;
+            if (pos.y < mc.level.getMinY() - 4) break;
         }
     }
 
     private void applyAim(float targetYaw, float targetPitch) {
         double speed = aimSpeed.get();
-        float currentYaw = mc.player.getYaw();
-        float currentPitch = mc.player.getPitch();
+        float currentYaw = mc.player.getYRot();
+        float currentPitch = mc.player.getXRot();
 
-        float yawDelta = MathHelper.wrapDegrees(targetYaw - currentYaw);
+        float yawDelta = Mth.wrapDegrees(targetYaw - currentYaw);
         float pitchDelta = targetPitch - currentPitch;
 
         float newYaw = currentYaw + (float) (yawDelta * speed);
         float newPitch = currentPitch + (float) (pitchDelta * speed);
 
-        mc.player.setYaw(newYaw);
-        mc.player.setPitch(newPitch);
+        mc.player.setYRot(newYaw);
+        mc.player.setXRot(newPitch);
     }
 
     @EventHandler
@@ -594,8 +602,8 @@ public class CrossbowAssist extends Module {
         if (renderMode.get() == RenderMode.Off || trajectoryPoints.isEmpty()) return;
 
         for (int i = 0; i < trajectoryPoints.size() - 1; i++) {
-            Vec3d from = trajectoryPoints.get(i);
-            Vec3d to = trajectoryPoints.get(i + 1);
+            Vec3 from = trajectoryPoints.get(i);
+            Vec3 to = trajectoryPoints.get(i + 1);
 
             float t = (float) i / Math.max(1, trajectoryPoints.size() - 1);
             meteordevelopment.meteorclient.utils.render.color.Color c =
@@ -614,7 +622,7 @@ public class CrossbowAssist extends Module {
         }
 
         if (!trajectoryPoints.isEmpty()) {
-            Vec3d end = trajectoryPoints.get(trajectoryPoints.size() - 1);
+            Vec3 end = trajectoryPoints.get(trajectoryPoints.size() - 1);
             meteordevelopment.meteorclient.utils.render.color.Color red =
                 new meteordevelopment.meteorclient.utils.render.color.Color(255, 0, 0, 255);
             event.renderer.line(end.x - 0.3, end.y, end.z, end.x + 0.3, end.y, end.z, red);
@@ -632,11 +640,11 @@ public class CrossbowAssist extends Module {
         if (!loaded) return "Not loaded";
         if (currentTarget == null) return "Loaded • no target";
 
-        String name = currentTarget instanceof PlayerEntity p
+        String name = currentTarget instanceof Player p
             ? p.getName().getString()
             : currentTarget.getName().getString();
 
-        int combo = ComboTracker.getCombo(currentTarget.getUuid());
+        int combo = ComboTracker.getCombo(currentTarget.getUUID());
         String comboStr = combo > 0 ? " | combo: " + combo : "";
         return "\u2192 " + name + comboStr;
     }

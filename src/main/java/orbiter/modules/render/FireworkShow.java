@@ -7,13 +7,13 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.entity.CommandBlockBlockEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.c2s.play.CreativeInventoryActionC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateCommandBlockC2SPacket;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
+import net.minecraft.world.level.block.entity.CommandBlockEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCommandBlockPacket;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -311,7 +311,7 @@ public class FireworkShow extends CreativeSafetyModule {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.player.networkHandler == null)
+        if (mc.player == null || mc.player.connection == null)
             return;
 
         currentTick++;
@@ -363,7 +363,7 @@ public class FireworkShow extends CreativeSafetyModule {
     }
 
     private void launchFirework(int index) {
-        if (mc.player == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.player.connection == null) return;
 
         double x;
         double y;
@@ -413,7 +413,7 @@ public class FireworkShow extends CreativeSafetyModule {
         }
 
         if (isOmegaPlusMode()) {
-            if (!mc.player.getAbilities().creativeMode || mc.world == null || mc.interactionManager == null) {
+            if (!mc.player.getAbilities().instabuild || mc.level == null || mc.gameMode == null) {
                 warning("Omega+ requires Creative mode and interaction manager.");
                 toggle();
                 return;
@@ -424,7 +424,7 @@ public class FireworkShow extends CreativeSafetyModule {
         }
 
         String cmd = buildFireworkSummonCommand(x, y, z);
-        mc.player.networkHandler.sendChatCommand(cmd);
+        mc.player.connection.sendCommand(cmd);
     }
 
     private String buildFireworkSummonCommand(double x, double y, double z) {
@@ -517,15 +517,15 @@ public class FireworkShow extends CreativeSafetyModule {
     }
 
     private void launchOmegaPlusCommand(String command, int index) {
-        if (mc.player == null || mc.player.networkHandler == null || mc.world == null) return;
+        if (mc.player == null || mc.player.connection == null || mc.level == null) return;
 
         if (!canPlaceOmegaPlusBlockNow()) return;
 
-        BlockPos playerPos = mc.player.getBlockPos();
-        Direction facing = mc.player.getHorizontalFacing();
-        Direction right = facing.rotateYClockwise();
+        BlockPos playerPos = mc.player.blockPosition();
+        Direction facing = mc.player.getDirection();
+        Direction right = facing.getClockWise();
         int distance = omegaPlusPlaceDistance.get() + (index % 3);
-        BlockPos base = playerPos.offset(facing, distance).up(1 + (index % 2));
+        BlockPos base = playerPos.offset(facing.getStepX() * distance, facing.getStepY() * distance, facing.getStepZ() * distance).above(1 + (index % 2));
         int clones = Math.min(Math.max(1, omegaPlusClones.get()), OMEGA_PLUS_HARD_MAX_CLONES);
         int spacing = Math.max(1, omegaPlusCloneSpacing.get());
         Set<BlockPos> used = new HashSet<>();
@@ -540,42 +540,42 @@ public class FireworkShow extends CreativeSafetyModule {
             int ox = (int) Math.round(Math.cos(angle) * spacing);
             int oz = (int) Math.round(Math.sin(angle) * spacing);
             int oy = c % 3;
-            BlockPos cloneBase = base.add(ox, oy, oz);
+            BlockPos cloneBase = base.offset(ox, oy, oz);
             if (!used.add(cloneBase)) continue;
 
             if (creativeGive) giveCommandBlockToHotbar();
 
-            BlockPos placePos = mode == OmegaPlusDelivery.Both ? cloneBase.offset(right) : cloneBase;
+            BlockPos placePos = mode == OmegaPlusDelivery.Both ? cloneBase.offset(right.getStepX(), right.getStepY(), right.getStepZ()) : cloneBase;
             placeAndProgramCommandBlockViaSetblock(placePos, command, facing);
             markOmegaPlacement();
         }
     }
 
     private void placeAndProgramCommandBlockViaSetblock(BlockPos pos, String command, Direction facing) {
-        if (mc.player == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.player.connection == null) return;
 
         String setblock = CommandUtils.formatCommand(
                 "setblock %d %d %d minecraft:command_block[facing=%s]",
                 pos.getX(),
                 pos.getY(),
                 pos.getZ(),
-                facing.asString());
-        if (setblock.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.networkHandler.sendChatCommand(setblock);
+                facing.getSerializedName());
+        if (setblock.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.connection.sendCommand(setblock);
 
-        mc.player.networkHandler.sendPacket(new UpdateCommandBlockC2SPacket(
+        mc.player.connection.send(new ServerboundSetCommandBlockPacket(
                 pos,
                 command,
-                CommandBlockBlockEntity.Type.REDSTONE,
+                CommandBlockEntity.Mode.REDSTONE,
                 omegaPlusTrackOutput.get(),
                 false,
                 false));
 
-        BlockPos powerPos = pos.up();
+        BlockPos powerPos = pos.above();
         String power = CommandUtils.formatCommand("setblock %d %d %d minecraft:redstone_block",
                 powerPos.getX(),
                 powerPos.getY(),
                 powerPos.getZ());
-        if (power.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.networkHandler.sendChatCommand(power);
+        if (power.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.connection.sendCommand(power);
 
         queueOmegaCleanup(pos, powerPos);
     }
@@ -586,12 +586,12 @@ public class FireworkShow extends CreativeSafetyModule {
     }
 
     private void giveCommandBlockToHotbar() {
-        if (mc.player == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.player.connection == null) return;
 
         int selected = mc.player.getInventory().getSelectedSlot();
         int targetSlot = selected;
-        ItemStack selectedStack = mc.player.getInventory().getStack(selected);
-        if (!selectedStack.isEmpty() && !selectedStack.isOf(Items.COMMAND_BLOCK)) {
+        ItemStack selectedStack = mc.player.getInventory().getItem(selected);
+        if (!selectedStack.isEmpty() && !selectedStack.is(Items.COMMAND_BLOCK)) {
             FindItemResult empty = InvUtils.find(ItemStack::isEmpty, 0, 8);
             if (!empty.found()) return;
             targetSlot = empty.slot();
@@ -599,8 +599,8 @@ public class FireworkShow extends CreativeSafetyModule {
 
         ItemStack stack = new ItemStack(Items.COMMAND_BLOCK);
         int packetSlot = 36 + targetSlot;
-        mc.player.networkHandler.sendPacket(new CreativeInventoryActionC2SPacket(packetSlot, stack));
-        mc.player.playerScreenHandler.getSlot(packetSlot).setStack(stack.copy());
+        mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(packetSlot, stack));
+        mc.player.containerMenu.getSlot(packetSlot).set(stack.copy());
     }
 
     private boolean canPlaceOmegaPlusBlockNow() {
@@ -619,7 +619,7 @@ public class FireworkShow extends CreativeSafetyModule {
     }
 
     private void processOmegaCleanup() {
-        if (mc.player == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.player.connection == null) return;
 
         Iterator<Map.Entry<BlockPos, Integer>> redstoneIt = omegaRedstoneCleanupTicks.entrySet().iterator();
         while (redstoneIt.hasNext()) {
@@ -639,12 +639,12 @@ public class FireworkShow extends CreativeSafetyModule {
     }
 
     private void sendSetblockAir(BlockPos pos) {
-        if (mc.player == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.player.connection == null) return;
         String clear = CommandUtils.formatCommand("setblock %d %d %d minecraft:air",
                 pos.getX(),
                 pos.getY(),
                 pos.getZ());
-        if (clear.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.networkHandler.sendChatCommand(clear);
+        if (clear.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.connection.sendCommand(clear);
     }
 
     private String buildFireworkEntityNBT(int explosionCount, int colorsPerExplosion, boolean includeFadeColors,

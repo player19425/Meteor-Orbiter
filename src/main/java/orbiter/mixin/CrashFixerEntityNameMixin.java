@@ -1,8 +1,8 @@
 package orbiter.mixin;
 
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.entity.Entity;
-import net.minecraft.text.Text;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.network.chat.Component;
 import orbiter.modules.misc.EntityNameSanitizer;
 import orbiter.modules.misc.ServerProtect;
 import org.spongepowered.asm.mixin.Mixin;
@@ -14,10 +14,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public class CrashFixerEntityNameMixin {
 
     @Inject(method = "getName", at = @At("RETURN"), cancellable = true)
-    private void orbiter$simplifyLaggyName(CallbackInfoReturnable<Text> cir) {
+    private void orbiter$simplifyLaggyName(CallbackInfoReturnable<Component> cir) {
         ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);
         if (mod == null || !mod.isActive() || !mod.shouldSanitizeEntityNames()) return;
-        Text name = cir.getReturnValue();
+        Component name = cir.getReturnValue();
         if (name == null) return;
         if (EntityNameSanitizer.shouldSimplify(name,
                 mod.getNameMaxChars(), mod.getNameMaxNodes(), mod.getNameMaxDepth(),

@@ -7,10 +7,10 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.fluid.Fluid;
-import net.minecraft.network.packet.s2c.play.ExplosionS2CPacket;
-import net.minecraft.registry.tag.FluidTags;
-import net.minecraft.registry.tag.TagKey;
+import net.minecraft.world.level.material.Fluid;
+import net.minecraft.network.protocol.game.ClientboundExplodePacket;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.tags.TagKey;
 
 public class AntiPush extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -60,6 +60,6 @@ public class AntiPush extends Module {
     private void onPacketReceive(PacketEvent.Receive event) {
         if (!isActive()) return;
         if (!antiExplosions.get()) return;
-        if (event.packet instanceof ExplosionS2CPacket) event.cancel();
+        if (event.packet instanceof ClientboundExplodePacket) event.cancel();
     }
 }

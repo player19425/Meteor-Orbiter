@@ -6,8 +6,8 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.network.packet.c2s.play.ChatMessageC2SPacket;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.network.protocol.game.ServerboundChatPacket;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -41,6 +41,11 @@ public class MessageFormatter extends Module {
         .name("append-timestamp").description("Append timestamp to messages.").defaultValue(false).build());
     private final Setting<Integer> repeatCount           = sgGeneral.add(new IntSetting.Builder()
         .name("repeat-count").description("Number of times to repeat the message.").defaultValue(1).min(1).max(10).sliderRange(1, 10).build());
+
+    private final Setting<String> prefix                 = sgGeneral.add(new StringSetting.Builder()
+        .name("prefix").description("Text prepended to every formatted message. Kept raw (no formatting). Can contain spaces, e.g. '/team chat ' to send the message into that command.").defaultValue("").build());
+    private final Setting<String> suffix                 = sgGeneral.add(new StringSetting.Builder()
+        .name("suffix").description("Text appended after every formatted message. Kept raw (no formatting).").defaultValue("").build());
 
     private final Setting<CodeOutputMode> codeOutputMode = sgCodes.add(new EnumSetting.Builder<CodeOutputMode>()
         .name("code-output-mode").description("Use § or & for color codes.").defaultValue(CodeOutputMode.Section).build());
@@ -241,7 +246,7 @@ public class MessageFormatter extends Module {
     private void onTick(TickEvent.Post event) {
         repeatTickClock++;
         if (pendingRepeats.isEmpty()) return;
-        ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+        ClientPacketListener handler = mc.getConnection();
         if (handler == null) { pendingRepeats.clear(); return; }
 
         List<PendingRepeat> ready = new ArrayList<>();
@@ -249,11 +254,9 @@ public class MessageFormatter extends Module {
             ready.add(pendingRepeats.poll());
         }
         for (PendingRepeat pr : ready) {
-            if (mc.getNetworkHandler() == null) { continue; }
-            String toSend = pr.message;
-
-            if (toSend.length() > 256) toSend = toSend.substring(0, 256);
-            handler.sendChatMessage(toSend);
+            if (mc.getConnection() == null) { continue; }
+            String toSend = truncateSafe(pr.message, 256);
+            handler.sendChat(toSend);
 
             if (pr.remaining > 1) {
                 pendingRepeats.add(new PendingRepeat(pr.message, pr.remaining - 1, pr.tickInterval, repeatTickClock + pr.tickInterval));
@@ -340,9 +343,9 @@ public class MessageFormatter extends Module {
     @EventHandler
     private void onPacketSend(PacketEvent.Send event) {
         if (isFormatting) return;
-        if (!(event.packet instanceof ChatMessageC2SPacket)) return;
-        ChatMessageC2SPacket packet = (ChatMessageC2SPacket) event.packet;
-        String original = packet.chatMessage();
+        if (!(event.packet instanceof ServerboundChatPacket)) return;
+        ServerboundChatPacket packet = (ServerboundChatPacket) event.packet;
+        String original = packet.message();
         if (original == null || original.isEmpty()) return;
 
         if (original.startsWith("/") && !formatSlashCommands.get()) return;
@@ -408,6 +411,10 @@ public class MessageFormatter extends Module {
             msg = applyCharInsertion(msg);
         }
 
+        if (!prefix.get().isEmpty()) {
+            msg = prefix.get() + msg;
+        }
+
         if (appendReset.get()) {
             msg += codePrefix() + "r";
         }
@@ -418,6 +425,10 @@ public class MessageFormatter extends Module {
 
         if (randomMessage.get()) {
             msg += " " + generateRandomSuffix();
+        }
+
+        if (!suffix.get().isEmpty()) {
+            msg += suffix.get();
         }
 
         return msg;
@@ -824,7 +835,7 @@ public class MessageFormatter extends Module {
     }
 
     private void sendChatMessage(String msg) {
-        ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+        ClientPacketListener handler = mc.getConnection();
         if (handler == null) return;
 
         int count = Math.max(1, repeatCount.get());
@@ -833,17 +844,39 @@ public class MessageFormatter extends Module {
 
         String first = msg;
         if (count > 1 && randomMessage.get()) first = msg + " [1]";
-        if (first.length() > 256) first = first.substring(0, 256);
-        handler.sendChatMessage(first);
+        handler.sendChat(truncateSafe(first, 256));
 
         if (count > 1) {
             for (int i = 1; i < count; i++) {
                 String toSend = msg;
                 if (randomMessage.get()) toSend = msg + " [" + (i + 1) + "]";
-                if (toSend.length() > 256) toSend = toSend.substring(0, 256);
-                pendingRepeats.add(new PendingRepeat(toSend, 1, tickInterval, repeatTickClock + tickInterval * i));
+                pendingRepeats.add(new PendingRepeat(truncateSafe(toSend, 256), 1, tickInterval, repeatTickClock + tickInterval * i));
             }
         }
+    }
+
+    private String truncateSafe(String msg, int max) {
+        if (msg == null || msg.length() <= max) return msg;
+
+        StringBuilder sb = new StringBuilder();
+        int count = 0;
+        for (int i = 0; i < msg.length() && count < max; i++) {
+            char c = msg.charAt(i);
+            sb.append(c);
+            count++;
+
+            if (c == '§' || c == '&') {
+                if (i + 1 < msg.length() && count < max) {
+                    sb.append(msg.charAt(i + 1));
+                    count++;
+                    i++;
+                } else {
+                    sb.setLength(sb.length() - 1);
+                    break;
+                }
+            }
+        }
+        return sb.toString();
     }
 
     public String getPreview(String input) {
@@ -941,7 +974,7 @@ public class MessageFormatter extends Module {
         String sub = parts[1].toLowerCase();
         switch (sub) {
             case "preview": {
-                String text = parts.length >= 3 ? parts[2] : "Hello World";
+                String text = parts.length >= 3 ? parts[2] : "Hello Level";
                 String formatted = formatMessage(text);
                 info("Preview: %s", formatted);
                 return true;
@@ -951,7 +984,7 @@ public class MessageFormatter extends Module {
                 return true;
             }
             case "steps": {
-                String text = parts.length >= 3 ? parts[2] : "Hello World";
+                String text = parts.length >= 3 ? parts[2] : "Hello Level";
                 String[] stepResults = getStepByStepPreview(text);
                 for (int i = 0; i < PIPELINE_ORDER.length; i++) {
                     info("  %d. %s: %s", i + 1, PIPELINE_ORDER[i], stepResults[i]);
@@ -999,6 +1032,8 @@ public class MessageFormatter extends Module {
         sb.append("appendTimestamp=").append(appendTimestamp.get()).append("\n");
         sb.append("randomMessage=").append(randomMessage.get()).append("\n");
         sb.append("repeatCount=").append(repeatCount.get()).append("\n");
+        sb.append("prefix=").append(prefix.get()).append("\n");
+        sb.append("suffix=").append(suffix.get()).append("\n");
         return sb.toString();
     }
 
@@ -1007,7 +1042,7 @@ public class MessageFormatter extends Module {
         if (fontPreset.get() != FontPreset.None) active.add("Font: " + fontPreset.get());
         if (leetSpeak.get()) active.add("Leet Speak");
         if (scrambleWords.get()) active.add("Scramble Words");
-        if (reverseText.get()) active.add("Reverse Text");
+        if (reverseText.get()) active.add("Reverse Component");
         if (morseCode.get()) active.add("Morse Code");
         if (baseColor.get().hasCode()) active.add("Base Color: " + baseColor.get());
         if (bold.get()) active.add("Bold");

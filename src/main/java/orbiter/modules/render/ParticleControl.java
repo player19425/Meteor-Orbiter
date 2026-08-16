@@ -3,7 +3,7 @@ package orbiter.modules.render;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.phys.Vec3;
 import orbiter.modules.CreativeSafetyModule;
 import orbiter.util.CommandUtils;
 
@@ -115,7 +115,7 @@ public final class ParticleControl extends CreativeSafetyModule {
     private static final double GOLDEN_FRACTION = 0.6180339887498949;
     private double phase;
     private double samplePhase;
-    private Vec3d fixedCenter;
+    private Vec3 fixedCenter;
     private int tickCounter;
 
     public ParticleControl() {
@@ -132,7 +132,7 @@ public final class ParticleControl extends CreativeSafetyModule {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.level == null || mc.player.connection == null) return;
         if (++tickCounter < delayTicks.get()) return;
         tickCounter = 0;
 
@@ -169,7 +169,7 @@ public final class ParticleControl extends CreativeSafetyModule {
         for (int n = 0; n < commands; n++) {
             double distributed = fractional((n + samplePhase) / commands);
             int index = Math.min(pointCount - 1, (int) Math.floor(distributed * pointCount));
-            Vec3d point = rotate(pointFor(shape.get(), index, pointCount, radius.get(), phase), ax, ay, az)
+            Vec3 point = rotate(pointFor(shape.get(), index, pointCount, radius.get(), phase), ax, ay, az)
                 .add(translateX.get(), translateY.get(), translateZ.get());
 
             String command;
@@ -178,7 +178,7 @@ public final class ParticleControl extends CreativeSafetyModule {
             } else {
                 command = relativeParticleCommand(target, point, spread, particleCount, mode, viewerSelector);
             }
-            mc.player.networkHandler.sendChatCommand(command);
+            mc.player.connection.sendCommand(command);
         }
     }
 
@@ -200,7 +200,7 @@ public final class ParticleControl extends CreativeSafetyModule {
         return null;
     }
 
-    private String relativeParticleCommand(String target, Vec3d point, double spread, int count, String mode, String viewers) {
+    private String relativeParticleCommand(String target, Vec3 point, double spread, int count, String mode, String viewers) {
         return CommandUtils.formatCommand(
             "execute at %s run particle %s ~%.3f ~%.3f ~%.3f %.3f %.3f %.3f 0 %d %s %s",
             target, particleStyle.get().id, point.x, point.y, point.z,
@@ -208,7 +208,7 @@ public final class ParticleControl extends CreativeSafetyModule {
         );
     }
 
-    private String absoluteParticleCommand(Vec3d point, double spread, int count, String mode, String viewers) {
+    private String absoluteParticleCommand(Vec3 point, double spread, int count, String mode, String viewers) {
         return CommandUtils.formatCommand(
             "particle %s %.3f %.3f %.3f %.3f %.3f %.3f 0 %d %s %s",
             particleStyle.get().id, point.x, point.y, point.z,
@@ -216,8 +216,8 @@ public final class ParticleControl extends CreativeSafetyModule {
         );
     }
 
-    private Vec3d playerPosition() {
-        return new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ());
+    private Vec3 playerPosition() {
+        return new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ());
     }
 
     private String safePlayerTarget(String value, boolean allowSelfSelector) {
@@ -276,7 +276,7 @@ public final class ParticleControl extends CreativeSafetyModule {
         };
     }
 
-    private Vec3d pointFor(Shape value, int index, int count, double r, double time) {
+    private Vec3 pointFor(Shape value, int index, int count, double r, double time) {
         double t = count <= 1 ? 0 : index / (double) count;
         return switch (value) {
             case Sphere -> {
@@ -284,33 +284,33 @@ public final class ParticleControl extends CreativeSafetyModule {
                 double y = 1.0 - 2.0 * ((index + 0.5) / count);
                 double radial = Math.sqrt(Math.max(0, 1.0 - y * y));
                 double a = golden * index;
-                yield new Vec3d(Math.cos(a) * radial * r, y * r, Math.sin(a) * radial * r);
+                yield new Vec3(Math.cos(a) * radial * r, y * r, Math.sin(a) * radial * r);
             }
-            case Ring -> new Vec3d(Math.cos(t * Math.PI * 2) * r, 0, Math.sin(t * Math.PI * 2) * r);
+            case Ring -> new Vec3(Math.cos(t * Math.PI * 2) * r, 0, Math.sin(t * Math.PI * 2) * r);
             case Torus -> {
                 double major = t * Math.PI * 2;
                 double minor = fractional(index * GOLDEN_FRACTION + time * 0.008) * Math.PI * 2;
                 double tube = r * 0.30;
-                yield new Vec3d((r + tube * Math.cos(minor)) * Math.cos(major), tube * Math.sin(minor),
+                yield new Vec3((r + tube * Math.cos(minor)) * Math.cos(major), tube * Math.sin(minor),
                     (r + tube * Math.cos(minor)) * Math.sin(major));
             }
             case Helix -> {
                 double a = t * Math.PI * 6 + time * 0.05;
-                yield new Vec3d(Math.cos(a) * r, (t - 0.5) * r * 2, Math.sin(a) * r);
+                yield new Vec3(Math.cos(a) * r, (t - 0.5) * r * 2, Math.sin(a) * r);
             }
             case DoubleHelix -> {
                 int strand = index & 1;
                 int strandCount = Math.max(1, count / 2);
                 double u = (index / 2.0) / strandCount;
                 double a = u * Math.PI * 6 + strand * Math.PI + time * 0.05;
-                yield new Vec3d(Math.cos(a) * r, (u - 0.5) * r * 2, Math.sin(a) * r);
+                yield new Vec3(Math.cos(a) * r, (u - 0.5) * r * 2, Math.sin(a) * r);
             }
             case Cone -> conePoint(index, count, r);
             case Cylinder -> cylinderPoint(index, count, r);
             case Spiral -> {
                 double a = t * Math.PI * 8 + time * 0.035;
                 double radial = r * (0.08 + 0.92 * t);
-                yield new Vec3d(Math.cos(a) * radial, (t - 0.5) * r * 0.35, Math.sin(a) * radial);
+                yield new Vec3(Math.cos(a) * radial, (t - 0.5) * r * 0.35, Math.sin(a) * radial);
             }
             case Galaxy -> galaxyPoint(index, count, r, time);
             case Heart -> heartPoint(t, r);
@@ -318,7 +318,7 @@ public final class ParticleControl extends CreativeSafetyModule {
             case Wave -> {
                 double x = (t * 2 - 1) * r;
                 double a = t * Math.PI * 4 + time * 0.06;
-                yield new Vec3d(x, Math.sin(a) * r * 0.45, Math.cos(a * 0.5) * r * 0.25);
+                yield new Vec3(x, Math.sin(a) * r * 0.45, Math.cos(a * 0.5) * r * 0.25);
             }
             case Atom -> atomPoint(index, count, r, time);
             case Cube -> cubePoint(index, count, r);
@@ -327,63 +327,63 @@ public final class ParticleControl extends CreativeSafetyModule {
         };
     }
 
-    private Vec3d conePoint(int index, int count, double r) {
+    private Vec3 conePoint(int index, int count, double r) {
         if (index % 4 == 0) {
             double a = (index / 4.0) / Math.max(1.0, count / 4.0) * Math.PI * 2;
-            return new Vec3d(Math.cos(a) * r, -r, Math.sin(a) * r);
+            return new Vec3(Math.cos(a) * r, -r, Math.sin(a) * r);
         }
         double t = index / (double) count;
         double a = t * Math.PI * 10;
         double radial = r * (1.0 - t);
-        return new Vec3d(Math.cos(a) * radial, -r + 2 * r * t, Math.sin(a) * radial);
+        return new Vec3(Math.cos(a) * radial, -r + 2 * r * t, Math.sin(a) * radial);
     }
 
-    private Vec3d cylinderPoint(int index, int count, double r) {
+    private Vec3 cylinderPoint(int index, int count, double r) {
         int lane = index % 3;
         double t = (index / 3.0) / Math.max(1.0, count / 3.0);
         double a = t * Math.PI * 6;
-        if (lane == 0) return new Vec3d(Math.cos(a) * r, -r, Math.sin(a) * r);
-        if (lane == 1) return new Vec3d(Math.cos(a) * r, r, Math.sin(a) * r);
-        return new Vec3d(Math.cos(a) * r, (fractional(t * 3) * 2 - 1) * r, Math.sin(a) * r);
+        if (lane == 0) return new Vec3(Math.cos(a) * r, -r, Math.sin(a) * r);
+        if (lane == 1) return new Vec3(Math.cos(a) * r, r, Math.sin(a) * r);
+        return new Vec3(Math.cos(a) * r, (fractional(t * 3) * 2 - 1) * r, Math.sin(a) * r);
     }
 
-    private Vec3d galaxyPoint(int index, int count, double r, double time) {
+    private Vec3 galaxyPoint(int index, int count, double r, double time) {
         int arms = 4;
         int arm = index % arms;
         double t = (index / (double) arms) / Math.max(1.0, count / (double) arms);
         double distance = r * Math.sqrt(Math.min(1.0, t));
         double a = arm * Math.PI * 2 / arms + t * Math.PI * 3 + time * 0.025;
-        return new Vec3d(Math.cos(a) * distance, Math.sin(t * Math.PI * 8) * r * 0.06, Math.sin(a) * distance);
+        return new Vec3(Math.cos(a) * distance, Math.sin(t * Math.PI * 8) * r * 0.06, Math.sin(a) * distance);
     }
 
-    private Vec3d heartPoint(double t, double r) {
+    private Vec3 heartPoint(double t, double r) {
         double a = t * Math.PI * 2;
         double x = 16 * Math.pow(Math.sin(a), 3);
         double y = 13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a);
-        return new Vec3d(x * r / 17.0, y * r / 17.0, 0);
+        return new Vec3(x * r / 17.0, y * r / 17.0, 0);
     }
 
-    private Vec3d starPoint(int index, int count, double r) {
+    private Vec3 starPoint(int index, int count, double r) {
         int vertices = 10;
         double progress = index / (double) count * vertices;
         int vertex = (int) Math.floor(progress) % vertices;
         double u = fractional(progress);
-        Vec3d a = starVertex(vertex, r);
-        Vec3d b = starVertex((vertex + 1) % vertices, r);
+        Vec3 a = starVertex(vertex, r);
+        Vec3 b = starVertex((vertex + 1) % vertices, r);
         return a.lerp(b, u);
     }
 
-    private Vec3d starVertex(int index, double r) {
+    private Vec3 starVertex(int index, double r) {
         double radial = (index & 1) == 0 ? r : r * 0.42;
         double a = -Math.PI / 2 + index * Math.PI / 5;
-        return new Vec3d(Math.cos(a) * radial, Math.sin(a) * radial, 0);
+        return new Vec3(Math.cos(a) * radial, Math.sin(a) * radial, 0);
     }
 
-    private Vec3d atomPoint(int index, int count, double r, double time) {
+    private Vec3 atomPoint(int index, int count, double r, double time) {
         int orbit = index % 3;
         double t = (index / 3.0) / Math.max(1.0, count / 3.0);
         double a = t * Math.PI * 2 + time * 0.025;
-        Vec3d ring = new Vec3d(Math.cos(a) * r, 0, Math.sin(a) * r);
+        Vec3 ring = new Vec3(Math.cos(a) * r, 0, Math.sin(a) * r);
         return switch (orbit) {
             case 0 -> rotate(ring, Math.toRadians(60), 0, 0);
             case 1 -> rotate(ring, Math.toRadians(-60), 0, Math.toRadians(60));
@@ -391,38 +391,38 @@ public final class ParticleControl extends CreativeSafetyModule {
         };
     }
 
-    private Vec3d cubePoint(int index, int count, double r) {
+    private Vec3 cubePoint(int index, int count, double r) {
         int edge = index % 12;
         double u = (index / 12.0) / Math.max(1.0, count / 12.0 - 1.0);
         u = fractional(u);
         double v = -r + 2 * r * u;
         return switch (edge) {
-            case 0 -> new Vec3d(v, -r, -r); case 1 -> new Vec3d(v, -r, r);
-            case 2 -> new Vec3d(v, r, -r); case 3 -> new Vec3d(v, r, r);
-            case 4 -> new Vec3d(-r, v, -r); case 5 -> new Vec3d(-r, v, r);
-            case 6 -> new Vec3d(r, v, -r); case 7 -> new Vec3d(r, v, r);
-            case 8 -> new Vec3d(-r, -r, v); case 9 -> new Vec3d(-r, r, v);
-            case 10 -> new Vec3d(r, -r, v); default -> new Vec3d(r, r, v);
+            case 0 -> new Vec3(v, -r, -r); case 1 -> new Vec3(v, -r, r);
+            case 2 -> new Vec3(v, r, -r); case 3 -> new Vec3(v, r, r);
+            case 4 -> new Vec3(-r, v, -r); case 5 -> new Vec3(-r, v, r);
+            case 6 -> new Vec3(r, v, -r); case 7 -> new Vec3(r, v, r);
+            case 8 -> new Vec3(-r, -r, v); case 9 -> new Vec3(-r, r, v);
+            case 10 -> new Vec3(r, -r, v); default -> new Vec3(r, r, v);
         };
     }
 
-    private Vec3d pyramidPoint(int index, int count, double r) {
-        Vec3d top = new Vec3d(0, r, 0);
-        Vec3d[] base = {new Vec3d(r, -r, r), new Vec3d(-r, -r, r), new Vec3d(-r, -r, -r), new Vec3d(r, -r, -r)};
+    private Vec3 pyramidPoint(int index, int count, double r) {
+        Vec3 top = new Vec3(0, r, 0);
+        Vec3[] base = {new Vec3(r, -r, r), new Vec3(-r, -r, r), new Vec3(-r, -r, -r), new Vec3(r, -r, -r)};
         int segment = index % 8;
-        Vec3d a = segment < 4 ? top : base[segment - 4];
-        Vec3d b = segment < 4 ? base[segment] : base[(segment - 3) % 4];
+        Vec3 a = segment < 4 ? top : base[segment - 4];
+        Vec3 b = segment < 4 ? base[segment] : base[(segment - 3) % 4];
         double u = (index / 8.0) / Math.max(1.0, count / 8.0);
         return a.lerp(b, fractional(u));
     }
 
-    private Vec3d diamondPoint(int index, int count, double r) {
-        Vec3d top = new Vec3d(0, r, 0);
-        Vec3d bottom = new Vec3d(0, -r, 0);
-        Vec3d[] ring = {new Vec3d(r, 0, 0), new Vec3d(0, 0, r), new Vec3d(-r, 0, 0), new Vec3d(0, 0, -r)};
+    private Vec3 diamondPoint(int index, int count, double r) {
+        Vec3 top = new Vec3(0, r, 0);
+        Vec3 bottom = new Vec3(0, -r, 0);
+        Vec3[] ring = {new Vec3(r, 0, 0), new Vec3(0, 0, r), new Vec3(-r, 0, 0), new Vec3(0, 0, -r)};
         int segment = index % 12;
-        Vec3d a;
-        Vec3d b;
+        Vec3 a;
+        Vec3 b;
         if (segment < 4) { a = top; b = ring[segment]; }
         else if (segment < 8) { a = bottom; b = ring[segment - 4]; }
         else { a = ring[segment - 8]; b = ring[(segment - 7) % 4]; }
@@ -430,7 +430,7 @@ public final class ParticleControl extends CreativeSafetyModule {
         return a.lerp(b, fractional(u));
     }
 
-    private Vec3d rotate(Vec3d p, double ax, double ay, double az) {
+    private Vec3 rotate(Vec3 p, double ax, double ay, double az) {
         double x1 = p.x;
         double y1 = p.y * Math.cos(ax) - p.z * Math.sin(ax);
         double z1 = p.y * Math.sin(ax) + p.z * Math.cos(ax);
@@ -438,7 +438,7 @@ public final class ParticleControl extends CreativeSafetyModule {
         double z2 = -x1 * Math.sin(ay) + z1 * Math.cos(ay);
         double x3 = x2 * Math.cos(az) - y1 * Math.sin(az);
         double y3 = x2 * Math.sin(az) + y1 * Math.cos(az);
-        return new Vec3d(x3, y3, z2);
+        return new Vec3(x3, y3, z2);
     }
 
     private double fractional(double value) {

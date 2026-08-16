@@ -4,11 +4,11 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.hit.HitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 import orbiter.Orbiter;
 import orbiter.util.ConfigModifier;
 
@@ -24,8 +24,16 @@ public class JumpA extends Module {
         .defaultValue(false).build());
 
     private final Setting<Double> velocityCap = sg.add(new DoubleSetting.Builder()
-        .name("velocity-cap").description("Maximum upward velocity to apply.")
+        .name("velocity-cap").description("Maximum upward velocity to apply (limits how high you can jump).")
         .defaultValue(2.0).min(0.42).max(4.0).sliderRange(0.42, 4.0).build());
+
+    private final Setting<Integer> maxScanHeight = sg.add(new IntSetting.Builder()
+        .name("max-scan-height").description("Scan upward this many blocks for a platform and jump to the highest non-air block found (0 = off).")
+        .defaultValue(32).min(0).max(256).sliderRange(0, 128).build());
+
+    private final Setting<Boolean> unlimitedHeight = sg.add(new BoolSetting.Builder()
+        .name("unlimited-height").description("Ignore the velocity cap and jump as high as the target requires (like Slime Jump).")
+        .defaultValue(false).build());
 
     private final Setting<Double> lookRange = sg.add(new DoubleSetting.Builder()
         .name("look-range").description("How far to raytrace for parkour target.")
@@ -41,20 +49,20 @@ public class JumpA extends Module {
     }
 
     @Override public void onActivate() {
-        if (!ConfigModifier.get().stupidModules.get()) { info("Stupid Modules disabled."); toggle(); }
+        if (!ConfigModifier.get().stupidModulesEnabled()) { info("Stupid Modules disabled."); toggle(); }
     }
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
-        if (!ConfigModifier.get().stupidModules.get()) { toggle(); return; }
+        if (mc.player == null || mc.level == null) return;
+        if (!ConfigModifier.get().stupidModulesEnabled()) { toggle(); return; }
 
-        if (!mc.options.jumpKey.isPressed()) return;
-        if (requireGrounded.get() && !mc.player.isOnGround()) return;
-        if (requireForwardInput.get() && !mc.player.input.hasForwardMovement()) return;
+        if (!mc.options.keyJump.isDown()) return;
+        if (requireGrounded.get() && !mc.player.onGround()) return;
+        if (requireForwardInput.get() && !mc.player.input.hasForwardImpulse()) return;
 
-        BlockPos feet = mc.player.getBlockPos();
-        if (isSolid(feet.up(1)) || isSolid(feet.up(2))) {
+        BlockPos feet = mc.player.blockPosition();
+        if (isSolid(feet.above(1)) || isSolid(feet.above(2))) {
             if (debugMode.get()) info("Ceiling too low.");
             return;
         }
@@ -77,17 +85,46 @@ public class JumpA extends Module {
             return;
         }
 
+        if (maxScanHeight.get() > 0) {
+            double platformHeight = scanPlatformHeight();
+            if (platformHeight > 0) {
+                double velocity = solveVelocity(platformHeight + 0.36, unlimitedHeight.get());
+                if (unlimitedHeight.get() || velocity <= velocityCap.get()) {
+                    applyVelocity(velocity);
+                    if (debugMode.get()) info("Platform jump: %.1f blocks, velocity %.3f", platformHeight, velocity);
+                    return;
+                }
+            }
+        }
+
         if (debugMode.get() && wallHeight <= 0 && parkourVelocity <= 0) {
             info("No target detected.");
         }
     }
 
+    private double scanPlatformHeight() {
+        if (mc.player == null || mc.level == null || maxScanHeight.get() <= 0) return 0;
+
+        BlockPos feet = mc.player.blockPosition();
+        int baseY = feet.getY();
+        int maxY = baseY + maxScanHeight.get();
+        BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+
+        for (int y = maxY; y > baseY; y--) {
+            m.set(feet.getX(), y, feet.getZ());
+            if (isSolid(m) && (y == maxY || !isSolid(m.above()))) {
+                return y - baseY + 1.0;
+            }
+        }
+        return 0;
+    }
+
     private double detectWall() {
-        double yaw = Math.toRadians(mc.player.getYaw());
+        double yaw = Math.toRadians(mc.player.getYRot());
         double fwdX = -Math.sin(yaw), fwdZ = Math.cos(yaw);
         double rightX = Math.cos(yaw), rightZ = Math.sin(yaw);
-        int baseY = mc.player.getBlockPos().getY();
-        BlockPos.Mutable m = new BlockPos.Mutable();
+        int baseY = mc.player.blockPosition().getY();
+        BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
 
         for (int dist = 1; dist <= 3; dist++) {
             for (double[] off : new double[][]{{0, 0}, {-0.3, 0}, {0.3, 0}}) {
@@ -96,14 +133,14 @@ public class JumpA extends Module {
 
                 for (int y = baseY; y <= baseY + 5; y++) {
                     m.set((int) Math.floor(sx), y, (int) Math.floor(sz));
-                    BlockState state = mc.world.getBlockState(m);
-                    if (state.isAir() || state.getCollisionShape(mc.world, m).isEmpty()) continue;
+                    BlockState state = mc.level.getBlockState(m);
+                    if (state.isAir() || state.getCollisionShape(mc.level, m).isEmpty()) continue;
 
                     int top = y;
                     while (top < baseY + 5) {
                         m.set((int) Math.floor(sx), top + 1, (int) Math.floor(sz));
-                        BlockState above = mc.world.getBlockState(m);
-                        if (above.isAir() || above.getCollisionShape(mc.world, m).isEmpty()) break;
+                        BlockState above = mc.level.getBlockState(m);
+                        if (above.isAir() || above.getCollisionShape(mc.level, m).isEmpty()) break;
                         top++;
                     }
                     return top - baseY + 1.0;
@@ -114,40 +151,40 @@ public class JumpA extends Module {
     }
 
     private double calcParkourJump() {
-        if (mc.player == null || mc.world == null) return 0;
+        if (mc.player == null || mc.level == null) return 0;
 
-        Vec3d eyePos = mc.player.getEyePos();
-        Vec3d look = mc.player.getRotationVec(1.0f);
+        Vec3 eyePos = mc.player.getEyePosition();
+        Vec3 look = mc.player.getViewVector(1.0f);
 
-        BlockHitResult result = mc.world.raycast(new net.minecraft.world.RaycastContext(
+        BlockHitResult result = mc.level.clip(new net.minecraft.world.level.ClipContext(
             eyePos,
-            eyePos.add(look.multiply(lookRange.get())),
-            net.minecraft.world.RaycastContext.ShapeType.COLLIDER,
-            net.minecraft.world.RaycastContext.FluidHandling.NONE,
+            eyePos.add(look.scale(lookRange.get())),
+            net.minecraft.world.level.ClipContext.Block.COLLIDER,
+            net.minecraft.world.level.ClipContext.Fluid.NONE,
             mc.player
         ));
 
         if (result.getType() != HitResult.Type.BLOCK) return 0;
-        if (result.isInsideBlock()) return 0;
+        if (result.isInside()) return 0;
 
         BlockPos target = result.getBlockPos();
         int targetY = target.getY();
 
-        if (targetY <= mc.player.getBlockPos().getY()) return 0;
+        if (targetY <= mc.player.blockPosition().getY()) return 0;
 
         double dx = target.getX() + 0.5 - mc.player.getX();
         double dz = target.getZ() + 0.5 - mc.player.getZ();
         double horizDist = Math.sqrt(dx * dx + dz * dz);
         if (horizDist < 0.5 || horizDist > 10) return 0;
 
-        BlockPos landing = target.up();
-        if (isSolid(landing) || isSolid(landing.up())) {
+        BlockPos landing = target.above();
+        if (isSolid(landing) || isSolid(landing.above())) {
 
             boolean foundLanding = false;
             for (BlockPos adj : new BlockPos[]{
                 landing.west(), landing.east(), landing.north(), landing.south()
             }) {
-                if (!isSolid(adj) && !isSolid(adj.up())) {
+                if (!isSolid(adj) && !isSolid(adj.above())) {
                     foundLanding = true;
                     break;
                 }
@@ -162,14 +199,18 @@ public class JumpA extends Module {
     }
 
     private boolean isSolid(BlockPos pos) {
-        BlockState state = mc.world.getBlockState(pos);
-        return !state.isAir() && !state.getCollisionShape(mc.world, pos).isEmpty();
+        BlockState state = mc.level.getBlockState(pos);
+        return !state.isAir() && !state.getCollisionShape(mc.level, pos).isEmpty();
     }
 
     private double solveVelocity(double targetHeight) {
-        double lo = 0.42, hi = 6.0;
+        return solveVelocity(targetHeight, false);
+    }
+
+    private double solveVelocity(double targetHeight, boolean unlimited) {
+        double lo = 0.42, hi = unlimited ? 64.0 : 6.0;
         if (simApex(hi) < targetHeight) return hi + 1;
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 25; i++) {
             double mid = (lo + hi) * 0.5;
             if (simApex(mid) >= targetHeight) hi = mid;
             else lo = mid;
@@ -179,7 +220,7 @@ public class JumpA extends Module {
 
     private double simApex(double v0) {
         double v = v0, rise = 0, max = 0;
-        for (int t = 0; t < 100 && v > -3.92; t++) {
+        for (int t = 0; t < 2000 && v > 0.001; t++) {
             rise += v;
             max = Math.max(max, rise);
             v = (v - 0.08) * 0.98;
@@ -188,7 +229,7 @@ public class JumpA extends Module {
     }
 
     private void applyVelocity(double velocity) {
-        Vec3d vel = mc.player.getVelocity();
-        mc.player.setVelocity(vel.x, velocity, vel.z);
+        Vec3 vel = mc.player.getDeltaMovement();
+        mc.player.setDeltaMovement(vel.x, velocity, vel.z);
     }
 }

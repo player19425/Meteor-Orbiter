@@ -11,28 +11,29 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.entity.effect.StatusEffects;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtElement;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.network.packet.s2c.play.*;
-import net.minecraft.text.Text;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.BundleContentsComponent;
-import net.minecraft.component.type.ChargedProjectilesComponent;
-import net.minecraft.component.type.ContainerComponent;
-import net.minecraft.component.type.LoreComponent;
-import net.minecraft.component.type.NbtComponent;
-import net.minecraft.component.type.AttributeModifiersComponent;
-import net.minecraft.component.type.WrittenBookContentComponent;
-import net.minecraft.entity.TypedEntityData;
-import net.minecraft.nbt.AbstractNbtNumber;
-import net.minecraft.entity.attribute.EntityAttributeModifier;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.network.protocol.game.*;
+import net.minecraft.network.chat.Component;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.component.BundleContents;
+import net.minecraft.world.item.component.ChargedProjectiles;
+import net.minecraft.world.item.component.ItemContainerContents;
+import net.minecraft.world.item.component.ItemLore;
+import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
+import net.minecraft.world.item.component.WrittenBookContent;
+import net.minecraft.world.item.component.TypedEntityData;
+import net.minecraft.nbt.NumericTag;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -189,7 +190,7 @@ public class ServerProtect extends Module {
 
     private final Setting<Integer> maxTextDepth = sgItems.add(new IntSetting.Builder()
         .name("max-text-depth")
-        .description("Maximum nesting depth of translated Text (with/extra siblings). "
+        .description("Maximum nesting depth of translated Component (with/extra siblings). "
             + "Nested translate bombs crash the client by expanding exponentially.")
         .defaultValue(32)
         .min(4)
@@ -656,18 +657,18 @@ public class ServerProtect extends Module {
     public void suppressDialogs() {
         dialogsSuppressedUntilMs = System.currentTimeMillis() + dialogSuppressMinutes.get() * 60_000L;
         if (mc.player != null) {
-            mc.player.sendMessage(Text.literal("\u00a7c[ServerProtect] Dialogs suppressed for "
-                + dialogSuppressMinutes.get() + " minutes or until disconnect."), false);
+            mc.player.sendSystemMessage(Component.literal("\u00a7c[ServerProtect] Dialogs suppressed for "
+                + dialogSuppressMinutes.get() + " minutes or until disconnect."));
         }
     }
 
-    public boolean shouldBlockDialog(net.minecraft.dialog.type.Dialog dialog) {
+    public boolean shouldBlockDialog(net.minecraft.server.dialog.Dialog dialog) {
         if (!shouldGuardDialogs() || dialog == null) return false;
         if (areDialogsSuppressed()) return true;
 
-        net.minecraft.dialog.DialogCommonData common = dialog.common();
+        net.minecraft.server.dialog.CommonDialogData common = dialog.common();
         if (common == null) return true;
-        Text title = common.title();
+        Component title = common.title();
         if (title != null && (isAbusiveText(title) || title.getString().length() > maxDialogTitleChars.get())) return true;
         if (common.body() == null || common.inputs() == null) return true;
         if (common.body().size() > maxDialogBodyElements.get() || common.inputs().size() > maxDialogInputs.get()) return true;
@@ -677,30 +678,30 @@ public class ServerProtect extends Module {
         return blockUnclosableDialogs.get() && !common.canCloseWithEscape() && !hasDialogExit(dialog);
     }
 
-    private int countDialogActions(net.minecraft.dialog.type.Dialog dialog) {
-        if (dialog instanceof net.minecraft.dialog.type.SimpleDialog simple) return simple.getButtons().size();
-        if (dialog instanceof net.minecraft.dialog.type.MultiActionDialog multi) {
+    private int countDialogActions(net.minecraft.server.dialog.Dialog dialog) {
+        if (dialog instanceof net.minecraft.server.dialog.SimpleDialog simple) return simple.mainActions().size();
+        if (dialog instanceof net.minecraft.server.dialog.MultiActionDialog multi) {
             return multi.actions().size() + (multi.exitAction().isPresent() ? 1 : 0);
         }
-        if (dialog instanceof net.minecraft.dialog.type.DialogListDialog list) {
+        if (dialog instanceof net.minecraft.server.dialog.DialogListDialog list) {
             return list.dialogs().size() + (list.exitAction().isPresent() ? 1 : 0);
         }
-        if (dialog instanceof net.minecraft.dialog.type.ServerLinksDialog links) {
+        if (dialog instanceof net.minecraft.server.dialog.ServerLinksDialog links) {
             return links.exitAction().isPresent() ? 1 : 0;
         }
         return 0;
     }
 
-    private boolean hasDialogExit(net.minecraft.dialog.type.Dialog dialog) {
-        if (dialog.getCancelAction().isPresent()) return true;
-        if (dialog instanceof net.minecraft.dialog.type.SimpleDialog simple) return !simple.getButtons().isEmpty();
-        if (dialog instanceof net.minecraft.dialog.type.MultiActionDialog multi) {
+    private boolean hasDialogExit(net.minecraft.server.dialog.Dialog dialog) {
+        if (dialog.onCancel().isPresent()) return true;
+        if (dialog instanceof net.minecraft.server.dialog.SimpleDialog simple) return !simple.mainActions().isEmpty();
+        if (dialog instanceof net.minecraft.server.dialog.MultiActionDialog multi) {
             return !multi.actions().isEmpty() || multi.exitAction().isPresent();
         }
-        if (dialog instanceof net.minecraft.dialog.type.DialogListDialog list) {
+        if (dialog instanceof net.minecraft.server.dialog.DialogListDialog list) {
             return list.dialogs().size() > 0 || list.exitAction().isPresent();
         }
-        return dialog instanceof net.minecraft.dialog.type.ServerLinksDialog links && links.exitAction().isPresent();
+        return dialog instanceof net.minecraft.server.dialog.ServerLinksDialog links && links.exitAction().isPresent();
     }
 
     @EventHandler
@@ -708,7 +709,7 @@ public class ServerProtect extends Module {
         if (!chatLengthLimit.get()) return;
         if (event.message.length() > 255) {
             if (mc.player != null) {
-                mc.player.sendMessage(Text.literal("\u00a7c[ServerProtect] Message too long (" + event.message.length() + " chars, max 255)."), false);
+                mc.player.sendSystemMessage(Component.literal("\u00a7c[ServerProtect] Message too long (" + event.message.length() + " chars, max 255)."));
             }
             event.setCancelled(true);
         }
@@ -716,26 +717,26 @@ public class ServerProtect extends Module {
 
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
-        if (checkExplosion.get() && event.packet instanceof ExplosionS2CPacket pkt) {
+        if (checkExplosion.get() && event.packet instanceof ClientboundExplodePacket pkt) {
             if (!isValidExplosion(pkt)) { event.cancel(); return; }
         }
 
-        if (checkParticle.get() && event.packet instanceof ParticleS2CPacket pkt) {
+        if (checkParticle.get() && event.packet instanceof ClientboundLevelParticlesPacket pkt) {
             if (!isValidParticle(pkt)) { event.cancel(); return; }
         }
 
-        if (checkPosition.get() && event.packet instanceof PlayerPositionLookS2CPacket pkt) {
+        if (checkPosition.get() && event.packet instanceof ClientboundPlayerPositionPacket pkt) {
             if (!isValidPosition(pkt)) { event.cancel(); return; }
         }
 
-        if (soundLimit.get() && event.packet instanceof PlaySoundS2CPacket) {
+        if (soundLimit.get() && event.packet instanceof ClientboundSoundPacket) {
             soundCountThisTick++;
             if (soundCountThisTick > maxSoundsPerTick.get()) { event.cancel(); return; }
         }
 
-        if (bossbarLimit.get() && event.packet instanceof BossBarS2CPacket) {
+        if (bossbarLimit.get() && event.packet instanceof ClientboundBossEventPacket) {
             bossBarCount++;
             if (bossBarCount > maxBossBars.get()) {
                 event.cancel();
@@ -744,7 +745,7 @@ public class ServerProtect extends Module {
         }
 
         if (titleLimit.get()) {
-            if (event.packet instanceof TitleS2CPacket || event.packet instanceof SubtitleS2CPacket) {
+            if (event.packet instanceof ClientboundSetTitleTextPacket || event.packet instanceof ClientboundSetSubtitleTextPacket) {
                 long now = System.currentTimeMillis();
                 if (now - lastTitleResetTime >= 1000) {
                     titleCountThisSecond = 0;
@@ -755,13 +756,13 @@ public class ServerProtect extends Module {
             }
         }
 
-        if (hideScoreboard.get() && event.packet instanceof net.minecraft.network.packet.s2c.play.ScoreboardDisplayS2CPacket) {
+        if (hideScoreboard.get() && event.packet instanceof net.minecraft.network.protocol.game.ClientboundSetDisplayObjectivePacket) {
             event.cancel();
             return;
         }
 
         if (blockLargeChat.get()) {
-            if (event.packet instanceof GameMessageS2CPacket || event.packet instanceof ProfilelessChatMessageS2CPacket) {
+            if (event.packet instanceof ClientboundSystemChatPacket || event.packet instanceof ClientboundPlayerChatPacket) {
                 chatCountThisTick++;
                 if (chatCountThisTick > maxChatsPerTick.get()) {
                     notifyProtection("Chat rate limit triggered.");
@@ -770,7 +771,7 @@ public class ServerProtect extends Module {
                 }
             }
 
-            if (event.packet instanceof net.minecraft.network.packet.s2c.play.GameMessageS2CPacket pkt) {
+            if (event.packet instanceof net.minecraft.network.protocol.game.ClientboundSystemChatPacket pkt) {
                 String raw = pkt.content().getString();
                 if (raw.length() > maxIncomingChatLength.get()) {
                     event.cancel(); return;
@@ -779,7 +780,7 @@ public class ServerProtect extends Module {
                     event.cancel(); return;
                 }
             }
-            if (event.packet instanceof net.minecraft.network.packet.s2c.play.ProfilelessChatMessageS2CPacket pkt) {
+            if (event.packet instanceof net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket pkt) {
                 String raw = pkt.message().getString();
                 if (raw.length() > maxIncomingChatLength.get()) {
                     event.cancel(); return;
@@ -789,17 +790,17 @@ public class ServerProtect extends Module {
                 }
             }
 
-            if (event.packet instanceof net.minecraft.network.packet.s2c.play.ChatMessageS2CPacket pkt) {
-                net.minecraft.text.Text unsigned = pkt.unsignedContent();
+            if (event.packet instanceof net.minecraft.network.protocol.game.ClientboundPlayerChatPacket pkt) {
+                net.minecraft.network.chat.Component unsigned = pkt.unsignedContent();
                 if (unsigned != null && isAbusiveText(unsigned)) {
                     event.cancel(); return;
                 }
             }
         }
 
-        if (invalidSlotProtect.get() && event.packet instanceof ScreenHandlerSlotUpdateS2CPacket pkt) {
+        if (invalidSlotProtect.get() && event.packet instanceof ClientboundContainerSetSlotPacket pkt) {
             int slot = pkt.getSlot();
-            int syncId = pkt.getSyncId();
+            int syncId = pkt.getContainerId();
 
             if (syncId < -1 || syncId > 255 || slot < -1 || slot > 45) {
                 event.cancel();
@@ -807,29 +808,29 @@ public class ServerProtect extends Module {
             }
         }
 
-        if (shouldPacketItemGuard() && event.packet instanceof ScreenHandlerSlotUpdateS2CPacket pkt) {
-            ItemStack stack = pkt.getStack();
+        if (shouldPacketItemGuard() && event.packet instanceof ClientboundContainerSetSlotPacket pkt) {
+            ItemStack stack = pkt.getItem();
             if (stack != null && !stack.isEmpty() && isMaliciousItem(stack)) {
 
                 notifyBlocked("safe local view for slot " + pkt.getSlot());
             }
         }
 
-        if (shouldPacketItemGuard() && event.packet instanceof InventoryS2CPacket pkt) {
+        if (shouldPacketItemGuard() && event.packet instanceof ClientboundContainerSetContentPacket pkt) {
             int hidden = 0;
-            List<ItemStack> contents = pkt.contents();
+            List<ItemStack> contents = pkt.items();
             if (contents != null) {
                 for (ItemStack stack : contents) {
                     if (stack != null && !stack.isEmpty() && isMaliciousItem(stack)) hidden++;
                 }
             }
-            ItemStack cursor = pkt.cursorStack();
+            ItemStack cursor = pkt.carriedItem();
             if (cursor != null && !cursor.isEmpty() && isMaliciousItem(cursor)) hidden++;
             if (hidden > 0) notifyBlocked(hidden + " safe local item views in inventory sync");
         }
 
-        if (event.packet instanceof EntitySpawnS2CPacket pkt) {
-            EntityType<?> type = pkt.getEntityType();
+        if (event.packet instanceof ClientboundAddEntityPacket pkt) {
+            EntityType<?> type = pkt.getType();
             entitySpawnsThisTick++;
 
             if (entitySpawnsThisTick > 100) {
@@ -837,7 +838,7 @@ public class ServerProtect extends Module {
                 return;
             }
 
-            if (type == EntityType.AREA_EFFECT_CLOUD) {
+            if (type == EntityTypes.AREA_EFFECT_CLOUD) {
                 event.cancel();
                 return;
             }
@@ -848,57 +849,57 @@ public class ServerProtect extends Module {
             }
 
             if (entityLimit.get()) {
-                if (limitTnt.get() && type == EntityType.TNT) {
-                    int current = entityTypeCounts.getOrDefault(EntityType.TNT, 0);
+                if (limitTnt.get() && type == EntityTypes.TNT) {
+                    int current = entityTypeCounts.getOrDefault(EntityTypes.TNT, 0);
                     if (current >= maxTnt.get()) { event.cancel(); return; }
                 }
             }
         }
 
-        if (floorItemLimit.get() && event.packet instanceof EntitySpawnS2CPacket pkt) {
-            if (pkt.getEntityType() == EntityType.ITEM) {
+        if (floorItemLimit.get() && event.packet instanceof ClientboundAddEntityPacket pkt) {
+            if (pkt.getType() == EntityTypes.ITEM) {
                 if (itemEntityCount >= maxFloorItems.get()) { event.cancel(); return; }
             }
         }
 
-        if (guardCommandTree.get() && event.packet instanceof CommandTreeS2CPacket pkt) {
+        if (guardCommandTree.get() && event.packet instanceof ClientboundCommandsPacket pkt) {
 
             ServerProtectCommandTreeAccessor acc = (ServerProtectCommandTreeAccessor) pkt;
-            if (acc.orbiter$getNodes() != null && acc.orbiter$getNodes().size() > maxCommandNodes.get()) {
-                notifyBlocked("oversized command tree (" + acc.orbiter$getNodes().size() + " nodes)");
+            if (acc.orbiter$getEntries() != null && acc.orbiter$getEntries().size() > maxCommandNodes.get()) {
+                notifyBlocked("oversized command tree (" + acc.orbiter$getEntries().size() + " nodes)");
                 event.cancel();
                 return;
             }
         }
 
-        if (guardAttributes.get() && event.packet instanceof EntityAttributesS2CPacket pkt) {
-            if (hasExtremeAttributes(pkt.getEntries())) {
+        if (guardAttributes.get() && event.packet instanceof ClientboundUpdateAttributesPacket pkt) {
+            if (hasExtremeAttributes(pkt.getValues())) {
                 event.cancel();
                 return;
             }
         }
 
-        if (guardTeams.get() && event.packet instanceof TeamS2CPacket pkt) {
-            if (pkt.getTeam().isPresent()) {
-                TeamS2CPacket.SerializableTeam team = pkt.getTeam().get();
-                if (isAbusiveText(team.getDisplayName())
-                    || isAbusiveText(team.getPrefix())
-                    || isAbusiveText(team.getSuffix())) {
+        if (guardTeams.get() && event.packet instanceof ClientboundSetPlayerTeamPacket pkt) {
+            if (pkt.getParameters().isPresent()) {
+                ClientboundSetPlayerTeamPacket.Parameters team = pkt.getParameters().get();
+                if (isAbusiveText(team.displayName())
+                    || isAbusiveText(team.playerPrefix())
+                    || isAbusiveText(team.playerSuffix())) {
                     event.cancel();
                     return;
                 }
             }
         }
 
-        if (guardTeams.get() && event.packet instanceof ScoreboardObjectiveUpdateS2CPacket pkt) {
-            if (pkt.getMode() != ScoreboardObjectiveUpdateS2CPacket.REMOVE_MODE
+        if (guardTeams.get() && event.packet instanceof ClientboundSetObjectivePacket pkt) {
+            if (pkt.getMethod() != ClientboundSetObjectivePacket.METHOD_REMOVE
                 && isAbusiveText(pkt.getDisplayName())) {
                 event.cancel();
                 return;
             }
         }
 
-        if (guardMaps.get() && event.packet instanceof MapUpdateS2CPacket pkt) {
+        if (guardMaps.get() && event.packet instanceof ClientboundMapItemDataPacket pkt) {
             if (pkt.decorations().isPresent()) {
                 int icons = pkt.decorations().get().size();
                 if (icons > maxMapIcons.get()) {
@@ -906,7 +907,7 @@ public class ServerProtect extends Module {
                     return;
                 }
             }
-            if (pkt.updateData().isPresent()) {
+            if (pkt.colorPatch().isPresent()) {
                 mapUpdateCountThisTick++;
                 if (mapUpdateCountThisTick > maxMapUpdatesPerTick.get()) {
                     event.cancel();
@@ -915,10 +916,10 @@ public class ServerProtect extends Module {
             }
         }
 
-        if (guardSigns.get() && event.packet instanceof BlockEntityUpdateS2CPacket pkt) {
-            if (pkt.getBlockEntityType() == net.minecraft.block.entity.BlockEntityType.SIGN
-                || pkt.getBlockEntityType() == net.minecraft.block.entity.BlockEntityType.HANGING_SIGN) {
-                NbtCompound nbt = pkt.getNbt();
+        if (guardSigns.get() && event.packet instanceof ClientboundBlockEntityDataPacket pkt) {
+            if (pkt.getType() == net.minecraft.world.level.block.entity.BlockEntityTypes.SIGN
+                || pkt.getType() == net.minecraft.world.level.block.entity.BlockEntityTypes.HANGING_SIGN) {
+                CompoundTag nbt = pkt.getTag();
                 if (nbt != null && (hasMaliciousSignText(nbt, "front_text") || hasMaliciousSignText(nbt, "back_text"))) {
                     event.cancel();
                     return;
@@ -926,29 +927,29 @@ public class ServerProtect extends Module {
             }
         }
 
-        if (guardScreenTitles.get() && event.packet instanceof OpenScreenS2CPacket pkt) {
-            if (isAbusiveText(pkt.getName())) {
+        if (guardScreenTitles.get() && event.packet instanceof ClientboundOpenScreenPacket pkt) {
+            if (isAbusiveText(pkt.getTitle())) {
                 event.cancel();
                 return;
             }
         }
 
-        if (guardScreenTitles.get() && event.packet instanceof SetTradeOffersS2CPacket pkt) {
-            net.minecraft.village.TradeOfferList offers = pkt.getOffers();
+        if (guardScreenTitles.get() && event.packet instanceof ClientboundMerchantOffersPacket pkt) {
+            net.minecraft.world.item.trading.MerchantOffers offers = pkt.getOffers();
             if (offers != null) {
-                for (net.minecraft.village.TradeOffer offer : offers) {
+                for (net.minecraft.world.item.trading.MerchantOffer offer : offers) {
 
-                    if (isMaliciousItem(offer.getSellItem())) {
+                    if (isMaliciousItem(offer.getResult())) {
                         event.cancel();
                         return;
                     }
-                    net.minecraft.village.TradedItem first = offer.getFirstBuyItem();
-                    if (first != null && isMaliciousItem(first.itemStack())) {
+                    net.minecraft.world.item.ItemStack first = offer.getCostA();
+                    if (first != null && !first.isEmpty() && isMaliciousItem(first)) {
                         event.cancel();
                         return;
                     }
-                    java.util.Optional<net.minecraft.village.TradedItem> second = offer.getSecondBuyItem();
-                    if (second != null && second.isPresent() && isMaliciousItem(second.get().itemStack())) {
+                    net.minecraft.world.item.ItemStack second = offer.getCostB();
+                    if (second != null && !second.isEmpty() && isMaliciousItem(second)) {
                         event.cancel();
                         return;
                     }
@@ -956,8 +957,8 @@ public class ServerProtect extends Module {
             }
         }
 
-        if (guardPlayerList.get() && event.packet instanceof PlayerListS2CPacket pkt) {
-            for (PlayerListS2CPacket.Entry entry : pkt.getEntries()) {
+        if (guardPlayerList.get() && event.packet instanceof ClientboundPlayerInfoUpdatePacket pkt) {
+            for (ClientboundPlayerInfoUpdatePacket.Entry entry : pkt.entries()) {
                 if (entry.displayName() != null && isAbusiveText(entry.displayName())) {
 
                     event.cancel();
@@ -966,10 +967,10 @@ public class ServerProtect extends Module {
             }
         }
 
-        if (event.packet instanceof EntityTrackerUpdateS2CPacket pkt) {
-            for (net.minecraft.entity.data.DataTracker.SerializedEntry<?> entry : pkt.trackedValues()) {
+        if (event.packet instanceof ClientboundSetEntityDataPacket pkt) {
+            for (net.minecraft.network.syncher.SynchedEntityData.DataValue<?> entry : pkt.packedItems()) {
                 Object val = entry.value();
-                if (val instanceof Text text && isAbusiveText(text)) {
+                if (val instanceof Component text && isAbusiveText(text)) {
                     event.cancel();
                     return;
                 }
@@ -995,9 +996,9 @@ public class ServerProtect extends Module {
             }
         }
 
-        if (event.packet instanceof net.minecraft.network.packet.s2c.play.EntityStatusEffectS2CPacket pkt) {
-            net.minecraft.registry.entry.RegistryEntry<net.minecraft.entity.effect.StatusEffect> effect = pkt.getEffectId();
-            if (effect == StatusEffects.MINING_FATIGUE || effect == StatusEffects.DARKNESS) {
+        if (event.packet instanceof net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket pkt) {
+            net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect> effect = pkt.getEffect();
+            if (effect == MobEffects.MINING_FATIGUE || effect == MobEffects.DARKNESS) {
                 event.cancel();
                 return;
             }
@@ -1006,7 +1007,7 @@ public class ServerProtect extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         soundCountThisTick = 0;
         chatCountThisTick = 0;
@@ -1014,14 +1015,14 @@ public class ServerProtect extends Module {
         mapUpdateCountThisTick = 0;
         entitySpawnsThisTick = 0;
 
-        if (blockedCountThisTick > 0 && mc.world.getTime() != lastBlockedTick) {
+        if (blockedCountThisTick > 0 && mc.level.getGameTime() != lastBlockedTick) {
             notifyProtection("Applied " + blockedCountThisTick + " safe local item views.");
             blockedCountThisTick = 0;
         }
-        lastBlockedTick = mc.world.getTime();
+        lastBlockedTick = mc.level.getGameTime();
 
         List<Entity> allEntities = new ArrayList<>();
-        for (Entity e : mc.world.getEntities()) allEntities.add(e);
+        for (Entity e : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) allEntities.add(e);
         cachedEntities = allEntities;
 
         itemEntityCount = 0;
@@ -1029,7 +1030,7 @@ public class ServerProtect extends Module {
         Map<EntityType<?>, List<Entity>> perType = new HashMap<>();
 
         for (Entity entity : allEntities) {
-            if (entity instanceof PlayerEntity) continue;
+            if (entity instanceof Player) continue;
             if (entity instanceof ItemEntity) itemEntityCount++;
 
             EntityType<?> type = entity.getType();
@@ -1046,7 +1047,7 @@ public class ServerProtect extends Module {
         List<Entity> invalid = new ArrayList<>();
         List<Entity> nonPlayers = new ArrayList<>();
         for (Entity entity : allEntities) {
-            if (entity instanceof PlayerEntity) continue;
+            if (entity instanceof Player) continue;
             nonPlayers.add(entity);
             if (!isValidClientEntity(entity)) invalid.add(entity);
         }
@@ -1057,14 +1058,14 @@ public class ServerProtect extends Module {
             Collections.shuffle(nonPlayers);
             for (Entity entity : nonPlayers) {
                 if (totalExcess <= 0) break;
-                if (invalid.contains(entity) || entity instanceof PlayerEntity) continue;
+                if (invalid.contains(entity) || entity instanceof Player) continue;
                 entity.discard();
                 totalExcess--;
             }
             notifyProtection("Local entity limit triggered.");
         }
         if (limitTnt.get()) {
-            List<Entity> tntList = perType.getOrDefault(EntityType.TNT, List.of());
+            List<Entity> tntList = perType.getOrDefault(EntityTypes.TNT, List.of());
             int excess = tntList.size() - maxTnt.get();
             if (excess > 0) {
                 Collections.shuffle(tntList);
@@ -1085,19 +1086,19 @@ public class ServerProtect extends Module {
     private boolean isValidClientEntity(Entity entity) {
         if (entity == null) return false;
         if (!isFinite(entity.getX()) || !isFinite(entity.getY()) || !isFinite(entity.getZ())) return false;
-        if (!isFinite(entity.getYaw()) || !isFinite(entity.getPitch())) return false;
-        net.minecraft.util.math.Vec3d velocity = entity.getVelocity();
+        if (!isFinite(entity.getYRot()) || !isFinite(entity.getXRot())) return false;
+        net.minecraft.world.phys.Vec3 velocity = entity.getDeltaMovement();
         if (velocity == null || !isFinite(velocity.x) || !isFinite(velocity.y) || !isFinite(velocity.z)) return false;
-        net.minecraft.util.math.Box box = entity.getBoundingBox();
+        net.minecraft.world.phys.AABB box = entity.getBoundingBox();
         if (box == null) return false;
         double max = maxEntityBoundingSize.get();
-        return isFinite(box.getLengthX()) && isFinite(box.getLengthY()) && isFinite(box.getLengthZ())
-            && box.getLengthX() >= 0 && box.getLengthY() >= 0 && box.getLengthZ() >= 0
-            && box.getLengthX() <= max && box.getLengthY() <= max && box.getLengthZ() <= max;
+        return isFinite(box.getXsize()) && isFinite(box.getYsize()) && isFinite(box.getZsize())
+            && box.getXsize() >= 0 && box.getYsize() >= 0 && box.getZsize() >= 0
+            && box.getXsize() <= max && box.getYsize() <= max && box.getZsize() <= max;
     }
 
     private void tickHealthCheckers(int totalEntities) {
-        lowFpsTicks = updateSustainedCounter(fpsChecker.get() && mc.getCurrentFps() < minFps.get(), lowFpsTicks);
+        lowFpsTicks = updateSustainedCounter(fpsChecker.get() && mc.getFps() < minFps.get(), lowFpsTicks);
         float tps = TickRate.INSTANCE.getTickRate();
         lowTpsTicks = updateSustainedCounter(tpsChecker.get() && tps > 0 && tps < minTps.get(), lowTpsTicks);
         highEntityTicks = updateSustainedCounter(totalEntityChecker.get() && totalEntities > entityCheckerThreshold.get(), highEntityTicks);
@@ -1108,20 +1109,20 @@ public class ServerProtect extends Module {
         else if (highEntityTicks >= checkerSustainTicks.get()) reason = "Entity count remained above " + entityCheckerThreshold.get();
         if (reason == null) return;
 
-        long tick = mc.world.getTime();
+        long tick = mc.level.getGameTime();
         if (tick - lastCheckerActionTick < checkerCooldownTicks.get()) return;
         lastCheckerActionTick = tick;
         notifyProtection(reason + ".");
 
-        if (checkerRunCommand.get() && mc.player != null && mc.player.networkHandler != null) {
+        if (checkerRunCommand.get() && mc.player != null && mc.player.connection != null) {
             String commandValue = checkerCommand.get().trim();
             if (!commandValue.isEmpty()) {
                 if (commandValue.startsWith("/")) commandValue = commandValue.substring(1);
-                mc.player.networkHandler.sendChatCommand(commandValue);
+                mc.player.connection.sendCommand(commandValue);
             }
         }
-        if (checkerDisconnect.get() && mc.getNetworkHandler() != null) {
-            mc.getNetworkHandler().getConnection().disconnect(Text.literal("ServerProtect: " + reason));
+        if (checkerDisconnect.get() && mc.getConnection() != null) {
+            mc.getConnection().getConnection().disconnect(Component.literal("ServerProtect: " + reason));
         }
     }
 
@@ -1130,46 +1131,46 @@ public class ServerProtect extends Module {
     }
 
     private void notifyProtection(String message) {
-        if (!notifications.get() || mc.player == null || mc.world == null) return;
-        long tick = mc.world.getTime();
+        if (!notifications.get() || mc.player == null || mc.level == null) return;
+        long tick = mc.level.getGameTime();
         if (tick - lastNotificationTick < notificationCooldownTicks.get()) return;
         lastNotificationTick = tick;
-        mc.player.sendMessage(Text.literal("\u00a7c[ServerProtect] \u00a77" + message), false);
+        mc.player.sendSystemMessage(Component.literal("\u00a7c[ServerProtect] \u00a77" + message));
     }
 
-    private boolean isValidExplosion(ExplosionS2CPacket pkt) {
+    private boolean isValidExplosion(ClientboundExplodePacket pkt) {
         double max = maxWorldPos.get();
         double kb = maxKnockback.get();
-        net.minecraft.util.math.Vec3d center = pkt.center();
+        net.minecraft.world.phys.Vec3 center = pkt.center();
         if (!isFinite(center.x) || !isFinite(center.y) || !isFinite(center.z)) return false;
         if (Math.abs(center.x) > max || Math.abs(center.y) > max || Math.abs(center.z) > max) return false;
         if (pkt.playerKnockback().isPresent()) {
-            net.minecraft.util.math.Vec3d knock = pkt.playerKnockback().get();
+            net.minecraft.world.phys.Vec3 knock = pkt.playerKnockback().get();
             if (!isFinite(knock.x) || !isFinite(knock.y) || !isFinite(knock.z)) return false;
             if (Math.abs(knock.x) > kb || Math.abs(knock.y) > kb || Math.abs(knock.z) > kb) return false;
         }
         return true;
     }
 
-    private boolean isValidParticle(ParticleS2CPacket pkt) {
+    private boolean isValidParticle(ClientboundLevelParticlesPacket pkt) {
         if (pkt.getCount() < 0 || pkt.getCount() > maxParticleCount.get()) return false;
         double max = maxWorldPos.get();
         if (!isFinite(pkt.getX()) || !isFinite(pkt.getY()) || !isFinite(pkt.getZ())) return false;
         if (Math.abs(pkt.getX()) > max || Math.abs(pkt.getY()) > max || Math.abs(pkt.getZ()) > max) return false;
         double speed = maxParticleSpeed.get();
-        return isFinite(pkt.getOffsetX()) && isFinite(pkt.getOffsetY()) && isFinite(pkt.getOffsetZ()) && isFinite(pkt.getSpeed())
-            && Math.abs(pkt.getOffsetX()) <= speed && Math.abs(pkt.getOffsetY()) <= speed
-            && Math.abs(pkt.getOffsetZ()) <= speed && Math.abs(pkt.getSpeed()) <= speed;
+        return isFinite(pkt.getXDist()) && isFinite(pkt.getYDist()) && isFinite(pkt.getZDist()) && isFinite(pkt.getMaxSpeed())
+            && Math.abs(pkt.getXDist()) <= speed && Math.abs(pkt.getYDist()) <= speed
+            && Math.abs(pkt.getZDist()) <= speed && Math.abs(pkt.getMaxSpeed()) <= speed;
     }
 
-    private boolean isValidPosition(PlayerPositionLookS2CPacket pkt) {
+    private boolean isValidPosition(ClientboundPlayerPositionPacket pkt) {
         double max = maxWorldPos.get();
         double rot = maxRotation.get();
-        net.minecraft.util.math.Vec3d pos = pkt.change().position();
+        net.minecraft.world.phys.Vec3 pos = pkt.change().position();
         if (!isFinite(pos.x) || !isFinite(pos.y) || !isFinite(pos.z)) return false;
         if (Math.abs(pos.x) > max || Math.abs(pos.y) > max || Math.abs(pos.z) > max) return false;
-        float yaw = pkt.change().yaw();
-        float pitch = pkt.change().pitch();
+        float yaw = pkt.change().yRot();
+        float pitch = pkt.change().xRot();
         if (!isFinite(yaw) || !isFinite(pitch)) return false;
         if (Math.abs(yaw) > rot || Math.abs(pitch) > rot) return false;
         return true;
@@ -1183,20 +1184,20 @@ public class ServerProtect extends Module {
         return !Float.isNaN(v) && !Float.isInfinite(v);
     }
 
-    private boolean isValidCommandTree(CommandTreeS2CPacket pkt) {
+    private boolean isValidCommandTree(ClientboundCommandsPacket pkt) {
 
         return true;
     }
 
-    private boolean isValidEntityAttributes(EntityAttributesS2CPacket pkt) {
-        List<EntityAttributesS2CPacket.Entry> entries = pkt.getEntries();
+    private boolean isValidEntityAttributes(ClientboundUpdateAttributesPacket pkt) {
+        List<ClientboundUpdateAttributesPacket.AttributeSnapshot> entries = pkt.getValues();
         if (entries == null) return true;
-        for (EntityAttributesS2CPacket.Entry entry : entries) {
+        for (ClientboundUpdateAttributesPacket.AttributeSnapshot entry : entries) {
             double base = entry.base();
             if (!isFinite(base) || Math.abs(base) > 1e9) return false;
             if (entry.modifiers() != null) {
                 for (var mod : entry.modifiers()) {
-                    double v = mod.value();
+                    double v = mod.amount();
                     if (!isFinite(v) || Math.abs(v) > 1e9) return false;
                 }
             }
@@ -1204,22 +1205,22 @@ public class ServerProtect extends Module {
         return true;
     }
 
-    private boolean isValidTeam(TeamS2CPacket pkt) {
-        var teamOpt = pkt.getTeam();
+    private boolean isValidTeam(ClientboundSetPlayerTeamPacket pkt) {
+        var teamOpt = pkt.getParameters();
         if (teamOpt == null || teamOpt.isEmpty()) return true;
         var team = teamOpt.get();
-        if (isAbusiveText(team.getDisplayName())) return false;
-        if (isAbusiveText(team.getPrefix())) return false;
-        if (isAbusiveText(team.getSuffix())) return false;
+        if (isAbusiveText(team.displayName())) return false;
+        if (isAbusiveText(team.playerPrefix())) return false;
+        if (isAbusiveText(team.playerSuffix())) return false;
         return true;
     }
 
-    private boolean isValidScoreboardObjective(ScoreboardObjectiveUpdateS2CPacket pkt) {
-        if (pkt.getMode() == ScoreboardObjectiveUpdateS2CPacket.REMOVE_MODE) return true;
+    private boolean isValidScoreboardObjective(ClientboundSetObjectivePacket pkt) {
+        if (pkt.getMethod() == ClientboundSetObjectivePacket.METHOD_REMOVE) return true;
         return !isAbusiveText(pkt.getDisplayName());
     }
 
-    private boolean isValidMapUpdate(MapUpdateS2CPacket pkt) {
+    private boolean isValidMapUpdate(ClientboundMapItemDataPacket pkt) {
         var decos = pkt.decorations();
         if (decos != null && decos.isPresent()) {
             List<?> list = decos.get();
@@ -1228,18 +1229,18 @@ public class ServerProtect extends Module {
         return true;
     }
 
-    private boolean isValidBlockEntityUpdate(BlockEntityUpdateS2CPacket pkt) {
-        NbtCompound nbt = pkt.getNbt();
+    private boolean isValidBlockEntityUpdate(ClientboundBlockEntityDataPacket pkt) {
+        CompoundTag nbt = pkt.getTag();
         if (nbt == null) return true;
 
         for (String side : new String[]{"front_text", "back_text"}) {
-            NbtElement sideEl = nbt.get(side);
-            if (sideEl instanceof NbtCompound sideCompound) {
-                NbtElement msgs = sideCompound.get("messages");
-                if (msgs instanceof NbtList list) {
+            Tag sideEl = nbt.get(side);
+            if (sideEl instanceof CompoundTag sideCompound) {
+                Tag msgs = sideCompound.get("messages");
+                if (msgs instanceof ListTag list) {
                     for (int i = 0; i < list.size(); i++) {
                         var e = list.get(i);
-                        if (e instanceof net.minecraft.nbt.NbtString ns) {
+                        if (e instanceof net.minecraft.nbt.StringTag ns) {
                             String s = ns.asString().orElse("");
                             if (countFormatArgs(s) > 0 && countFormatArgs(s) * 4 > 32) return false;
                         }
@@ -1250,20 +1251,20 @@ public class ServerProtect extends Module {
         return true;
     }
 
-    private boolean isValidOpenScreen(OpenScreenS2CPacket pkt) {
-        return !isAbusiveText(pkt.getName());
+    private boolean isValidOpenScreen(ClientboundOpenScreenPacket pkt) {
+        return !isAbusiveText(pkt.getTitle());
     }
 
-    private static boolean isValidTradeOffers(SetTradeOffersS2CPacket pkt) {
-        net.minecraft.village.TradeOfferList offers = pkt.getOffers();
+    private static boolean isValidTradeOffers(ClientboundMerchantOffersPacket pkt) {
+        net.minecraft.world.item.trading.MerchantOffers offers = pkt.getOffers();
         if (offers == null) return true;
-        for (net.minecraft.village.TradeOffer offer : offers) {
-            if (isMaliciousItem(offer.getSellItem())) return false;
-            if (isMaliciousItem(offer.copySellItem())) return false;
-            net.minecraft.village.TradedItem first = offer.getFirstBuyItem();
-            if (first != null && isMaliciousItem(first.itemStack())) return false;
-            java.util.Optional<net.minecraft.village.TradedItem> second = offer.getSecondBuyItem();
-            if (second != null && second.isPresent() && isMaliciousItem(second.get().itemStack())) return false;
+        for (net.minecraft.world.item.trading.MerchantOffer offer : offers) {
+            if (isMaliciousItem(offer.getResult())) return false;
+            if (isMaliciousItem(offer.getResult())) return false;
+            net.minecraft.world.item.ItemStack first = offer.getCostA();
+            if (first != null && !first.isEmpty() && isMaliciousItem(first)) return false;
+            net.minecraft.world.item.ItemStack second = offer.getCostB();
+            if (second != null && !second.isEmpty() && isMaliciousItem(second)) return false;
         }
         return true;
     }
@@ -1416,12 +1417,12 @@ public class ServerProtect extends Module {
     public void warn(String msg) { warning(msg); }
 
     private void notify(String msg) {
-        if (mc.player != null) mc.player.sendMessage(Text.literal(msg), false);
+        if (mc.player != null) mc.player.sendSystemMessage(Component.literal(msg));
     }
 
     private void notifyBlocked(String detail) {
         if (mc.player == null) return;
-        long tick = mc.world == null ? 0L : mc.world.getTime();
+        long tick = mc.level == null ? 0L : mc.level.getGameTime();
         if (tick != lastBlockedTick) {
             if (blockedCountThisTick > 0) {
                 notifyProtection("Applied " + blockedCountThisTick + " safe local item views.");
@@ -1443,37 +1444,37 @@ public class ServerProtect extends Module {
         if (stack == null || stack.isEmpty()) return false;
         if (depth > 4 || ++nodes[0] > 512 || !visited.add(stack)) return true;
 
-        Text name = stack.get(DataComponentTypes.CUSTOM_NAME);
+        Component name = stack.get(DataComponents.CUSTOM_NAME);
         if (name != null && isAbusiveText(name)) return true;
 
-        Text itemName = stack.get(DataComponentTypes.ITEM_NAME);
+        Component itemName = stack.get(DataComponents.ITEM_NAME);
         if (itemName != null && isAbusiveText(itemName)) return true;
 
-        LoreComponent lore = stack.get(DataComponentTypes.LORE);
+        ItemLore lore = stack.get(DataComponents.LORE);
         if (lore != null && lore.lines() != null) {
-            for (Text line : lore.lines()) {
+            for (Component line : lore.lines()) {
                 if (isAbusiveText(line)) return true;
             }
         }
 
-        if (hasMaliciousNbt(stack.get(DataComponentTypes.ENTITY_DATA))) return true;
-        if (hasMaliciousNbt(stack.get(DataComponentTypes.BLOCK_ENTITY_DATA))) return true;
+        if (hasMaliciousNbt(stack.get(DataComponents.ENTITY_DATA))) return true;
+        if (hasMaliciousNbt(stack.get(DataComponents.BLOCK_ENTITY_DATA))) return true;
 
-        AttributeModifiersComponent attrComp = stack.get(DataComponentTypes.ATTRIBUTE_MODIFIERS);
+        ItemAttributeModifiers attrComp = stack.get(DataComponents.ATTRIBUTE_MODIFIERS);
         if (attrComp != null && hasExtremeAttributeModifiers(attrComp)) return true;
 
-        NbtComponent customData = stack.get(DataComponentTypes.CUSTOM_DATA);
-        if (customData != null && !customData.isEmpty() && hasMaliciousNbt(customData.copyNbt())) return true;
-        NbtComponent bucketData = stack.get(DataComponentTypes.BUCKET_ENTITY_DATA);
-        if (bucketData != null && !bucketData.isEmpty() && hasMaliciousNbt(bucketData.copyNbt())) return true;
+        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
+        if (customData != null && !customData.isEmpty() && hasMaliciousNbt(customData.copyTag())) return true;
+        CustomData bucketData = stack.get(DataComponents.BUCKET_ENTITY_DATA);
+        if (bucketData != null && !bucketData.isEmpty() && hasMaliciousNbt(bucketData.copyTag())) return true;
 
-        WrittenBookContentComponent book = stack.get(DataComponentTypes.WRITTEN_BOOK_CONTENT);
+        WrittenBookContent book = stack.get(DataComponents.WRITTEN_BOOK_CONTENT);
         if (book != null && book.pages() != null) {
             for (var page : book.pages()) {
                 if (isAbusiveText(page.raw())) return true;
             }
         }
-        net.minecraft.component.type.WritableBookContentComponent writable = stack.get(DataComponentTypes.WRITABLE_BOOK_CONTENT);
+        net.minecraft.world.item.component.WritableBookContent writable = stack.get(DataComponents.WRITABLE_BOOK_CONTENT);
         if (writable != null && writable.pages() != null) {
             for (var page : writable.pages()) {
 
@@ -1483,21 +1484,21 @@ public class ServerProtect extends Module {
         }
 
         if (depth < 4) {
-            BundleContentsComponent bundle = stack.get(DataComponentTypes.BUNDLE_CONTENTS);
+            BundleContents bundle = stack.get(DataComponents.BUNDLE_CONTENTS);
             if (bundle != null && !bundle.isEmpty()) {
-                for (ItemStack inner : bundle.iterate()) {
+                for (ItemStack inner : bundle.itemCopyStream().toList()) {
                     if (isMaliciousItem(inner, depth + 1, visited, nodes)) return true;
                 }
             }
-            ContainerComponent container = stack.get(DataComponentTypes.CONTAINER);
+            ItemContainerContents container = stack.get(DataComponents.CONTAINER);
             if (container != null) {
-                for (ItemStack inner : container.iterateNonEmpty()) {
+                for (ItemStack inner : container.nonEmptyItemCopyStream().toList()) {
                     if (isMaliciousItem(inner, depth + 1, visited, nodes)) return true;
                 }
             }
-            ChargedProjectilesComponent projectiles = stack.get(DataComponentTypes.CHARGED_PROJECTILES);
+            ChargedProjectiles projectiles = stack.get(DataComponents.CHARGED_PROJECTILES);
             if (projectiles != null && !projectiles.isEmpty()) {
-                for (ItemStack inner : projectiles.getProjectiles()) {
+                for (ItemStack inner : projectiles.itemCopies()) {
                     if (isMaliciousItem(inner, depth + 1, visited, nodes)) return true;
                 }
             }
@@ -1507,34 +1508,34 @@ public class ServerProtect extends Module {
 
     public static boolean isMaliciousItemNamesOnly(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return false;
-        Text name = stack.get(DataComponentTypes.CUSTOM_NAME);
+        Component name = stack.get(DataComponents.CUSTOM_NAME);
         if (name != null && isAbusiveText(name)) return true;
-        LoreComponent lore = stack.get(DataComponentTypes.LORE);
+        ItemLore lore = stack.get(DataComponents.LORE);
         if (lore != null && lore.lines() != null) {
-            for (Text line : lore.lines()) if (isAbusiveText(line)) return true;
+            for (Component line : lore.lines()) if (isAbusiveText(line)) return true;
         }
         return false;
     }
 
     public static boolean isMaliciousEntityDataOnly(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return false;
-        if (hasMaliciousNbt(stack.get(DataComponentTypes.ENTITY_DATA))) return true;
-        if (hasMaliciousNbt(stack.get(DataComponentTypes.BLOCK_ENTITY_DATA))) return true;
+        if (hasMaliciousNbt(stack.get(DataComponents.ENTITY_DATA))) return true;
+        if (hasMaliciousNbt(stack.get(DataComponents.BLOCK_ENTITY_DATA))) return true;
         return false;
     }
 
-    public static boolean isAbusiveText(Text text) {
+    public static boolean isAbusiveText(Component text) {
         return isAbusiveText(text, 0, new int[]{0});
     }
 
-    private static boolean isAbusiveText(Text text, int depth, int[] expansion) {
+    private static boolean isAbusiveText(Component text, int depth, int[] expansion) {
         if (text == null) return false;
         ServerProtect mod = ServerProtect.get();
         int maxDepth = (mod != null) ? mod.getMaxTextDepth() : 32;
         int maxExp = (mod != null) ? mod.getMaxTranslateExpansion() : 32;
         if (depth > maxDepth) return true;
 
-        if (text.getContent() instanceof net.minecraft.text.TranslatableTextContent tc) {
+        if (text.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents tc) {
             int percentArgs = countFormatArgs(tc.getKey());
             Object[] args = tc.getArgs();
             if (percentArgs == 0 && args != null && args.length > 0) {
@@ -1546,7 +1547,7 @@ public class ServerProtect extends Module {
             }
             if (args != null) {
                 for (Object arg : args) {
-                    if (arg instanceof Text argText) {
+                    if (arg instanceof Component argText) {
                         if (isAbusiveText(argText, depth + 1, expansion)) return true;
                     } else if (arg instanceof String s) {
                         int sub = countFormatArgs(s);
@@ -1562,30 +1563,30 @@ public class ServerProtect extends Module {
         String raw = text.getString();
         if (raw.contains("\u00A7k") && raw.length() > 64) return true;
 
-        net.minecraft.text.Style style = text.getStyle();
+        net.minecraft.network.chat.Style style = text.getStyle();
         if (style != null) {
-            net.minecraft.text.HoverEvent hover = style.getHoverEvent();
+            net.minecraft.network.chat.HoverEvent hover = style.getHoverEvent();
             if (hover != null && isAbusiveHover(hover, depth, expansion)) return true;
         }
 
         if (text.getSiblings() != null) {
-            for (Text sib : text.getSiblings()) {
+            for (Component sib : text.getSiblings()) {
                 if (isAbusiveText(sib, depth + 1, expansion)) return true;
             }
         }
         return false;
     }
 
-    private static boolean isAbusiveHover(net.minecraft.text.HoverEvent hover, int depth, int[] expansion) {
-        if (hover instanceof net.minecraft.text.HoverEvent.ShowText st) {
+    private static boolean isAbusiveHover(net.minecraft.network.chat.HoverEvent hover, int depth, int[] expansion) {
+        if (hover instanceof net.minecraft.network.chat.HoverEvent.ShowText st) {
             if (isAbusiveText(st.value(), depth + 1, expansion)) return true;
-        } else if (hover instanceof net.minecraft.text.HoverEvent.ShowItem si) {
-            if (isMaliciousItem(si.item(), depth + 1,
+        } else if (hover instanceof net.minecraft.network.chat.HoverEvent.ShowItem si) {
+            if (isMaliciousItem(si.item().create(), depth + 1,
                 java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>()), new int[]{0})) return true;
         }
 
-        if (hover instanceof net.minecraft.text.HoverEvent.ShowEntity se) {
-            net.minecraft.text.HoverEvent.EntityContent ec = se.entity();
+        if (hover instanceof net.minecraft.network.chat.HoverEvent.ShowEntity se) {
+            net.minecraft.network.chat.HoverEvent.EntityTooltipInfo ec = se.entity();
             if (ec != null && ec.name != null && ec.name.isPresent()
                 && isAbusiveText(ec.name.get(), depth + 1, expansion)) return true;
         }
@@ -1622,31 +1623,31 @@ public class ServerProtect extends Module {
         return n;
     }
 
-    public static boolean hasMaliciousNbt(NbtCompound nbt) {
+    public static boolean hasMaliciousNbt(CompoundTag nbt) {
         if (nbt == null) return false;
         return scanNbt(nbt, 0, new int[]{0});
     }
 
     public static boolean hasMaliciousNbt(TypedEntityData<?> data) {
         if (data == null) return false;
-        return scanNbt(data.copyNbtWithoutId(), 0, new int[]{0});
+        return scanNbt(data.copyTagWithoutId(), 0, new int[]{0});
     }
 
-    private static boolean hasExtremeAttributeModifiers(AttributeModifiersComponent comp) {
+    private static boolean hasExtremeAttributeModifiers(ItemAttributeModifiers comp) {
         for (var entry : comp.modifiers()) {
-            double v = entry.modifier().value();
+            double v = entry.modifier().amount();
             if (Double.isInfinite(v) || Double.isNaN(v) || Math.abs(v) > 1e9) return true;
         }
         return false;
     }
 
-    private static boolean scanNbt(NbtElement el, int depth, int[] expansion) {
+    private static boolean scanNbt(Tag el, int depth, int[] expansion) {
         if (depth > 16) return true;
-        if (el instanceof NbtCompound c) {
-            for (String key : c.getKeys()) {
-                NbtElement child = c.get(key);
+        if (el instanceof CompoundTag c) {
+            for (String key : c.keySet()) {
+                Tag child = c.get(key);
                 if (child == null) continue;
-                if (key.equals("id") && child instanceof net.minecraft.nbt.NbtString ns) {
+                if (key.equals("id") && child instanceof net.minecraft.nbt.StringTag ns) {
                     String v = ns.asString().orElse("");
                     if (v.equals("minecraft:ender_dragon")) {
 
@@ -1654,19 +1655,19 @@ public class ServerProtect extends Module {
                         if (expansion[0] > 256) return true;
                     }
                 }
-                if (child instanceof AbstractNbtNumber num) {
+                if (child instanceof NumericTag num) {
                     double d = num.doubleValue();
                     if (Double.isInfinite(d) || Double.isNaN(d) || Math.abs(d) > 1e9) return true;
                 }
                 if (scanNbt(child, depth + 1, expansion)) return true;
             }
-        } else if (el instanceof NbtList list) {
+        } else if (el instanceof ListTag list) {
             int n = list.size();
             if (n > 256) return true;
             for (int i = 0; i < n; i++) {
                 if (scanNbt(list.get(i), depth + 1, expansion)) return true;
             }
-        } else if (el instanceof net.minecraft.nbt.NbtString ns) {
+        } else if (el instanceof net.minecraft.nbt.StringTag ns) {
             String s = ns.asString().orElse("");
             if (s != null) {
 
@@ -1682,42 +1683,42 @@ public class ServerProtect extends Module {
         return false;
     }
 
-    public static List<Text> createSafeItemTooltip(ItemStack stack) {
+    public static List<Component> createSafeItemTooltip(ItemStack stack) {
         if (stack == null || stack.isEmpty() || !isMaliciousItem(stack)) return List.of();
         return List.of(
-            Text.literal("\u00a7c[ServerProtect] Unsafe item display blocked"),
-            Text.literal("\u00a77The server-owned item was not modified.")
+            Component.literal("\u00a7c[ServerProtect] Unsafe item display blocked"),
+            Component.literal("\u00a77The server-owned item was not modified.")
         );
     }
 
-    public static Text createSafeItemName(ItemStack stack) {
+    public static Component createSafeItemName(ItemStack stack) {
         if (stack == null || stack.isEmpty() || !isMaliciousItem(stack)) return null;
-        return Text.literal("\u00a7c[Unsafe item hidden]");
+        return Component.literal("\u00a7c[Unsafe item hidden]");
     }
 
-    private boolean hasExtremeAttributes(List<EntityAttributesS2CPacket.Entry> entries) {
+    private boolean hasExtremeAttributes(List<ClientboundUpdateAttributesPacket.AttributeSnapshot> entries) {
         if (entries == null) return false;
-        for (EntityAttributesS2CPacket.Entry entry : entries) {
+        for (ClientboundUpdateAttributesPacket.AttributeSnapshot entry : entries) {
             double base = entry.base();
             if (!isFinite(base) || Math.abs(base) > 1e9) return true;
-            for (net.minecraft.entity.attribute.EntityAttributeModifier mod : entry.modifiers()) {
-                double v = mod.value();
+            for (net.minecraft.world.entity.ai.attributes.AttributeModifier mod : entry.modifiers()) {
+                double v = mod.amount();
                 if (!isFinite(v) || Math.abs(v) > 1e9) return true;
             }
         }
         return false;
     }
 
-    private static boolean hasMaliciousSignText(NbtCompound root, String key) {
+    private static boolean hasMaliciousSignText(CompoundTag root, String key) {
         if (root == null || key == null) return false;
-        NbtElement section = root.get(key);
-        if (!(section instanceof NbtCompound sectionC)) return false;
-        NbtElement messages = sectionC.get("messages");
-        if (!(messages instanceof NbtList list)) return false;
+        Tag section = root.get(key);
+        if (!(section instanceof CompoundTag sectionC)) return false;
+        Tag messages = sectionC.get("messages");
+        if (!(messages instanceof ListTag list)) return false;
         int[] expansion = {0};
         for (int i = 0; i < list.size() && i < 64; i++) {
-            NbtElement el = list.get(i);
-            if (el instanceof net.minecraft.nbt.NbtString ns) {
+            Tag el = list.get(i);
+            if (el instanceof net.minecraft.nbt.StringTag ns) {
                 String s = ns.asString().orElse("");
                 if (countFormatArgs(s) > 0) {
                     expansion[0] += countFormatArgs(s);

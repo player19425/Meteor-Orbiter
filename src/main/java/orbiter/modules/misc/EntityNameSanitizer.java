@@ -1,12 +1,12 @@
 package orbiter.modules.misc;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityType;
-import net.minecraft.text.PlainTextContent;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.text.TextContent;
-import net.minecraft.util.Identifier;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.network.chat.ComponentContents;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentContents;
+import net.minecraft.resources.Identifier;
 
 import java.util.ArrayDeque;
 import java.util.List;
@@ -15,7 +15,7 @@ public final class EntityNameSanitizer {
 
     private EntityNameSanitizer() {}
 
-    public static boolean shouldSimplify(Text component, int maxChars, int maxNodes, int maxDepth,
+    public static boolean shouldSimplify(Component component, int maxChars, int maxNodes, int maxDepth,
                                          int maxStyleScore, int maxObfuscatedChars, int maxComplexNodes) {
         NameCost cost = analyze(component, Math.max(1, maxDepth));
         return cost.tooDeep
@@ -26,13 +26,13 @@ public final class EntityNameSanitizer {
             || cost.complexNodeCount > Math.max(1, maxComplexNodes);
     }
 
-    public static Text simplify(Entity entity) {
-        Identifier entityId = EntityType.getId(entity.getType());
+    public static Component simplify(Entity entity) {
+        Identifier entityId = EntityType.getKey(entity.getType());
         String label = entityId == null ? "entity" : entityId.getPath().replace('_', ' ');
-        return Text.literal(label + " [name hidden]");
+        return Component.literal(label + " [name hidden]");
     }
 
-    private static NameCost analyze(Text root, int maxDepth) {
+    private static NameCost analyze(Component root, int maxDepth) {
         NameCost cost = new NameCost();
         ArrayDeque<VisitNode> stack = new ArrayDeque<>();
         stack.push(new VisitNode(root, 0));
@@ -42,7 +42,7 @@ public final class EntityNameSanitizer {
                 cost.tooDeep = true;
                 return cost;
             }
-            Text component = node.component;
+            Component component = node.component;
             cost.nodeCount++;
             int directChars = estimateDirectChars(component);
             cost.totalChars += directChars;
@@ -50,10 +50,10 @@ public final class EntityNameSanitizer {
             if (component.getStyle().isObfuscated()) {
                 cost.obfuscatedChars += Math.max(directChars, 8);
             }
-            if (!(component.getContent() instanceof PlainTextContent)) {
+            if (!(component.getContents() instanceof net.minecraft.network.chat.contents.PlainTextContents)) {
                 cost.complexNodeCount++;
             }
-            List<Text> siblings = component.getSiblings();
+            List<Component> siblings = component.getSiblings();
             for (int index = siblings.size() - 1; index >= 0; index--) {
                 stack.addLast(new VisitNode(siblings.get(index), node.depth + 1));
             }
@@ -61,11 +61,10 @@ public final class EntityNameSanitizer {
         return cost;
     }
 
-    private static int estimateDirectChars(Text component) {
-        String collapsed = component.getLiteralString();
-        if (collapsed != null) return collapsed.length();
-        TextContent contents = component.getContent();
-        if (contents instanceof PlainTextContent plain) return plain.string().length();
+    private static int estimateDirectChars(Component component) {
+        String collapsed = component.getString();
+        if (!collapsed.isEmpty()) return collapsed.length();
+        if (component.getContents() instanceof net.minecraft.network.chat.contents.PlainTextContents plain) return plain.text().length();
         return 8;
     }
 
@@ -90,5 +89,5 @@ public final class EntityNameSanitizer {
         boolean tooDeep;
     }
 
-    private record VisitNode(Text component, int depth) {}
+    private record VisitNode(Component component, int depth) {}
 }

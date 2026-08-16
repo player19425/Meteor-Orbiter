@@ -2,23 +2,23 @@ package orbiter.mixin;
 
 import orbiter.modules.ClientSideThings;
 import orbiter.util.ClientSpoofState;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.player.HungerManager;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.food.FoodData;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(HungerManager.class)
+@Mixin(FoodData.class)
 public abstract class HungerManagerSpoofMixin {
     @Inject(method = "getFoodLevel", at = @At("HEAD"), cancellable = true)
     private void orbiter$getFoodLevel(CallbackInfoReturnable<Integer> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldFakeHunger()) return;
 
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
-        if ((Object) this != mc.player.getHungerManager()) return;
+        if ((Object) this != mc.player.getFoodData()) return;
 
         cir.setReturnValue(module.getFakeHunger());
     }
@@ -28,9 +28,9 @@ public abstract class HungerManagerSpoofMixin {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldFakeHunger()) return;
 
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
-        if ((Object) this != mc.player.getHungerManager()) return;
+        if ((Object) this != mc.player.getFoodData()) return;
 
         cir.setReturnValue(module.getFakeSaturation());
     }

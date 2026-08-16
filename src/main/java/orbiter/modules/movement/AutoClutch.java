@@ -7,20 +7,20 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.Block;
-import net.minecraft.block.BedBlock;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.util.ActionResult;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 
@@ -139,7 +139,7 @@ public class AutoClutch extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
+        if (mc.player == null || mc.level == null || mc.gameMode == null) return;
 
         if (survivalOnly.get() && (mc.player.isCreative() || mc.player.isSpectator())) {
             restoreSlot();
@@ -147,7 +147,7 @@ public class AutoClutch extends Module {
             return;
         }
 
-        if (onlyWhenFalling.get() && mc.player.getVelocity().y >= 0) {
+        if (onlyWhenFalling.get() && mc.player.getDeltaMovement().y >= 0) {
             restoreSlot();
             clutched = false;
             return;
@@ -155,7 +155,7 @@ public class AutoClutch extends Module {
 
         if (mc.player.fallDistance < minFallDistance.get()) return;
 
-        if (mc.player.isOnGround()) {
+        if (mc.player.onGround()) {
             restoreSlot();
             clutched = false;
             return;
@@ -209,7 +209,7 @@ public class AutoClutch extends Module {
     private boolean findAndSwitch(Item item) {
         if (mc.player == null) return false;
 
-        if (mc.player.getMainHandStack().getItem() == item) return true;
+        if (mc.player.getMainHandItem().getItem() == item) return true;
 
         FindItemResult hotbarResult = InvUtils.findInHotbar(item);
         if (hotbarResult.found()) {
@@ -245,9 +245,9 @@ public class AutoClutch extends Module {
     private boolean tryWaterBucket(Item bucketItem) {
         if (!findAndSwitch(bucketItem)) return false;
 
-        if (rotate.get()) mc.player.setPitch(90.0f);
+        if (rotate.get()) mc.player.setXRot(90.0f);
 
-        mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+        mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
         return true;
     }
 
@@ -261,9 +261,9 @@ public class AutoClutch extends Module {
         for (Item boat : boats) {
             if (!findAndSwitch(boat)) continue;
 
-            if (rotate.get()) mc.player.setPitch(90.0f);
+            if (rotate.get()) mc.player.setXRot(90.0f);
 
-            mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+            mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
             return true;
         }
         return false;
@@ -277,7 +277,7 @@ public class AutoClutch extends Module {
     private boolean tryPlaceBlock() {
 
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem blockItem)) continue;
 
             Block block = blockItem.getBlock();
@@ -293,7 +293,7 @@ public class AutoClutch extends Module {
         }
 
         for (int i = 9; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem blockItem)) continue;
 
             Block block = blockItem.getBlock();
@@ -319,36 +319,36 @@ public class AutoClutch extends Module {
 
     private boolean placeBlockBelow() {
         BlockPos below;
-        if (placeMode.get() == PlaceMode.LookVector && mc.crosshairTarget instanceof BlockHitResult bhr) {
+        if (placeMode.get() == PlaceMode.LookVector && mc.hitResult instanceof BlockHitResult bhr) {
             below = bhr.getBlockPos();
-            if (!mc.world.getBlockState(below).isReplaceable()) below = below.offset(bhr.getSide());
+            if (!mc.level.getBlockState(below).canBeReplaced()) below = below.offset(bhr.getDirection().getStepX(), bhr.getDirection().getStepY(), bhr.getDirection().getStepZ());
         } else {
-            below = BlockPos.ofFloored(mc.player.getX(), mc.player.getY() - 0.2, mc.player.getZ()).down();
+            below = BlockPos.containing(mc.player.getX(), mc.player.getY() - 0.2, mc.player.getZ()).below();
         }
 
-        if (!mc.world.getBlockState(below).isReplaceable()) return false;
+        if (!mc.level.getBlockState(below).canBeReplaced()) return false;
 
         if (rotate.get()) {
-            mc.player.setPitch(90.0f);
+            mc.player.setXRot(90.0f);
         }
 
         Direction[] priorities = {Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.UP};
         for (Direction dir : priorities) {
-            BlockPos neighbor = below.offset(dir);
-            BlockState neighborState = mc.world.getBlockState(neighbor);
+            BlockPos neighbor = below.offset(dir.getStepX(), dir.getStepY(), dir.getStepZ());
+            BlockState neighborState = mc.level.getBlockState(neighbor);
 
-            if (neighborState.isAir() || !neighborState.isSolidBlock(mc.world, neighbor)) continue;
+            if (neighborState.isAir() || !neighborState.isSolid()) continue;
 
             Direction clickFace = dir.getOpposite();
-            Vec3d hitPos = Vec3d.ofCenter(neighbor).add(
-                clickFace.getOffsetX() * 0.5,
-                clickFace.getOffsetY() * 0.5,
-                clickFace.getOffsetZ() * 0.5
+            Vec3 hitPos = Vec3.atCenterOf(neighbor).add(
+                clickFace.getStepX() * 0.5,
+                clickFace.getStepY() * 0.5,
+                clickFace.getStepZ() * 0.5
             );
 
             BlockHitResult hit = new BlockHitResult(hitPos, clickFace, neighbor, false);
-            ActionResult result = mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
-            if (result.isAccepted()) return true;
+            InteractionResult result = mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
+            if (result.consumesAction()) return true;
         }
 
         return false;
@@ -374,14 +374,14 @@ public class AutoClutch extends Module {
     }
 
     private double distanceToGround() {
-        if (mc.player == null || mc.world == null) return Double.MAX_VALUE;
+        if (mc.player == null || mc.level == null) return Double.MAX_VALUE;
 
-        BlockPos.Mutable mpos = mc.player.getBlockPos().mutableCopy();
+        BlockPos.MutableBlockPos mpos = mc.player.blockPosition().mutable();
         int startY = mpos.getY();
 
-        for (int y = startY - 1; y >= mc.world.getBottomY(); y--) {
+        for (int y = startY - 1; y >= mc.level.getMinY(); y--) {
             mpos.setY(y);
-            BlockState state = mc.world.getBlockState(mpos);
+            BlockState state = mc.level.getBlockState(mpos);
             if (!state.isAir()) {
                 return mc.player.getY() - y - 1;
             }

@@ -2,10 +2,10 @@ package orbiter.mixin;
 
 import orbiter.modules.ClientSideThings;
 import orbiter.util.ClientSpoofState;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.item.ItemStack;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -18,31 +18,31 @@ public abstract class LivingEntitySpoofMixin {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldFakeHealth()) return;
 
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
         if ((Object) this == mc.player) {
             cir.setReturnValue(module.getFakeHealth());
         }
     }
 
-    @Inject(method = "getArmor", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getArmorValue", at = @At("HEAD"), cancellable = true)
     private void orbiter$getArmor(CallbackInfoReturnable<Integer> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldFakeArmor()) return;
 
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
         if ((Object) this == mc.player) {
             cir.setReturnValue(module.getFakeArmor());
         }
     }
 
-    @Inject(method = "getEquippedStack", at = @At("RETURN"), cancellable = true)
-    private void orbiter$getEquippedStack(EquipmentSlot slot, CallbackInfoReturnable<ItemStack> cir) {
+    @Inject(method = "getItemBySlot", at = @At("RETURN"), cancellable = true)
+    private void orbiter$getItemBySlot(EquipmentSlot slot, CallbackInfoReturnable<ItemStack> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null) return;
 
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
         if ((Object) this != mc.player) return;
 

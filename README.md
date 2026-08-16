@@ -5,11 +5,11 @@
 
   
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.0-orange" alt="Version"></a>
-  <img src="https://img.shields.io/badge/Minecraft-1.21.11-blue" alt="Minecraft version">
-  <img src="https://img.shields.io/badge/Java-21-green" alt="Java version">
+  <img src="https://img.shields.io/badge/Minecraft-26.2-blue" alt="Minecraft version">
+  <img src="https://img.shields.io/badge/Java-25-green" alt="Java version">
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/github/downloads/player19425/Meteor-Orbiter/total" alt="Downloads"></a>
   <a href="https://github.com/player19425/Meteor-Orbiter/stargazers"><img src="https://img.shields.io/github/stars/player19425/Meteor-Orbiter" alt="Stars"></a>
-  <a href="https://github.com/player19425/Meteor-Orbiter/commits/1.21.11"><img src="https://img.shields.io/github/last-commit/player19425/Meteor-Orbiter" alt="Last commit"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/commits/26.2"><img src="https://img.shields.io/github/last-commit/player19425/Meteor-Orbiter" alt="Last commit"></a>
   <img src="https://img.shields.io/github/languages/code-size/player19425/Meteor-Orbiter" alt="Code size">
   <img src="https://img.shields.io/github/issues/player19425/Meteor-Orbiter" alt="Issues">
   <img src="https://img.shields.io/github/license/player19425/Meteor-Orbiter" alt="License">
@@ -30,9 +30,9 @@ Everything is organized into four in-game categories:
 
 # Requirements
 
-- [Java](https://adoptium.net/temurin/releases) 21 or higher
-- [Fabric Loader](https://fabricmc.net/use/installer/) 0.18.2+
-- [Meteor Client](https://meteorclient.com/) for 1.21.11
+- [Java](https://adoptium.net/temurin/releases) 25 or higher
+- [Fabric Loader](https://fabricmc.net/use/installer/) 0.19.3+
+- [Meteor Client](https://meteorclient.com/) for 26.2
 
 # Installation
 
@@ -65,8 +65,8 @@ Everything is organized into four in-game categories:
 | **Anti Push** | Stops fluid and entity push only. |
 | **Auto Clutch** | Automatically clutches to prevent fall damage using blocks, boats, water, or any fall-canceling item. |
 | **Force Invisibility** | Spoofs server Y and only drops to real Y when needed. |
-| **Jump A** | Jump over walls or reach blocks you're looking at with calculated velocity. |
-| **Slime Jump** | Automatically bounce when standing on slime, with configurable timing. |
+| **Jump A** | Jump over walls or reach blocks you're looking at with calculated velocity. Configurable scan height up to 256 with an optional unlimited mode. |
+| **Slime Jump** | Automatically bounce when standing on slime, with configurable timing, velocity, and a fixed bounce counter. |
 
 ## Player:
 
@@ -81,17 +81,16 @@ Everything is organized into four in-game categories:
 | Module | Description |
 |---|---|
 | **Auto Farming** | Harvests crops/cactus/sugarcane/bamboo, breeds animals, applies bonemeal and replants with delay. |
-| **Command Block Placer** | Places command blocks with set commands. Requires Creative + OP. |
+| **Command Block Placer** | Places command blocks with set commands and dynamic command slots (1-100). Requires Creative + OP. |
 | **Control Player** | Uses owner-authorized OP commands to rotate selected players around you. |
-| **Destroy Now** | Toggle 4 times within 20s to execute: inspect → arm → preview → execute. |
 | **Entity Spammer** | Mega entity manipulation module: spawn, fill, animate, and dominate entities. OP required. |
 | **Item Creator** | Create custom items with names, enchants, attributes, and entity NBT. Creative only. |
 | **Item Generator** | Spawns random or specific items with optional random enchants/attributes. Requires Creative mode. |
-| **NBT Lectern Crasher** | Places lecterns with malicious books. |
-| **Operator Nuker** | Nuke blocks using /fill or /setblock commands. Requires OP permissions. |
+| **NBT Lectern Crasher** | Places lecterns with malicious books. Payloads are sanitized to avoid self-kicks. |
+| **Operator Nuker** | Nuke blocks using /fill or /setblock commands. Only acts when non-air blocks are present. Requires OP permissions. |
 | **RNG Spammer** | Spawns valid loot tables around selected players. OP required. |
-| **TNT Rain** | Spawns TNT falling from the sky in a radius. OP required. |
-| **UUID Ban** | Ban a player by summoning a UUID-named entity. |
+| **TNT Rain** | Spawns TNT falling from the sky in a radius with random motion/rotation and configurable continuous rate. OP required. |
+| **UUID Ban** | Ban a player by summoning an entity carrying their UUID. Uses the entity's spawn egg when available. |
 | **World Downloader** | Downloads the world around you while moving. |
 | **World Edit** | Expanded client-side WorldEdit using vanilla commands. Chat: `.we <command>` |
 | **World Eraser** | Erases blocks in a radius. Enable TWICE within 10s to trigger. OP permissions required. |
@@ -101,9 +100,9 @@ Everything is organized into four in-game categories:
 | Module | Description |
 |---|---|
 | **Beacon Optimizer** | Reduces beacon animation-state churn without hiding visible beacon beams. |
-| **Block Spoof** | Replace block textures/models client-side for visual deception. |
+| **Block Spoof** | Replace block textures/models client-side for visual deception. Block maps accept any separator. |
 | **Bossbar Flash** | Rapidly creates/updates boss bars with random colors and titles. OP required. |
-| **Camera 360** | Removes camera rotation limits for full 360°+ movement. |
+| **Camera 360** | Removes camera rotation limits for full 360°+ movement while sending only legal rotations to the server. |
 | **Firework Show** | Launch choreographed firework shows with customizable shapes, colors, and patterns. |
 | **Particle Control** | Creates optimized rotating particle shapes around selected players with OP /particle commands. |
 | **Particle Spam** | Spams /particle commands in a radius. OP required. |
@@ -121,27 +120,25 @@ Everything is organized into four in-game categories:
 | **Client Side Things** | Local visual spoof system for HUD, inventory, weather, equipment, overlays, fog, crosshair, and bossbar. |
 | **Exploit Preventer** | Prevents common server-side exploits: brand fingerprinting, resource pack SSRF, and channel fingerprinting. |
 | **I Sell Wand** | Automates selling by equipping a sell wand and right-clicking recorded/nearby chests. |
-| **Infini Reach** | Extended reach via OP attributes or an invisible offhand item. |
+| **Infini Reach** | Extended reach via OP attributes or an invisible offhand item. Restores the original values when disabled. |
 | **Item Info** | Adds client-side-only lore to item tooltips: durability, enchantments, components, and full NBT. |
 | **Item Stealer** | Clone items with pick-block (no server packet), bypass trades, auto-steal GUIs, and persist items to disk. |
 | **Leave Message** | Intercepts close events, sends leave chat, waits, then disconnects gracefully. |
-| **Message Formatter** | Formats outgoing chat with color codes, gradients, font presets, Zalgo, and character injection. |
-| **Peak Plugin Scanner** | Detects server plugins via command tree analysis, systematic probing, namespace/help probing, and channel fingerprinting. |
+| **Message Formatter** | Formats outgoing chat with color codes, gradients, font presets, Zalgo, and character injection. Supports prefix/suffix, commands with spaces, and safe 256-char truncation. |
+| **Peak Plugin Scanner** | Detects server plugins via command tree analysis, systematic probing, namespace/help probing, and channel fingerprinting. Includes per-server caching and probe retries. |
 | **Ping Spoof** | Advanced ping/movement spoof with bypass, spoof, adaptive, competitive, and dynamic adaptive modes. |
 | **Server Protect** | Comprehensive anti-abuse module. Blocks crash packets, entity spam, malicious items, and more. |
-| **Spam Plus** | Spam module with letter-ladder and auto-split features. |
-| **Stupid Modules** | Master toggle for joke / experimental / stupid modules. |
+| **Spam Plus** | Spam module with letter-ladder, auto-split, command prefix/suffix, start delay, and randomized delays. |
 
 # Commands:
 
 | Command | Description | Aliases |
 |---|---|---|
 | `.autoshop` | Toggle and control the AutoShop module. | `autoshopdetect` |
-| `.destroynow` | Inspect, arm, preview, execute, or cancel DestroyNow. | |
 | `.escape` | Controls ForceInvisibility escape logic. | |
 | `.exportmodulelist` | Exports all module names to clipboard. | |
 | `.fixdeath` | Stops fake death loops and force-resyncs client/server state. | |
-| `.givepresetitems` | 300+ useful creative-mode presets. | `gpi` |
+| `.givepresetitems` | 200+ OP and command-block-only presets. | `gpi` |
 | `.hidekeybind` | Hides Meteor keybinds from the Controls screen. | |
 | `.isellwand` | Control the ISellWand module. | `sellwand` |
 | `.itemcrash` | Overloads your held item with extreme enchantments, attributes, and NBT data. | |
@@ -164,7 +161,18 @@ Everything is organized into four in-game categories:
 | **Custom Text** | Displays custom text on the HUD with placeholders. |
 | **Nearest Player** | Shows the nearest player and their distance. |
 | **Render Distance** | Shows current render distance. |
-| **Server Info** | Shows server info: brand, version, IP, difficulty, time, anticheats, plugins. |
+| **Server TPS** | Shows the server's ticks per second. |
+| **Server Time** | Shows the in-game day and time. |
+| **Server Version Note** | Notes when the server runs a different version (protocol bridge). |
+| **Server Difficulty** | Shows the world difficulty. |
+| **Server Protocol** | Shows the server protocol version. |
+| **Server Players** | Shows the number of online players. |
+| **Server Brand** | Shows the server brand. |
+| **Server Real Version** | Shows the real server version from the server list. |
+| **Server Version** | Shows the server version. |
+| **Server Real IP** | Shows the real IP address of the connection. |
+| **Server IP** | Shows the server IP (domain). |
+| **Server Plugins** | Shows the detected plugin count. |
 | **Weapon Cooldown** | Shows current weapon attack cooldown in seconds. |
 
 # Building from Source:

@@ -1,11 +1,11 @@
 package orbiter.mixin;
 
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -20,16 +20,21 @@ import orbiter.modules.render.Camera360;
 @Mixin(Entity.class)
 public abstract class Camera360Mixin {
 
-    @Shadow public abstract float getPitch();
-    @Shadow public abstract float getYaw();
-    @Shadow public abstract void setYaw(float yaw);
-    @Shadow public abstract void setPitch(float pitch);
-    @Shadow public float lastYaw;
-    @Shadow public float lastPitch;
+    @Shadow public abstract float getXRot();
+    @Shadow public abstract float getYRot();
+    @Shadow public abstract void setYRot(float yaw);
+    @Shadow public abstract void setXRot(float pitch);
+    @Shadow public float yRotO;
+    @Shadow public float xRotO;
 
     private boolean orbiter$is360Active() {
         Camera360 mod = (Camera360) Modules.get().get("360-camera");
         return mod != null && mod.isActive();
+    }
+
+    private boolean orbiter$shouldUnlockPitch() {
+        Camera360 mod = (Camera360) Modules.get().get("360-camera");
+        return mod != null && mod.shouldUnlockPitch();
     }
 
     private boolean orbiter$shouldInvertMouse() {
@@ -38,7 +43,7 @@ public abstract class Camera360Mixin {
     }
 
     private float orbiter$normalizedPitch() {
-        return ((getPitch() + 180) % 360 + 360) % 360 - 180;
+        return ((getXRot() + 180) % 360 + 360) % 360 - 180;
     }
 
     private boolean orbiter$isUpsideDown() {
@@ -46,7 +51,7 @@ public abstract class Camera360Mixin {
         return np > 90 || np < -90;
     }
 
-    @Inject(method = "changeLookDirection", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "turn", at = @At("HEAD"), cancellable = true)
     private void orbiter$changeLookDirection(double cursorDeltaX, double cursorDeltaY, CallbackInfo ci) {
         if (!orbiter$is360Active()) return;
         ci.cancel();
@@ -54,39 +59,27 @@ public abstract class Camera360Mixin {
         float f = (float) cursorDeltaY * 0.15F;
         float g = (float) cursorDeltaX * 0.15F;
 
-        setPitch(getPitch() + f);
-        lastPitch += f;
+        setXRot(getXRot() + f);
+        xRotO += f;
 
         if (orbiter$shouldInvertMouse() && orbiter$isUpsideDown()) {
-            setYaw(getYaw() - g);
-            lastYaw -= g;
+            setYRot(getYRot() - g);
+            yRotO -= g;
         } else {
-            setYaw(getYaw() + g);
-            lastYaw += g;
+            setYRot(getYRot() + g);
+            yRotO += g;
         }
 
-        Entity vehicle = ((Entity)(Object)this).getVehicle();
-        if (vehicle != null) {
-            vehicle.onPassengerLookAround((Entity)(Object)this);
-        }
-    }
 
-    @Redirect(method = "setAngles", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/math/MathHelper;clamp(FFF)F"))
-    private float orbiter$normalizePitchInSetAngles(float value, float min, float max) {
-        if (orbiter$is360Active()) {
-            float pitch = ((Entity)(Object)this).getPitch();
-            return ((pitch + 180) % 360 + 360) % 360 - 180;
-        }
-        return MathHelper.clamp(value, min, max);
     }
 
     @WrapOperation(
-        method = "setPitch",
+        method = "setXRot",
         at = @At(value = "INVOKE", target = "Ljava/lang/Math;clamp(FFF)F")
     )
     private float orbiter$unlockPitchSet(float value, float min, float max, Operation<Float> original) {
-        if (orbiter$is360Active()) {
-            return value;
+        if (orbiter$shouldUnlockPitch()) {
+            return ((value + 180) % 360 + 360) % 360 - 180;
         }
         return original.call(value, min, max);
     }
@@ -101,7 +94,7 @@ abstract class Camera360JumpMixin {
     }
 
     private float orbiter$normalizedPitch() {
-        return ((((Entity)(Object)this).getPitch() + 180) % 360 + 360) % 360 - 180;
+        return ((((Entity)(Object)this).getXRot() + 180) % 360 + 360) % 360 - 180;
     }
 
     private boolean orbiter$shouldInvertMovement() {
@@ -109,9 +102,9 @@ abstract class Camera360JumpMixin {
         return mod != null && mod.isActive();
     }
 
-    @Redirect(method = "jump", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/math/MathHelper;sin(D)F"))
+    @Redirect(method = "jumpFromGround", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Mth;sin(D)F"))
     private float orbiter$invertJumpSin(double value) {
-        float result = MathHelper.sin(value);
+        float result = Mth.sin(value);
         if (orbiter$is360Active() && orbiter$shouldInvertMovement()) {
             float np = orbiter$normalizedPitch();
             if (np < -90 || np > 90) return -result;
@@ -119,9 +112,9 @@ abstract class Camera360JumpMixin {
         return result;
     }
 
-    @Redirect(method = "jump", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/math/MathHelper;cos(D)F"))
+    @Redirect(method = "jumpFromGround", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Mth;cos(D)F"))
     private float orbiter$invertJumpCos(double value) {
-        float result = MathHelper.cos(value);
+        float result = Mth.cos(value);
         if (orbiter$is360Active() && orbiter$shouldInvertMovement()) {
             float np = orbiter$normalizedPitch();
             if (np < -90 || np > 90) return -result;
@@ -130,7 +123,7 @@ abstract class Camera360JumpMixin {
     }
 }
 
-@Mixin(PlayerEntity.class)
+@Mixin(Player.class)
 abstract class Camera360TravelMixin {
 
     private boolean orbiter$is360Active() {
@@ -139,15 +132,15 @@ abstract class Camera360TravelMixin {
     }
 
     private float orbiter$normalizedPitch() {
-        return ((getPitch() + 180) % 360 + 360) % 360 - 180;
+        return ((getXRot() + 180) % 360 + 360) % 360 - 180;
     }
 
-    private float getPitch() {
-        return ((Entity)(Object)this).getPitch();
+    private float getXRot() {
+        return ((Entity)(Object)this).getXRot();
     }
 
     @ModifyVariable(method = "travel", at = @At("HEAD"), argsOnly = true)
-    private Vec3d orbiter$invertMovement(Vec3d movementInput) {
+    private Vec3 orbiter$invertMovement(Vec3 movementInput) {
         if (!orbiter$is360Active()) return movementInput;
         float np = orbiter$normalizedPitch();
         if (np > 90 || np < -90) {

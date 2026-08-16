@@ -175,11 +175,11 @@ public class BossbarFlash extends CreativeSafetyModule {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.player.networkHandler == null)
+        if (mc.player == null || mc.player.connection == null)
             return;
 
         commandBatcher.setBudgetPerTick(maxCommandsPerTick.get());
-        commandBatcher.drain(mc.player.networkHandler::sendChatCommand);
+        commandBatcher.drain(mc.player.connection::sendCommand);
 
         tickCounter++;
         if (tickCounter < delay.get())
@@ -226,11 +226,11 @@ public class BossbarFlash extends CreativeSafetyModule {
     @Override
     public void onDeactivate() {
         commandBatcher.clear();
-        if (autoCleanup.get() && mc.player != null && mc.player.networkHandler != null) {
+        if (autoCleanup.get() && mc.player != null && mc.player.connection != null) {
             int removed = 0;
             for (int i = 0; i < createdBars.length; i++) {
                 if (!createdBars[i]) continue;
-                mc.player.networkHandler.sendChatCommand("bossbar remove orbiter:bar_" + i);
+                mc.player.connection.sendCommand("bossbar remove orbiter:bar_" + i);
                 removed++;
             }
             if (removed > 0) info("Cleaned up " + removed + " tracked boss bars.");
@@ -252,7 +252,7 @@ public class BossbarFlash extends CreativeSafetyModule {
     }
 
     private void cleanBossBars(boolean fullSlotsClean) {
-        if (mc.player == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.player.connection == null) return;
 
         if (!hasTrackedBars()) {
             info("No Orbiter boss bars to clean.");

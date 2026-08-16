@@ -7,7 +7,7 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.settings.StringSetting;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import net.minecraft.text.Text;
+import net.minecraft.network.chat.Component;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -71,15 +71,15 @@ public class LeaveMessage extends Module {
     private boolean handleLeaveSequence(String source) {
         if (!isActive()) return false;
         if (pendingLeave) return true;
-        if (mc.player == null || mc.getNetworkHandler() == null) return false;
-        if (multiplayerOnly.get() && (mc.isInSingleplayer() || mc.getCurrentServerEntry() == null)) return false;
+        if (mc.player == null || mc.getConnection() == null) return false;
+        if (multiplayerOnly.get() && (mc.hasSingleplayerServer() || mc.getCurrentServer() == null)) return false;
 
         pendingLeave = true;
 
         String msg = leaveMessage.get();
         if (msg != null && !msg.isBlank()) {
-            if (msg.startsWith("/")) mc.player.networkHandler.sendChatCommand(msg.substring(1));
-            else mc.player.networkHandler.sendChatMessage(msg);
+            if (msg.startsWith("/")) mc.player.connection.sendCommand(msg.substring(1));
+            else mc.player.connection.sendChat(msg);
         }
 
         if (notifyInChat.get()) {
@@ -107,8 +107,8 @@ public class LeaveMessage extends Module {
     }
 
     private void disconnectNow() {
-        if (mc.getNetworkHandler() != null) {
-            mc.getNetworkHandler().getConnection().disconnect(Text.literal("[LeaveMessage] delayed disconnect"));
+        if (mc.getConnection() != null) {
+            mc.getConnection().getConnection().disconnect(Component.literal("[LeaveMessage] delayed disconnect"));
         }
 
         pendingLeave = false;

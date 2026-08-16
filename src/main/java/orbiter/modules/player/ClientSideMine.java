@@ -12,12 +12,12 @@ import meteordevelopment.meteorclient.gui.widgets.pressable.WButton;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.network.packet.s2c.play.BlockUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.ChunkDeltaUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.core.BlockPos;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -62,19 +62,16 @@ public class ClientSideMine extends Module {
     }
 
     private void performReset() {
-        if (mc.world != null) {
+        if (mc.level != null) {
             for (BlockPos pos : clientMinedBlocks) {
                 BlockState restore = originalStates.get(pos);
                 if (restore != null && !restore.isAir()) {
-                    mc.world.setBlockState(pos, restore);
-                    mc.world.scheduleBlockRerenderIfNeeded(pos, Blocks.AIR.getDefaultState(), restore);
+                    mc.level.setBlock(pos, restore, 3);
+                    mc.level.setBlocksDirty(pos, Blocks.AIR.defaultBlockState(), restore);
                 } else {
 
-                    if (mc.worldRenderer != null) {
-                        mc.worldRenderer.scheduleBlockRenders(
-                            pos.getX() - 1, pos.getY() - 1, pos.getZ() - 1,
-                            pos.getX() + 1, pos.getY() + 1, pos.getZ() + 1
-                        );
+                    if (mc.levelRenderer != null) {
+                        mc.level.setSectionDirtyWithNeighbors(pos.getX() >> 4, pos.getY() >> 4, pos.getZ() >> 4);
                     }
                 }
             }
@@ -91,16 +88,16 @@ public class ClientSideMine extends Module {
 
     @EventHandler
     private void onStartBreakingBlock(StartBreakingBlockEvent event) {
-        if (mc.world == null || mc.player == null || event.blockPos == null) return;
+        if (mc.level == null || mc.player == null || event.blockPos == null) return;
 
-        BlockState state = mc.world.getBlockState(event.blockPos);
+        BlockState state = mc.level.getBlockState(event.blockPos);
         if (state.isAir()) return;
-        originalStates.put(event.blockPos.toImmutable(), state);
+        originalStates.put(event.blockPos.immutable(), state);
 
-        mc.world.setBlockState(event.blockPos, Blocks.AIR.getDefaultState());
+        mc.level.setBlock(event.blockPos, Blocks.AIR.defaultBlockState(), 3);
 
         if (antiRubberBand.get() || blockServerUpdates.get()) {
-            BlockPos immutable = event.blockPos.toImmutable();
+            BlockPos immutable = event.blockPos.immutable();
             clientMinedBlocks.add(immutable);
 
             if (clientMinedBlocks.size() > maxTrackedBlocks.get()) {
@@ -133,37 +130,37 @@ public class ClientSideMine extends Module {
 
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
-        if (antiRubberBand.get() && expectingTeleport && event.packet instanceof PlayerPositionLookS2CPacket) {
+        if (antiRubberBand.get() && expectingTeleport && event.packet instanceof ClientboundPlayerPositionPacket) {
             event.cancel();
-            if (mc.world != null) {
+            if (mc.level != null) {
                 for (BlockPos pos : clientMinedBlocks) {
-                    mc.world.setBlockState(pos, Blocks.AIR.getDefaultState());
+                    mc.level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
                 }
             }
             return;
         }
 
         if (blockServerUpdates.get()) {
-            if (event.packet instanceof BlockUpdateS2CPacket packet) {
+            if (event.packet instanceof ClientboundBlockUpdatePacket packet) {
                 if (clientMinedBlocks.contains(packet.getPos())) {
-                    BlockPos pos = packet.getPos().toImmutable();
+                    BlockPos pos = packet.getPos().immutable();
                     mc.execute(() -> {
-                        if (mc.world != null) {
-                            mc.world.setBlockState(pos, Blocks.AIR.getDefaultState());
+                        if (mc.level != null) {
+                            mc.level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
                         }
                     });
                 }
             }
 
-            if (event.packet instanceof ChunkDeltaUpdateS2CPacket packet) {
-                packet.visitUpdates((pos, state) -> {
-                    BlockPos immutable = pos.toImmutable();
+            if (event.packet instanceof ClientboundSectionBlocksUpdatePacket packet) {
+                packet.runUpdates((pos, state) -> {
+                    BlockPos immutable = pos.immutable();
                     if (clientMinedBlocks.contains(immutable)) {
                         mc.execute(() -> {
-                            if (mc.world != null) {
-                                mc.world.setBlockState(immutable, Blocks.AIR.getDefaultState());
+                            if (mc.level != null) {
+                                mc.level.setBlock(immutable, Blocks.AIR.defaultBlockState(), 3);
                             }
                         });
                     }

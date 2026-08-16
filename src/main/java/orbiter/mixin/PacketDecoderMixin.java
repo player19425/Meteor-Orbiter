@@ -2,9 +2,9 @@ package orbiter.mixin;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
-import net.minecraft.network.handler.DecoderHandler;
-import net.minecraft.network.listener.PacketListener;
-import net.minecraft.network.state.NetworkState;
+import net.minecraft.network.PacketDecoder;
+import net.minecraft.network.PacketListener;
+import net.minecraft.network.ProtocolInfo;
 import orbiter.modules.misc.RawPacketCapture;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -14,11 +14,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.List;
 
-@Mixin(DecoderHandler.class)
+@Mixin(PacketDecoder.class)
 public abstract class PacketDecoderMixin<T extends PacketListener> {
 
     @Shadow
-    private NetworkState<T> state;
+    private ProtocolInfo<T> protocolInfo;
 
     @Inject(method = "decode", at = @At("HEAD"))
     private void orbiter$captureRawBytes(ChannelHandlerContext ctx, ByteBuf buf, List<Object> out, CallbackInfo ci) {

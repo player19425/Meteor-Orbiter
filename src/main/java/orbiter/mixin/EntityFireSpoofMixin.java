@@ -1,7 +1,7 @@
 package orbiter.mixin;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.Entity;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.Entity;
 import orbiter.modules.ClientSideThings;
 import orbiter.util.ClientSpoofState;
 import org.spongepowered.asm.mixin.Mixin;
@@ -14,7 +14,7 @@ public abstract class EntityFireSpoofMixin {
     @Inject(method = "isOnFire", at = @At("HEAD"), cancellable = true)
     private void orbiter$isOnFire(CallbackInfoReturnable<Boolean> cir) {
         ClientSideThings module = ClientSpoofState.module();
-        MinecraftClient client = MinecraftClient.getInstance();
+        Minecraft client = Minecraft.getInstance();
         if (module != null && client.player != null && (Object) this == client.player && module.shouldSpoofBurning()) {
             cir.setReturnValue(true);
         }

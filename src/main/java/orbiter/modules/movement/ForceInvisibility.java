@@ -11,8 +11,8 @@ import meteordevelopment.meteorclient.events.game.GameJoinedEvent;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
-import meteordevelopment.meteorclient.mixin.PlayerMoveC2SPacketAccessor;
-import meteordevelopment.meteorclient.mixininterface.IPlayerMoveC2SPacket;
+import meteordevelopment.meteorclient.mixin.ServerboundMovePlayerPacketAccessor;
+import meteordevelopment.meteorclient.mixininterface.IServerboundMovePlayerPacket;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.ColorSetting;
@@ -27,24 +27,24 @@ import meteordevelopment.meteorclient.systems.modules.movement.Flight;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.ExperienceOrbEntity;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.network.packet.Packet;
-import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractEntityC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.c2s.play.TeleportConfirmC2SPacket;
-import net.minecraft.network.packet.s2c.play.PlayerPositionLookS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlayerRespawnS2CPacket;
-import net.minecraft.network.packet.s2c.play.PositionFlag;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.util.math.Vec3i;
-import net.minecraft.world.World;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
+import net.minecraft.world.entity.Relative;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.core.Vec3i;
+import net.minecraft.world.level.Level;
 
 public class ForceInvisibility
 extends Module {
@@ -79,14 +79,14 @@ extends Module {
 
     private static final class QueuedAction {
         private final Packet<?> packet;
-        private final Vec3d target;
+        private final Vec3 target;
         private final PendingOutcome outcome;
         private final boolean teleportXZ;
         private final boolean entityInteraction;
         private final int postActionHoldTicks;
         private final int createdAtAge;
 
-        private QueuedAction(Packet<?> packet, Vec3d target, PendingOutcome outcome, boolean teleportXZ, boolean entityInteraction, int postActionHoldTicks, int createdAtAge) {
+        private QueuedAction(Packet<?> packet, Vec3 target, PendingOutcome outcome, boolean teleportXZ, boolean entityInteraction, int postActionHoldTicks, int createdAtAge) {
             this.packet = packet;
             this.target = target;
             this.outcome = outcome;
@@ -360,18 +360,18 @@ extends Module {
     }
 
     public void onActivate() {
-        if (this.mc.player == null || this.mc.getNetworkHandler() == null) return;
+        if (this.mc.player == null || this.mc.getConnection() == null) return;
         this.resetRuntimeState();
         this.serverX = this.mc.player.getX();
         this.serverZ = this.mc.player.getZ();
         this.currentServerY = this.clampWorldY(this.mc.player.getY());
         this.lastPlayerEntityId = this.mc.player.getId();
-        this.lastPlayerAge = this.mc.player.age;
+        this.lastPlayerAge = this.mc.player.tickCount;
         this.mc.player.fallDistance = 0.0;
     }
 
     public void onDeactivate() {
-        if (this.mc.player != null && this.mc.getNetworkHandler() != null) {
+        if (this.mc.player != null && this.mc.getConnection() != null) {
             double realX = this.mc.player.getX();
             double realY = this.clampWorldY(this.mc.player.getY());
             double realZ = this.mc.player.getZ();
@@ -379,8 +379,8 @@ extends Module {
             this.serverZ = realZ;
             this.currentServerY = realY;
             this.withPacketBypass(() -> this.sendDirectResyncPackets(realX, realY, realZ, 6));
-            this.mc.player.setPosition(realX, realY, realZ);
-            this.mc.player.setVelocity(this.mc.player.getVelocity().x, 0.0, this.mc.player.getVelocity().z);
+            this.mc.player.setPos(realX, realY, realZ);
+            this.mc.player.setDeltaMovement(this.mc.player.getDeltaMovement().x, 0.0, this.mc.player.getDeltaMovement().z);
             this.mc.player.fallDistance = 0.0;
         }
         this.resetRuntimeState();
@@ -400,7 +400,7 @@ extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (this.mc.player == null || this.mc.getNetworkHandler() == null || this.mc.world == null) {
+        if (this.mc.player == null || this.mc.getConnection() == null || this.mc.level == null) {
             return;
         }
         double realX = this.mc.player.getX();
@@ -517,7 +517,7 @@ extends Module {
 
     @EventHandler
     private void onPacketSend(PacketEvent.Send event) {
-        if (this.mc.player == null || this.mc.getNetworkHandler() == null || this.mc.world == null) {
+        if (this.mc.player == null || this.mc.getConnection() == null || this.mc.level == null) {
             return;
         }
         if (this.sendingPackets) {
@@ -530,28 +530,28 @@ extends Module {
             return;
         }
         Packet packet = event.packet;
-        if (packet instanceof PlayerMoveC2SPacket) {
-            PlayerMoveC2SPacket move = (PlayerMoveC2SPacket)packet;
-            if (((IPlayerMoveC2SPacket)move).meteor$getTag() == 1337) {
+        if (packet instanceof ServerboundMovePlayerPacket) {
+            ServerboundMovePlayerPacket move = (ServerboundMovePlayerPacket)packet;
+            if (((IServerboundMovePlayerPacket)move).meteor$getTag() == 1337) {
                 return;
             }
-            ((PlayerMoveC2SPacketAccessor)move).meteor$setOnGround(true);
-            if (this.mc.player.fallDistance > 2.5 || this.mc.player.getVelocity().y < -0.3) {
+            ((ServerboundMovePlayerPacketAccessor)move).meteor$setOnGround(true);
+            if (this.mc.player.fallDistance > 2.5 || this.mc.player.getDeltaMovement().y < -0.3) {
                 this.extraNoFallTicks = Math.max(this.extraNoFallTicks, 24);
                 this.noFallAssistCooldownTicks = 0;
             }
             if (Modules.get().isActive(Flight.class)) {
                 return;
             }
-            if (move.changesPosition()) {
+            if (move.hasPosition()) {
                 event.cancel();
             }
             return;
         }
         packet = event.packet;
-        if (packet instanceof PlayerActionC2SPacket) {
-            PlayerActionC2SPacket packet2 = (PlayerActionC2SPacket)packet;
-            PlayerActionC2SPacket.Action action = packet2.getAction();
+        if (packet instanceof ServerboundPlayerActionPacket) {
+            ServerboundPlayerActionPacket packet2 = (ServerboundPlayerActionPacket)packet;
+            ServerboundPlayerActionPacket.Action action = packet2.getAction();
             if (this.isMiningAction(action)) {
                 if (this.breakMode.get() == BreakMode.Ignore) {
                     return;
@@ -565,13 +565,13 @@ extends Module {
             return;
         }
         packet = event.packet;
-        if (packet instanceof PlayerInteractBlockC2SPacket) {
-            PlayerInteractBlockC2SPacket packet3 = (PlayerInteractBlockC2SPacket)packet;
-            BlockPos blockPos = packet3.getBlockHitResult().getBlockPos();
+        if (packet instanceof ServerboundUseItemOnPacket) {
+            ServerboundUseItemOnPacket packet3 = (ServerboundUseItemOnPacket)packet;
+            BlockPos blockPos = packet3.getHitResult().getBlockPos();
             boolean container = this.isContainerInteraction(blockPos);
             if (this.isCreativePlayer() && ((Boolean)this.creativeFastBlockActions.get()).booleanValue() && !container && ((Boolean)this.allowPlace.get()).booleanValue() && this.activeAction == null && this.actionQueue.isEmpty() && this.holdMode != HoldMode.Mining) {
                 event.cancel();
-                if (!this.sendCreativeInstantBlockAction((Packet<?>)packet3, packet3.getBlockHitResult().getPos(), (Boolean)this.teleportInteractions.get())) {
+                if (!this.sendCreativeInstantBlockAction((Packet<?>)packet3, packet3.getHitResult().getLocation(), (Boolean)this.teleportInteractions.get())) {
                     this.handleBlockInteract(packet3);
                 }
                 return;
@@ -581,8 +581,8 @@ extends Module {
             return;
         }
         packet = event.packet;
-        if (packet instanceof PlayerInteractEntityC2SPacket) {
-            PlayerInteractEntityC2SPacket packet4 = (PlayerInteractEntityC2SPacket)packet;
+        if (packet instanceof ServerboundInteractPacket) {
+            ServerboundInteractPacket packet4 = (ServerboundInteractPacket)packet;
             event.cancel();
             this.handleEntityInteract(packet4);
         }
@@ -590,7 +590,7 @@ extends Module {
 
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (event.packet instanceof PlayerRespawnS2CPacket) {
+        if (event.packet instanceof ClientboundRespawnPacket) {
             this.respawnGraceTicks = 40;
             this.vclipDamageSafetyTicks = 12;
             if (this.mc.player != null) {
@@ -601,14 +601,14 @@ extends Module {
             return;
         }
         Packet packet = event.packet;
-        if (!(packet instanceof PlayerPositionLookS2CPacket)) {
+        if (!(packet instanceof ClientboundPlayerPositionPacket)) {
             return;
         }
-        PlayerPositionLookS2CPacket packet2 = (PlayerPositionLookS2CPacket)packet;
+        ClientboundPlayerPositionPacket packet2 = (ClientboundPlayerPositionPacket)packet;
         if (this.mc.player == null) {
             return;
         }
-        Vec3d packetPos = this.resolvePacketPosition(packet2);
+        Vec3 packetPos = this.resolvePacketPosition(packet2);
         double realX = this.mc.player.getX();
         double realY = this.mc.player.getY();
         double realZ = this.mc.player.getZ();
@@ -621,7 +621,7 @@ extends Module {
             return;
         }
         event.cancel();
-        this.withPacketBypass(() -> this.sendPacket((Packet<?>)new TeleportConfirmC2SPacket(packet2.teleportId())));
+        this.withPacketBypass(() -> this.mc.getConnection().send((Packet<?>)new ServerboundAcceptTeleportationPacket(packet2.id())));
         if (this.vclipAttemptPending) {
             this.evaluateVClipCorrection(packetPos);
         }
@@ -666,10 +666,10 @@ extends Module {
             return;
         }
         if (((Boolean)this.renderServerPos.get()).booleanValue()) {
-            Box box = new Box(this.serverX - 0.3, this.currentServerY, this.serverZ - 0.3, this.serverX + 0.3, this.currentServerY + 1.8, this.serverZ + 0.3);
+            AABB box = new AABB(this.serverX - 0.3, this.currentServerY, this.serverZ - 0.3, this.serverX + 0.3, this.currentServerY + 1.8, this.serverZ + 0.3);
             event.renderer.box(box, (Color)this.serverBoxColor.get(), (Color)this.serverLineColor.get(), ShapeMode.Both, 1);
             if (((Boolean)this.renderLinkLine.get()).booleanValue()) {
-                Vec3d eye = this.mc.player.getEyePos();
+                Vec3 eye = this.mc.player.getEyePosition();
                 event.renderer.line(eye.x, eye.y, eye.z, this.serverX, this.currentServerY + 1.62, this.serverZ, (Color)this.serverLineColor.get());
             }
         }
@@ -724,7 +724,7 @@ extends Module {
         this.clearActionState();
         this.resetHoldState();
         this.resetVClipState();
-        if (!this.isActive() || this.mc.player == null || this.mc.getNetworkHandler() == null) {
+        if (!this.isActive() || this.mc.player == null || this.mc.getConnection() == null) {
             return;
         }
         this.hardResyncToReal(this.mc.player.getX(), this.mc.player.getY(), this.mc.player.getZ(), false);
@@ -755,7 +755,7 @@ extends Module {
     }
 
     private boolean trySendEscapeBurst(double realY) {
-        if (!this.escapeOverrideActive || this.mc.player == null || this.mc.getNetworkHandler() == null) {
+        if (!this.escapeOverrideActive || this.mc.player == null || this.mc.getConnection() == null) {
             return false;
         }
         double targetY = this.getDesiredAnchorY(realY);
@@ -789,13 +789,13 @@ extends Module {
         return sent[0] || Math.abs(targetY - this.currentServerY) <= 1.0;
     }
 
-    private void handleMiningPacket(PlayerActionC2SPacket packet, PlayerActionC2SPacket.Action action) {
+    private void handleMiningPacket(ServerboundPlayerActionPacket packet, ServerboundPlayerActionPacket.Action action) {
         if (this.breakMode.get() == BreakMode.Ignore) {
             return;
         }
-        boolean start = action == PlayerActionC2SPacket.Action.START_DESTROY_BLOCK;
-        boolean stop = action == PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK || action == PlayerActionC2SPacket.Action.ABORT_DESTROY_BLOCK;
-        int n = this.lastMiningPacketAge = this.mc.player != null ? this.mc.player.age : -1;
+        boolean start = action == ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK;
+        boolean stop = action == ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK || action == ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK;
+        int n = this.lastMiningPacketAge = this.mc.player != null ? this.mc.player.tickCount : -1;
         if (start) {
             this.miningHoldActive = true;
             this.miningHoldFailsafeTicks = 50;
@@ -809,28 +809,28 @@ extends Module {
         }
         PendingOutcome outcome = start ? PendingOutcome.HoldMining : PendingOutcome.Return;
         boolean prioritize = true;
-        this.queueAction((Packet<?>)packet, Vec3d.ofCenter((Vec3i)packet.getPos()), outcome, 0, prioritize, (Boolean)this.teleportInteractions.get(), false);
+        this.queueAction((Packet<?>)packet, Vec3.atCenterOf((Vec3i)packet.getPos()), outcome, 0, prioritize, (Boolean)this.teleportInteractions.get(), false);
     }
 
-    private boolean handleCreativeMiningImmediate(PlayerActionC2SPacket packet, PlayerActionC2SPacket.Action action) {
-        if (packet == null || this.mc.player == null || this.mc.getNetworkHandler() == null) {
+    private boolean handleCreativeMiningImmediate(ServerboundPlayerActionPacket packet, ServerboundPlayerActionPacket.Action action) {
+        if (packet == null || this.mc.player == null || this.mc.getConnection() == null) {
             return false;
         }
         if (!this.isMiningAction(action)) {
             return false;
         }
-        boolean start = action == PlayerActionC2SPacket.Action.START_DESTROY_BLOCK;
-        boolean stop = action == PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK || action == PlayerActionC2SPacket.Action.ABORT_DESTROY_BLOCK;
+        boolean start = action == ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK;
+        boolean stop = action == ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK || action == ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK;
         double realX = this.mc.player.getX();
         double realY = this.clampWorldY(this.mc.player.getY());
         double realZ = this.mc.player.getZ();
-        Vec3d target = Vec3d.ofCenter((Vec3i)packet.getPos());
+        Vec3 target = Vec3.atCenterOf((Vec3i)packet.getPos());
         double actionX = (Boolean)this.teleportInteractions.get() != false ? target.x : realX;
         double actionZ = (Boolean)this.teleportInteractions.get() != false ? target.z : realZ;
         int downPackets = Math.max(1, (Integer)this.creativeDownResyncPackets.get());
         this.withPacketBypass(() -> {
             this.sendDirectResyncPackets(actionX, realY, actionZ, downPackets);
-            this.mc.getNetworkHandler().sendPacket((Packet)packet);
+            this.mc.getConnection().send((Packet)packet);
             if (((Boolean)this.actionPostSync.get()).booleanValue()) {
                 this.sendDirectResyncPackets(actionX, realY, actionZ, 1);
             }
@@ -841,7 +841,7 @@ extends Module {
         this.movementCooldownTicks = 0;
         this.consecutiveSendFailures = 0;
         this.extraNoFallTicks = Math.max(this.extraNoFallTicks, 16);
-        this.lastMiningPacketAge = this.mc.player.age;
+        this.lastMiningPacketAge = this.mc.player.tickCount;
         if (start) {
             if (((Boolean)this.creativeClearActionQueue.get()).booleanValue()) {
                 this.clearActionState();
@@ -861,16 +861,16 @@ extends Module {
         return true;
     }
 
-    private boolean isMiningAction(PlayerActionC2SPacket.Action action) {
-        return action == PlayerActionC2SPacket.Action.START_DESTROY_BLOCK || action == PlayerActionC2SPacket.Action.STOP_DESTROY_BLOCK || action == PlayerActionC2SPacket.Action.ABORT_DESTROY_BLOCK;
+    private boolean isMiningAction(ServerboundPlayerActionPacket.Action action) {
+        return action == ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK || action == ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK || action == ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK;
     }
 
     private boolean isCreativePlayer() {
-        return this.mc.player != null && this.mc.player.getAbilities().creativeMode;
+        return this.mc.player != null && this.mc.player.getAbilities().instabuild;
     }
 
-    private boolean sendCreativeInstantBlockAction(Packet<?> packet, Vec3d target, boolean teleportXZ) {
-        if (packet == null || this.mc.player == null || this.mc.getNetworkHandler() == null) {
+    private boolean sendCreativeInstantBlockAction(Packet<?> packet, Vec3 target, boolean teleportXZ) {
+        if (packet == null || this.mc.player == null || this.mc.getConnection() == null) {
             return false;
         }
         double realX = this.mc.player.getX();
@@ -887,17 +887,17 @@ extends Module {
         }
         int downPackets = Math.max(1, (Integer)this.creativeDownResyncPackets.get());
         int upPackets = Math.max(1, (Integer)this.creativeUpResyncPackets.get());
-        if (this.lastCreativeInstantActionAge >= 0 && this.mc.player.age - this.lastCreativeInstantActionAge <= 1) {
+        if (this.lastCreativeInstantActionAge >= 0 && this.mc.player.tickCount - this.lastCreativeInstantActionAge <= 1) {
             downPackets = 1;
             upPackets = 1;
         }
-        this.lastCreativeInstantActionAge = this.mc.player.age;
+        this.lastCreativeInstantActionAge = this.mc.player.tickCount;
         int finalDownPackets = downPackets;
         int finalUpPackets = upPackets;
         double finalReturnY = returnY;
         this.withPacketBypass(() -> {
             this.sendDirectResyncPackets(actionX, actionY, actionZ, finalDownPackets);
-            this.mc.getNetworkHandler().sendPacket(packet);
+            this.mc.getConnection().send(packet);
             this.sendDirectResyncPackets(returnX, finalReturnY, returnZ, finalUpPackets);
         });
         if (((Boolean)this.creativeClearActionQueue.get()).booleanValue()) {
@@ -916,18 +916,18 @@ extends Module {
         return true;
     }
 
-    private void handleBlockInteract(PlayerInteractBlockC2SPacket packet) {
-        boolean container = this.isContainerInteraction(packet.getBlockHitResult().getBlockPos());
+    private void handleBlockInteract(ServerboundUseItemOnPacket packet) {
+        boolean container = this.isContainerInteraction(packet.getHitResult().getBlockPos());
         if (container && !((Boolean)this.allowStorage.get()).booleanValue()) {
             return;
         }
         if (!container && !((Boolean)this.allowPlace.get()).booleanValue()) {
             return;
         }
-        this.queueAction((Packet<?>)packet, packet.getBlockHitResult().getPos(), container ? PendingOutcome.HoldContainer : PendingOutcome.Return, container ? 0 : this.getPlacePostActionTicks(), false, (Boolean)this.teleportInteractions.get(), false);
+        this.queueAction((Packet<?>)packet, packet.getHitResult().getLocation(), container ? PendingOutcome.HoldContainer : PendingOutcome.Return, container ? 0 : this.getPlacePostActionTicks(), false, (Boolean)this.teleportInteractions.get(), false);
     }
 
-    private void handleEntityInteract(PlayerInteractEntityC2SPacket packet) {
+    private void handleEntityInteract(ServerboundInteractPacket packet) {
         if (!((Boolean)this.allowEntityHit.get()).booleanValue()) {
             return;
         }
@@ -945,17 +945,17 @@ extends Module {
         if (this.mc.player == null || this.actionQueue.isEmpty()) {
             return;
         }
-        int nowAge = this.mc.player.age;
+        int nowAge = this.mc.player.tickCount;
         int maxQueuedAge = 120;
         while (!this.actionQueue.isEmpty() && (head = this.actionQueue.peekFirst()) != null && head.createdAtAge <= nowAge && nowAge - head.createdAtAge > maxQueuedAge) {
             this.actionQueue.pollFirst();
         }
     }
 
-    private void queueAction(Packet<?> packet, Vec3d target, PendingOutcome outcome, int postActionHoldTicks, boolean prioritizeFront, boolean teleportXZ, boolean entityInteraction) {
+    private void queueAction(Packet<?> packet, Vec3 target, PendingOutcome outcome, int postActionHoldTicks, boolean prioritizeFront, boolean teleportXZ, boolean entityInteraction) {
         int createdAtAge;
-        Vec3d safeTarget = this.sanitizeActionTarget(target);
-        QueuedAction queued = new QueuedAction(packet, safeTarget, outcome, teleportXZ, entityInteraction, postActionHoldTicks, createdAtAge = this.mc.player != null ? this.mc.player.age : 0);
+        Vec3 safeTarget = this.sanitizeActionTarget(target);
+        QueuedAction queued = new QueuedAction(packet, safeTarget, outcome, teleportXZ, entityInteraction, postActionHoldTicks, createdAtAge = this.mc.player != null ? this.mc.player.tickCount : 0);
         if (!this.shouldSkipDuplicateCheck(queued) && this.isDuplicateAction(queued)) {
             return;
         }
@@ -1015,7 +1015,7 @@ extends Module {
     }
 
     private boolean sendActionNow(QueuedAction action, double actionX, double actionY, double actionZ) {
-        if (this.mc.player == null || this.mc.getNetworkHandler() == null) {
+        if (this.mc.player == null || this.mc.getConnection() == null) {
             return false;
         }
         if (this.isMiningActionPacket(action.packet)) {
@@ -1068,13 +1068,13 @@ extends Module {
     }
 
     private boolean sendMiningActionNow(Packet<?> packet, double actionX, double actionY, double actionZ) {
-        if (packet == null || this.mc.player == null || this.mc.getNetworkHandler() == null) {
+        if (packet == null || this.mc.player == null || this.mc.getConnection() == null) {
             return false;
         }
         int downPackets = this.isCreativePlayer() ? 2 : 1;
         this.withPacketBypass(() -> {
             this.sendDirectResyncPackets(actionX, actionY, actionZ, downPackets);
-            this.mc.getNetworkHandler().sendPacket(packet);
+            this.mc.getConnection().send(packet);
             if (((Boolean)this.actionPostSync.get()).booleanValue()) {
                 this.sendDirectResyncPackets(actionX, actionY, actionZ, 1);
             }
@@ -1089,7 +1089,7 @@ extends Module {
     }
 
     private void sendFastRiseAfterHit(double realY) {
-        if (this.mc.player == null || this.mc.getNetworkHandler() == null) {
+        if (this.mc.player == null || this.mc.getConnection() == null) {
             return;
         }
         if (!((Boolean)this.fastRiseAfterHit.get()).booleanValue()) {
@@ -1119,7 +1119,7 @@ extends Module {
         if (action.outcome == PendingOutcome.HoldContainer) {
             this.holdMode = HoldMode.Container;
             this.containerGraceTicksLeft = Math.max(1, (Integer)this.containerGraceTicks.get());
-            this.containerScreenSeen = this.mc.currentScreen instanceof HandledScreen;
+            this.containerScreenSeen = this.mc.gui.screen() instanceof AbstractContainerScreen;
             return;
         }
         if (action.postActionHoldTicks > 0) {
@@ -1131,7 +1131,7 @@ extends Module {
     }
 
     private void updateHoldState() {
-        if (this.mc.player == null || this.mc.world == null) {
+        if (this.mc.player == null || this.mc.level == null) {
             return;
         }
         if (this.holdMode == HoldMode.Mining) {
@@ -1146,7 +1146,7 @@ extends Module {
             }
         }
         if (this.holdMode == HoldMode.Container) {
-            if (this.mc.currentScreen instanceof HandledScreen) {
+            if (this.mc.gui.screen() instanceof AbstractContainerScreen) {
                 this.containerScreenSeen = true;
             } else if (!this.containerScreenSeen) {
                 if (this.containerGraceTicksLeft > 0) {
@@ -1201,7 +1201,7 @@ extends Module {
             --this.miningNoInputReleaseTicks;
         }
         int silenceTicks = Math.max(4, (Integer)this.miningPacketSilenceTicks.get());
-        boolean packetSilenceExpired = this.lastMiningPacketAge >= 0 && this.mc.player.age > this.lastMiningPacketAge + silenceTicks;
+        boolean packetSilenceExpired = this.lastMiningPacketAge >= 0 && this.mc.player.tickCount > this.lastMiningPacketAge + silenceTicks;
         boolean bl = noInputExpired = !attackPressed && this.miningNoInputReleaseTicks <= 0;
         if ((packetSilenceExpired || noInputExpired) && this.activeAction == null) {
             this.miningHoldActive = false;
@@ -1211,16 +1211,16 @@ extends Module {
     }
 
     private boolean isAttackKeyPressed() {
-        return this.mc.options != null && this.mc.options.attackKey != null && this.mc.options.attackKey.isPressed();
+        return this.mc.options != null && this.mc.options.keyAttack != null && this.mc.options.keyAttack.isDown();
     }
 
     private boolean hasNearbyCollectibles() {
-        if (this.mc.player == null || this.mc.world == null) {
+        if (this.mc.player == null || this.mc.level == null) {
             return false;
         }
         double rangeSq = (Double)this.collectRange.get() * (Double)this.collectRange.get();
-        for (Entity entity : this.mc.world.getEntities()) {
-            if (!(entity instanceof ItemEntity) && !(entity instanceof ExperienceOrbEntity) || entity.isRemoved() || !(entity.squaredDistanceTo((Entity)this.mc.player) <= rangeSq)) continue;
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) this.mc.level).meteor$getEntityLookup().getAll()) {
+            if (!(entity instanceof ItemEntity) && !(entity instanceof ExperienceOrb) || entity.isRemoved() || !(entity.distanceToSqr((Entity)this.mc.player) <= rangeSq)) continue;
             return true;
         }
         return false;
@@ -1228,18 +1228,18 @@ extends Module {
 
     private void sendPermanentNoFall(double realX, double realY, double realZ) {
         boolean needsAssist;
-        if (this.mc.player == null || this.mc.getNetworkHandler() == null) {
+        if (this.mc.player == null || this.mc.getConnection() == null) {
             return;
         }
         boolean vclipFalling = this.vclipAttemptPending && this.pendingVClipTargetY < this.pendingVClipStartY;
         double desyncY = Math.abs(this.currentServerY - realY);
-        boolean emergencyAssist = this.mc.player.fallDistance >= 2.5 || this.mc.player.getVelocity().y <= -0.3;
+        boolean emergencyAssist = this.mc.player.fallDistance >= 2.5 || this.mc.player.getDeltaMovement().y <= -0.3;
         boolean aggressiveAssist = (Boolean)this.aggressiveNoFall.get() != false && desyncY >= (Double)this.noFallDesyncThreshold.get();
-        boolean bl = needsAssist = this.extraNoFallTicks > 0 || this.mc.player.fallDistance > (double)0.8f || this.mc.player.getVelocity().y < -0.08 || this.mc.player.hurtTime > 0 || vclipFalling || aggressiveAssist || emergencyAssist;
+        boolean bl = needsAssist = this.extraNoFallTicks > 0 || this.mc.player.fallDistance > (double)0.8f || this.mc.player.getDeltaMovement().y < -0.08 || this.mc.player.hurtTime > 0 || vclipFalling || aggressiveAssist || emergencyAssist;
         if (needsAssist && (emergencyAssist || this.noFallAssistCooldownTicks <= 0)) {
             boolean horizontalCollision = this.mc.player.horizontalCollision;
             this.withPacketBypass(() -> {
-                PlayerMoveC2SPacket.OnGroundOnly packet = new PlayerMoveC2SPacket.OnGroundOnly(true, horizontalCollision);
+                ServerboundMovePlayerPacket.StatusOnly packet = new ServerboundMovePlayerPacket.StatusOnly(true, horizontalCollision);
                 if (!this.trySendPacketNow((Packet<?>)packet)) {
                     this.sendTrackedPosition(this.serverX, this.currentServerY, this.serverZ, true);
                 }
@@ -1272,7 +1272,7 @@ extends Module {
             this.antiKickOffTicksLeft = Math.max(1, (Integer)this.antiKickOffTicks.get());
         }
 
-        if (this.antiKickOffTicksLeft > 0 && this.mc.getNetworkHandler() != null && this.mc.player != null) {
+        if (this.antiKickOffTicksLeft > 0 && this.mc.getConnection() != null && this.mc.player != null) {
             double step = Math.max(0.01, Math.min((Double)this.antiKickDownStep.get(), 0.4));
             double pulseY = this.currentServerY - step;
             this.withPacketBypass(() -> {
@@ -1354,7 +1354,7 @@ extends Module {
         this.clearPendingVClipAttempt();
     }
 
-    private void evaluateVClipCorrection(Vec3d packetPos) {
+    private void evaluateVClipCorrection(Vec3 packetPos) {
         boolean closerToStart;
         boolean bl = closerToStart = Math.abs(packetPos.y - this.pendingVClipStartY) + 0.05 < Math.abs(packetPos.y - this.pendingVClipTargetY);
         if (closerToStart) {
@@ -1391,7 +1391,7 @@ extends Module {
     }
 
     private boolean sendVClipBurst(double x, double y, double z) {
-        if (this.mc.player == null || this.mc.getNetworkHandler() == null) {
+        if (this.mc.player == null || this.mc.getConnection() == null) {
             return false;
         }
         int burst = Math.max(1, (Integer)this.vclipBurstPackets.get());
@@ -1408,7 +1408,7 @@ extends Module {
             confirm = Math.max(confirm, 2);
         }
         int repeats = Math.max(0, Math.min(4, burst - 1 + confirm));
-        for (int i = 0; i < repeats && this.trySendPacketNow((Packet<?>)new PlayerMoveC2SPacket.OnGroundOnly(true, this.mc.player.horizontalCollision)); ++i) {
+        for (int i = 0; i < repeats && this.trySendPacketNow((Packet<?>)new ServerboundMovePlayerPacket.StatusOnly(true, this.mc.player.horizontalCollision)); ++i) {
         }
         return true;
     }
@@ -1446,8 +1446,8 @@ extends Module {
 
     private boolean sendTrackedPosition(double x, double y, double z, boolean onGround) {
         double clampedY;
-        PlayerMoveC2SPacket.PositionAndOnGround packet;
-        if (this.mc.player == null || this.mc.getNetworkHandler() == null) {
+        ServerboundMovePlayerPacket.Pos packet;
+        if (this.mc.player == null || this.mc.getConnection() == null) {
             return false;
         }
         double targetY = this.clampWorldY(y);
@@ -1469,14 +1469,14 @@ extends Module {
             sendY = this.currentServerY + Math.copySign(maxYStep, dy);
         }
 
-        if (this.antiKickOffTicksLeft > 0 && this.mc.player != null && !this.mc.player.isOnGround()) {
+        if (this.antiKickOffTicksLeft > 0 && this.mc.player != null && !this.mc.player.onGround()) {
             boolean ascendingOrFlat = sendY >= this.currentServerY;
             boolean dropTooSmall = this.currentServerY - sendY < (Double) this.antiKickDownStep.get();
             if (ascendingOrFlat || dropTooSmall) {
                 sendY = Math.min(sendY, this.currentServerY - (Double) this.antiKickDownStep.get());
             }
         }
-        if (!this.trySendPacketNow((Packet<?>)(packet = new PlayerMoveC2SPacket.PositionAndOnGround(sendX, clampedY = this.clampWorldY(sendY), sendZ, onGround, this.mc.player.horizontalCollision)))) {
+        if (!this.trySendPacketNow((Packet<?>)(packet = new ServerboundMovePlayerPacket.Pos(sendX, clampedY = this.clampWorldY(sendY), sendZ, onGround, this.mc.player.horizontalCollision)))) {
             this.consecutiveSendFailures = Math.min(36, this.consecutiveSendFailures + 1);
             return false;
         }
@@ -1488,7 +1488,7 @@ extends Module {
     }
 
     private boolean sendPacket(Packet<?> packet) {
-        if (this.mc.getNetworkHandler() == null) {
+        if (this.mc.getConnection() == null) {
             return false;
         }
         if (this.trySendPacketNow(packet)) {
@@ -1499,14 +1499,14 @@ extends Module {
     }
 
     private void sendDirectResyncPackets(double x, double y, double z, int count) {
-        if (this.mc.player == null || this.mc.getNetworkHandler() == null) {
+        if (this.mc.player == null || this.mc.getConnection() == null) {
             return;
         }
         double clampedY = this.clampWorldY(y);
         int packets = Math.max(1, count);
         for (int i = 0; i < packets; ++i) {
-            PlayerMoveC2SPacket.PositionAndOnGround packet = new PlayerMoveC2SPacket.PositionAndOnGround(x, clampedY, z, true, this.mc.player.horizontalCollision);
-            this.mc.getNetworkHandler().sendPacket((Packet)packet);
+            ServerboundMovePlayerPacket.Pos packet = new ServerboundMovePlayerPacket.Pos(x, clampedY, z, true, this.mc.player.horizontalCollision);
+            this.mc.getConnection().send((Packet)packet);
         }
     }
 
@@ -1522,7 +1522,7 @@ extends Module {
     }
 
     private boolean trySendPacketNow(Packet<?> packet) {
-        if (this.mc.getNetworkHandler() == null) {
+        if (this.mc.getConnection() == null) {
             return false;
         }
         long now = System.currentTimeMillis();
@@ -1530,11 +1530,11 @@ extends Module {
         if (this.sentPacketTimesMs.size() >= 300) {
             return false;
         }
-        if (packet instanceof IPlayerMoveC2SPacket) {
-            IPlayerMoveC2SPacket taggedPacket = (IPlayerMoveC2SPacket)packet;
+        if (packet instanceof IServerboundMovePlayerPacket) {
+            IServerboundMovePlayerPacket taggedPacket = (IServerboundMovePlayerPacket)packet;
             taggedPacket.meteor$setTag(1337);
         }
-        this.mc.getNetworkHandler().sendPacket(packet);
+        this.mc.getConnection().send(packet);
         this.sentPacketTimesMs.addLast(now);
         return true;
     }
@@ -1544,7 +1544,7 @@ extends Module {
         if (this.bufferedPackets.isEmpty()) {
             return;
         }
-        if (this.mc.getNetworkHandler() == null) {
+        if (this.mc.getConnection() == null) {
             this.bufferedPackets.clear();
             return;
         }
@@ -1634,14 +1634,14 @@ extends Module {
         this.lastPlayerAge = -1;
     }
 
-    private void handleAcceptedCorrection(Vec3d packetPos) {
+    private void handleAcceptedCorrection(Vec3 packetPos) {
         this.serverX = packetPos.x;
         this.serverZ = packetPos.z;
         this.currentServerY = this.clampWorldY(packetPos.y);
         this.movementCooldownTicks = Math.max(this.movementCooldownTicks, 1);
     }
 
-    private boolean isCorrectionNearReal(Vec3d packetPos, double realX, double realY, double realZ) {
+    private boolean isCorrectionNearReal(Vec3 packetPos, double realX, double realY, double realZ) {
         double dx = packetPos.x - realX;
         double dz = packetPos.z - realZ;
         double horizSq = dx * dx + dz * dz;
@@ -1649,7 +1649,7 @@ extends Module {
         return horizSq <= 4.0 && dy <= 3.0;
     }
 
-    private boolean isCorrectionFarFromTracked(Vec3d packetPos) {
+    private boolean isCorrectionFarFromTracked(Vec3 packetPos) {
         double dx = packetPos.x - this.serverX;
         double dz = packetPos.z - this.serverZ;
         double horizSq = dx * dx + dz * dz;
@@ -1657,7 +1657,7 @@ extends Module {
         return horizSq >= 64.0 || dy >= 12.0;
     }
 
-    private boolean isCorrectionNearTracked(Vec3d packetPos) {
+    private boolean isCorrectionNearTracked(Vec3 packetPos) {
         double dx = packetPos.x - this.serverX;
         double dz = packetPos.z - this.serverZ;
         double horizSq = dx * dx + dz * dz;
@@ -1665,14 +1665,14 @@ extends Module {
         return horizSq <= 16.0 && dy <= 6.0;
     }
 
-    private Vec3d resolveEntityActionTarget(PlayerInteractEntityC2SPacket packet) {
+    private Vec3 resolveEntityActionTarget(ServerboundInteractPacket packet) {
         double backZ;
         Entity targetEntity = this.resolvePacketEntity(packet);
-        Vec3d fallback = this.resolveEntityTarget(targetEntity);
+        Vec3 fallback = this.resolveEntityTarget(targetEntity);
         if (!((Boolean)this.avoidHitFov.get()).booleanValue() || targetEntity == null || this.mc.player == null) {
             return fallback;
         }
-        double yawRad = Math.toRadians(targetEntity.getYaw());
+        double yawRad = Math.toRadians(targetEntity.getYRot());
         double forwardX = -Math.sin(yawRad);
         double forwardZ = Math.cos(yawRad);
         double backX = -forwardX;
@@ -1681,21 +1681,21 @@ extends Module {
         double behind = Math.max(0.0, (Double)this.hitBehindOffset.get());
         double side = Math.max(0.0, (Double)this.hitSideOffset.get());
         double y = this.mc.player.getY();
-        Vec3d center = targetEntity.getBoundingBox().getCenter();
-        Vec3d candidateRight = new Vec3d(center.x + backX * behind + sideX * side, y, center.z + backZ * behind + sideZ * side);
-        Vec3d candidateLeft = new Vec3d(center.x + backX * behind - sideX * side, y, center.z + backZ * behind - sideZ * side);
-        Vec3d candidateBack = new Vec3d(center.x + backX * (behind + 0.8), y, center.z + backZ * (behind + 0.8));
-        Vec3d best = this.pickBestStealthHitPosition(targetEntity, fallback, candidateRight, candidateLeft, candidateBack);
+        Vec3 center = targetEntity.getBoundingBox().getCenter();
+        Vec3 candidateRight = new Vec3(center.x + backX * behind + sideX * side, y, center.z + backZ * behind + sideZ * side);
+        Vec3 candidateLeft = new Vec3(center.x + backX * behind - sideX * side, y, center.z + backZ * behind - sideZ * side);
+        Vec3 candidateBack = new Vec3(center.x + backX * (behind + 0.8), y, center.z + backZ * (behind + 0.8));
+        Vec3 best = this.pickBestStealthHitPosition(targetEntity, fallback, candidateRight, candidateLeft, candidateBack);
         return this.isFiniteVec(best) ? best : fallback;
     }
 
-    private Vec3d pickBestStealthHitPosition(Entity targetEntity, Vec3d fallback, Vec3d ... candidates) {
+    private Vec3 pickBestStealthHitPosition(Entity targetEntity, Vec3 fallback, Vec3 ... candidates) {
         if (this.mc.player == null || targetEntity == null) {
             return fallback;
         }
-        Vec3d best = fallback;
+        Vec3 best = fallback;
         double bestScore = this.scoreStealthHitPosition(targetEntity, fallback);
-        for (Vec3d candidate : candidates) {
+        for (Vec3 candidate : candidates) {
             double score = this.scoreStealthHitPosition(targetEntity, candidate);
             if (!(score < bestScore)) continue;
             best = candidate;
@@ -1704,7 +1704,7 @@ extends Module {
         return best;
     }
 
-    private double scoreStealthHitPosition(Entity targetEntity, Vec3d candidate) {
+    private double scoreStealthHitPosition(Entity targetEntity, Vec3 candidate) {
         double toZ;
         if (this.mc.player == null || targetEntity == null) {
             return Double.POSITIVE_INFINITY;
@@ -1722,7 +1722,7 @@ extends Module {
         double horizontal = Math.sqrt(horizontalSq);
         double dirX = toX / horizontal;
         double dirZ = toZ / horizontal;
-        double yawRad = Math.toRadians(targetEntity.getYaw());
+        double yawRad = Math.toRadians(targetEntity.getYRot());
         double forwardX = -Math.sin(yawRad);
         double forwardZ = Math.cos(yawRad);
         double frontDot = Math.max(0.0, forwardX * dirX + forwardZ * dirZ);
@@ -1732,40 +1732,40 @@ extends Module {
         return collisionPenalty + frontPenalty + travelPenalty;
     }
 
-    private Vec3d resolveEntityTarget(Entity preferred) {
-        if (this.mc.player == null || this.mc.world == null) {
-            return this.mc.player != null ? new Vec3d(this.mc.player.getX(), this.mc.player.getY(), this.mc.player.getZ()) : Vec3d.ZERO;
+    private Vec3 resolveEntityTarget(Entity preferred) {
+        if (this.mc.player == null || this.mc.level == null) {
+            return this.mc.player != null ? new Vec3(this.mc.player.getX(), this.mc.player.getY(), this.mc.player.getZ()) : Vec3.ZERO;
         }
         if (preferred != null && !preferred.isRemoved()) {
             return preferred.getBoundingBox().getCenter();
         }
-        if (this.mc.targetedEntity != null) {
-            return this.mc.targetedEntity.getBoundingBox().getCenter();
+        if (this.mc.crosshairPickEntity != null) {
+            return this.mc.crosshairPickEntity.getBoundingBox().getCenter();
         }
         Entity closest = null;
         double closestSq = 36.0;
-        for (Entity entity : this.mc.world.getEntities()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) this.mc.level).meteor$getEntityLookup().getAll()) {
             double distSq;
-            if (entity == this.mc.player || entity.isRemoved() || (distSq = entity.squaredDistanceTo((Entity)this.mc.player)) > closestSq) continue;
+            if (entity == this.mc.player || entity.isRemoved() || (distSq = entity.distanceToSqr((Entity)this.mc.player)) > closestSq) continue;
             closestSq = distSq;
             closest = entity;
         }
-        return closest != null ? closest.getBoundingBox().getCenter() : new Vec3d(this.mc.player.getX(), this.mc.player.getY(), this.mc.player.getZ());
+        return closest != null ? closest.getBoundingBox().getCenter() : new Vec3(this.mc.player.getX(), this.mc.player.getY(), this.mc.player.getZ());
     }
 
-    private Vec3d resolveEntityTarget() {
+    private Vec3 resolveEntityTarget() {
         return this.resolveEntityTarget(null);
     }
 
-    private Entity resolvePacketEntity(PlayerInteractEntityC2SPacket packet) {
+    private Entity resolvePacketEntity(ServerboundInteractPacket packet) {
         Field field;
-        if (this.mc.world == null || packet == null) {
-            return this.mc.targetedEntity;
+        if (this.mc.level == null || packet == null) {
+            return this.mc.crosshairPickEntity;
         }
         Method method = this.getPacketGetEntityMethod();
         if (method != null) {
             try {
-                Object result = method.invoke(packet, this.mc.world);
+                Object result = method.invoke(packet, this.mc.level);
                 if (result instanceof Entity) {
                     Entity entity = (Entity)result;
                     return entity;
@@ -1778,7 +1778,7 @@ extends Module {
         if ((field = this.getPacketEntityIdField()) != null) {
             try {
                 int id = field.getInt(packet);
-                Entity entity = this.mc.world.getEntityById(id);
+                Entity entity = this.mc.level.getEntity(id);
                 if (entity != null) {
                     return entity;
                 }
@@ -1787,7 +1787,7 @@ extends Module {
 
             }
         }
-        return this.mc.targetedEntity;
+        return this.mc.crosshairPickEntity;
     }
 
     private Method getPacketGetEntityMethod() {
@@ -1798,7 +1798,7 @@ extends Module {
             return this.packetGetEntityMethod;
         }
         try {
-            this.packetGetEntityMethod = PlayerInteractEntityC2SPacket.class.getMethod("getEntity", World.class);
+            this.packetGetEntityMethod = ServerboundInteractPacket.class.getMethod("getEntity", Level.class);
             this.packetGetEntityMethod.setAccessible(true);
             return this.packetGetEntityMethod;
         }
@@ -1816,7 +1816,7 @@ extends Module {
             return this.packetEntityIdField;
         }
         try {
-            this.packetEntityIdField = PlayerInteractEntityC2SPacket.class.getDeclaredField("entityId");
+            this.packetEntityIdField = ServerboundInteractPacket.class.getDeclaredField("entityId");
             this.packetEntityIdField.setAccessible(true);
             return this.packetEntityIdField;
         }
@@ -1827,10 +1827,10 @@ extends Module {
     }
 
     private boolean isContainerInteraction(BlockPos pos) {
-        if (this.mc.world == null || pos == null) {
+        if (this.mc.level == null || pos == null) {
             return false;
         }
-        return this.mc.world.getBlockState(pos).createScreenHandlerFactory((World)this.mc.world, pos) != null;
+        return this.mc.level.getBlockState(pos).getMenuProvider((Level)this.mc.level, pos) != null;
     }
 
     private int getPlacePostActionTicks() {
@@ -1851,15 +1851,15 @@ extends Module {
         return this.clampWorldY(target);
     }
 
-    private Vec3d resolvePacketPosition(PlayerPositionLookS2CPacket packet) {
+    private Vec3 resolvePacketPosition(ClientboundPlayerPositionPacket packet) {
         if (this.mc.player == null) {
-            return Vec3d.ZERO;
+            return Vec3.ZERO;
         }
-        Vec3d change = packet.change().position();
-        double x = change.x + (packet.relatives().contains(PositionFlag.X) ? this.mc.player.getX() : 0.0);
-        double y = change.y + (packet.relatives().contains(PositionFlag.Y) ? this.mc.player.getY() : 0.0);
-        double z = change.z + (packet.relatives().contains(PositionFlag.Z) ? this.mc.player.getZ() : 0.0);
-        return new Vec3d(x, y, z);
+        Vec3 change = packet.change().position();
+        double x = change.x + (packet.relatives().contains(Relative.X) ? this.mc.player.getX() : 0.0);
+        double y = change.y + (packet.relatives().contains(Relative.Y) ? this.mc.player.getY() : 0.0);
+        double z = change.z + (packet.relatives().contains(Relative.Z) ? this.mc.player.getZ() : 0.0);
+        return new Vec3(x, y, z);
     }
 
     private boolean hasPlayerIdentityChanged() {
@@ -1872,11 +1872,11 @@ extends Module {
         if (this.mc.player.getId() != this.lastPlayerEntityId) {
             return true;
         }
-        return this.lastPlayerAge >= 0 && this.mc.player.age < this.lastPlayerAge;
+        return this.lastPlayerAge >= 0 && this.mc.player.tickCount < this.lastPlayerAge;
     }
 
     private boolean isPlayerDead() {
-        return this.mc.player == null || this.mc.player.isDead() || this.mc.player.getHealth() <= 0.0f || this.mc.player.deathTime > 0;
+        return this.mc.player == null || this.mc.player.isDeadOrDying() || this.mc.player.getHealth() <= 0.0f || this.mc.player.deathTime > 0;
     }
 
     private void trackPlayerState() {
@@ -1886,16 +1886,16 @@ extends Module {
             return;
         }
         this.lastPlayerEntityId = this.mc.player.getId();
-        this.lastPlayerAge = this.mc.player.age;
+        this.lastPlayerAge = this.mc.player.tickCount;
     }
 
     private double clampWorldY(double y) {
         double max;
-        if (this.mc.world == null) {
+        if (this.mc.level == null) {
             return this.clamp(y, -4096.0, 4096.0);
         }
-        double min = (double)this.mc.world.getBottomY() + 1.0;
-        if (min > (max = (double)this.mc.world.getTopYInclusive() - 1.0)) {
+        double min = (double)this.mc.level.getMinY() + 1.0;
+        if (min > (max = (double)this.mc.level.getMaxY() - 1.0)) {
             return y;
         }
         return this.clamp(y, min, max);
@@ -1906,23 +1906,23 @@ extends Module {
     }
 
     private boolean isTeleportPositionSafe(double x, double y, double z) {
-        if (this.mc.player == null || this.mc.world == null) {
+        if (this.mc.player == null || this.mc.level == null) {
             return false;
         }
-        double minY = (double)this.mc.world.getBottomY() + 1.0;
-        double maxY = (double)this.mc.world.getTopYInclusive() - 1.0;
+        double minY = (double)this.mc.level.getMinY() + 1.0;
+        double maxY = (double)this.mc.level.getMaxY() - 1.0;
         if (y < minY || y > maxY) {
             return false;
         }
-        Box movedBox = this.mc.player.getBoundingBox().offset(x - this.mc.player.getX(), y - this.mc.player.getY(), z - this.mc.player.getZ());
-        return !this.mc.world.getBlockCollisions((Entity)this.mc.player, movedBox).iterator().hasNext();
+        AABB movedBox = this.mc.player.getBoundingBox().move(x - this.mc.player.getX(), y - this.mc.player.getY(), z - this.mc.player.getZ());
+        return !this.mc.level.getBlockCollisions((Entity)this.mc.player, movedBox).iterator().hasNext();
     }
 
     private boolean shouldTemporarilyBypassSpoofing() {
         if (this.mc.player == null) {
             return false;
         }
-        return this.mc.player.hasVehicle() || this.mc.player.isGliding() || this.mc.player.isUsingRiptide() || this.mc.player.isSleeping();
+        return this.mc.player.isPassenger() || this.mc.player.isFallFlying() || this.mc.player.isAutoSpinAttack() || this.mc.player.isSleeping();
     }
 
     private void recoverFromSendStall(double x, double y, double z) {
@@ -1935,14 +1935,14 @@ extends Module {
         this.consecutiveSendFailures = 0;
     }
 
-    private Vec3d sanitizeActionTarget(Vec3d target) {
+    private Vec3 sanitizeActionTarget(Vec3 target) {
         if (this.isFiniteVec(target)) {
             return target;
         }
         if (this.mc.player != null) {
-            return new Vec3d(this.mc.player.getX(), this.mc.player.getY(), this.mc.player.getZ());
+            return new Vec3(this.mc.player.getX(), this.mc.player.getY(), this.mc.player.getZ());
         }
-        return new Vec3d(this.serverX, this.currentServerY, this.serverZ);
+        return new Vec3(this.serverX, this.currentServerY, this.serverZ);
     }
 
     private boolean isDuplicateAction(QueuedAction queued) {
@@ -1957,7 +1957,7 @@ extends Module {
         if (queued == null || !this.isCreativePlayer()) {
             return false;
         }
-        return queued.packet instanceof PlayerInteractBlockC2SPacket;
+        return queued.packet instanceof ServerboundUseItemOnPacket;
     }
 
     private boolean isSameAction(QueuedAction a, QueuedAction b) {
@@ -1967,13 +1967,13 @@ extends Module {
         if (a.packet.getClass() != b.packet.getClass()) {
             return false;
         }
-        if (a.packet instanceof PlayerActionC2SPacket left && b.packet instanceof PlayerActionC2SPacket right) {
+        if (a.packet instanceof ServerboundPlayerActionPacket left && b.packet instanceof ServerboundPlayerActionPacket right) {
             if (left.getAction() != right.getAction()) {
                 return false;
             }
         }
-        if (a.packet instanceof PlayerInteractBlockC2SPacket left && b.packet instanceof PlayerInteractBlockC2SPacket right) {
-            if (!left.getBlockHitResult().getBlockPos().equals(right.getBlockHitResult().getBlockPos())) {
+        if (a.packet instanceof ServerboundUseItemOnPacket left && b.packet instanceof ServerboundUseItemOnPacket right) {
+            if (!left.getHitResult().getBlockPos().equals(right.getHitResult().getBlockPos())) {
                 return false;
             }
             if (left.getHand() != right.getHand()) {
@@ -1992,18 +1992,18 @@ extends Module {
         if (a.postActionHoldTicks != b.postActionHoldTicks) {
             return false;
         }
-        return a.target.squaredDistanceTo(b.target) <= 0.04;
+        return a.target.distanceToSqr(b.target) <= 0.04;
     }
 
     private boolean isMiningActionPacket(Packet<?> packet) {
-        if (!(packet instanceof PlayerActionC2SPacket)) {
+        if (!(packet instanceof ServerboundPlayerActionPacket)) {
             return false;
         }
-        PlayerActionC2SPacket actionPacket = (PlayerActionC2SPacket)packet;
+        ServerboundPlayerActionPacket actionPacket = (ServerboundPlayerActionPacket)packet;
         return this.isMiningAction(actionPacket.getAction());
     }
 
-    private boolean isFiniteVec(Vec3d vec) {
+    private boolean isFiniteVec(Vec3 vec) {
         return vec != null && Double.isFinite(vec.x) && Double.isFinite(vec.y) && Double.isFinite(vec.z);
     }
 

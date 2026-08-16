@@ -1,11 +1,11 @@
 package orbiter.mixin;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.client.input.KeyInput;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.screen.slot.Slot;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.world.inventory.Slot;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -14,26 +14,26 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(Screen.class)
 public class ScreenMixin {
 
-    @Inject(method = "keyPressed(Lnet/minecraft/client/input/KeyInput;)Z", at = @At("HEAD"), cancellable = true)
-    private void orbiter$onKeyPressed(KeyInput input, CallbackInfoReturnable<Boolean> cir) {
+    @Inject(method = "keyPressed(Lnet/minecraft/client/input/KeyEvent;)Z", at = @At("HEAD"), cancellable = true)
+    private void orbiter$onKeyPressed(KeyEvent input, CallbackInfoReturnable<Boolean> cir) {
         Screen self = (Screen) (Object) this;
-        if (!(self instanceof HandledScreen<?> screen)) return;
+        if (!(self instanceof AbstractContainerScreen<?> screen)) return;
 
-        Slot focusedSlot = ((HandledScreenAccessor) screen).getFocusedSlot();
-        if (focusedSlot == null || !focusedSlot.hasStack()) return;
+        Slot hoveredSlot = ((HandledScreenAccessor) screen).getHoveredSlot();
+        if (hoveredSlot == null || !hoveredSlot.hasItem()) return;
 
-        MinecraftClient mc = MinecraftClient.getInstance();
+        Minecraft mc = Minecraft.getInstance();
         if (mc.options == null) return;
 
-        KeyBinding pick = mc.options.pickItemKey;
-        if (!pick.matchesKey(input)) return;
+        KeyMapping pick = mc.options.keyPickItem;
+        if (!pick.matches(input)) return;
 
-        if (orbiter.modules.misc.ItemStealer.bypassTrade(focusedSlot)) {
+        if (orbiter.modules.misc.ItemStealer.bypassTrade(hoveredSlot)) {
             cir.setReturnValue(true);
             return;
         }
 
-        if (orbiter.modules.misc.ItemStealer.cloneGuiSlot(focusedSlot)) {
+        if (orbiter.modules.misc.ItemStealer.cloneGuiSlot(hoveredSlot)) {
             cir.setReturnValue(true);
         }
     }

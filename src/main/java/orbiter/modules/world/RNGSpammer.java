@@ -119,7 +119,7 @@ public class RNGSpammer extends CreativeSafetyModule {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.player.networkHandler == null) return;
+        if (mc.player == null || mc.player.connection == null) return;
         if (++tickCounter < Math.max(1, delay.get())) return;
         tickCounter = 0;
 
@@ -133,7 +133,7 @@ public class RNGSpammer extends CreativeSafetyModule {
             double z = (randomPosition.get() ? offset(random, spreadRadius.get()) : 0);
             String cmd = CommandUtils.formatCommand(
                 "execute at %s run loot spawn ~%.2f ~%.2f ~%.2f loot %s", target, x, y, z, table);
-            mc.player.networkHandler.sendChatCommand(cmd);
+            mc.player.connection.sendCommand(cmd);
         }
     }
 

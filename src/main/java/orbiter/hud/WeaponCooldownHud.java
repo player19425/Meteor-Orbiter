@@ -6,8 +6,8 @@ import meteordevelopment.meteorclient.systems.hud.HudElement;
 import meteordevelopment.meteorclient.systems.hud.HudElementInfo;
 import meteordevelopment.meteorclient.systems.hud.HudRenderer;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.player.Player;
 
 public class WeaponCooldownHud extends HudElement {
     public static final HudElementInfo<WeaponCooldownHud> INFO = new HudElementInfo<>(Orbiter.HUD_GROUP, "weapon-cooldown", "Shows current weapon attack cooldown in seconds.", WeaponCooldownHud::new);
@@ -16,7 +16,7 @@ public class WeaponCooldownHud extends HudElement {
 
     private final Setting<String> readyText = sgGeneral.add(new StringSetting.Builder()
         .name("ready-text")
-        .description("Text shown when weapon is ready to attack.")
+        .description("Component shown when weapon is ready to attack.")
         .defaultValue("Ready")
         .build()
     );
@@ -30,7 +30,7 @@ public class WeaponCooldownHud extends HudElement {
 
     private final Setting<SettingColor> textColor = sgGeneral.add(new ColorSetting.Builder()
         .name("color")
-        .description("Text color while cooling down.")
+        .description("Component color while cooling down.")
         .defaultValue(new SettingColor(255, 255, 255, 255))
         .build()
     );
@@ -58,7 +58,7 @@ public class WeaponCooldownHud extends HudElement {
 
     private final Setting<Double> scale = sgGeneral.add(new DoubleSetting.Builder()
         .name("scale")
-        .description("Text scale.")
+        .description("Component scale.")
         .defaultValue(1.0)
         .min(0.5)
         .sliderRange(0.5, 3.0)
@@ -71,11 +71,11 @@ public class WeaponCooldownHud extends HudElement {
 
     @Override
     public void render(HudRenderer renderer) {
-        PlayerEntity player = MinecraftClient.getInstance().player;
+        Player player = Minecraft.getInstance().player;
         if (player == null) return;
 
-        float progress = player.getAttackCooldownProgress(0.5f);
-        float ticksRemaining = (1.0f - progress) * player.getAttackCooldownProgressPerTick();
+        float progress = player.getAttackStrengthScale(0.5f);
+        float ticksRemaining = (1.0f - progress) * player.getCurrentItemAttackStrengthDelay();
         double seconds = ticksRemaining / 20.0;
 
         String text;

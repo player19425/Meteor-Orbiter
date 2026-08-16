@@ -11,55 +11,55 @@ import meteordevelopment.meteorclient.events.entity.player.PickItemsEvent;
 import meteordevelopment.meteorclient.events.entity.player.InteractBlockEvent;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
-import net.minecraft.client.network.ClientPlayNetworkHandler;
-import net.minecraft.client.network.ClientPlayerEntity;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.effect.StatusEffect;
-import net.minecraft.entity.effect.StatusEffectInstance;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.packet.c2s.play.ChatMessageC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
-import net.minecraft.network.packet.c2s.play.HandSwingC2SPacket;
-import net.minecraft.network.packet.c2s.play.PlayerInteractBlockC2SPacket;
-import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
-import net.minecraft.network.packet.s2c.play.GameStateChangeS2CPacket;
-import net.minecraft.network.packet.s2c.play.HealthUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
-import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
-import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
-import net.minecraft.network.packet.s2c.play.OverlayMessageS2CPacket;
-import net.minecraft.network.packet.s2c.play.GameMessageS2CPacket;
-import net.minecraft.network.packet.s2c.play.UnloadChunkS2CPacket;
-import net.minecraft.network.packet.s2c.play.GameJoinS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlayerRespawnS2CPacket;
-import net.minecraft.network.packet.s2c.play.BlockUpdateS2CPacket;
-import net.minecraft.network.packet.s2c.play.EntityStatusS2CPacket;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.text.Text;
-import net.minecraft.util.Hand;
-import net.minecraft.util.hit.BlockHitResult;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
-import net.minecraft.item.Item;
-import net.minecraft.item.Items;
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.scoreboard.Scoreboard;
-import net.minecraft.scoreboard.ScoreboardObjective;
-import net.minecraft.scoreboard.ScoreboardCriterion;
-import net.minecraft.scoreboard.ScoreboardDisplaySlot;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.entity.effect.StatusEffects;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.effect.MobEffect;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.network.protocol.game.ServerboundChatPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
+import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.network.protocol.game.ClientboundGameEventPacket;
+import net.minecraft.network.protocol.game.ClientboundSetHealthPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
+import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
+import net.minecraft.network.protocol.game.ClientboundLoginPacket;
+import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.scores.Scoreboard;
+import net.minecraft.world.scores.Objective;
+import net.minecraft.world.scores.criteria.ObjectiveCriteria;
+import net.minecraft.world.scores.DisplaySlot;
+import net.minecraft.core.Holder;
+import net.minecraft.world.effect.MobEffects;
 import orbiter.util.ComboTracker;
 
 import java.io.*;
@@ -98,7 +98,7 @@ public class Actions extends Module {
     private final SettingGroup sgTitle       = settings.createGroup("On Title/Actionbar");
     private final SettingGroup sgScreenOpen   = settings.createGroup("On Screen Open");
     private final SettingGroup sgMoveDistance  = settings.createGroup("On Move Distance");
-    private final SettingGroup sgTimeInWorld  = settings.createGroup("On Time In World");
+    private final SettingGroup sgTimeInWorld  = settings.createGroup("On Time In Level");
     private final SettingGroup sgPotion       = settings.createGroup("On Potion Effect");
     private final SettingGroup sgArmorBreak   = settings.createGroup("On Armor Break");
     private final SettingGroup sgTargetSwitch  = settings.createGroup("On Target Switch");
@@ -375,8 +375,8 @@ public class Actions extends Module {
     private int lastXPLevel = 0;
     private boolean wasDead = false;
     private boolean wasRaining = false;
-    private RegistryKey<World> lastDimension = null;
-    private Vec3d lastPosition = Vec3d.ZERO;
+    private ResourceKey<Level> lastDimension = null;
+    private Vec3 lastPosition = Vec3.ZERO;
     private double accumulatedDistance = 0.0;
     private long joinTick = 0;
     private long currentTick = 0;
@@ -384,7 +384,7 @@ public class Actions extends Module {
     private UUID lastTargetUuid = null;
     private int lastCombo = 0;
     private final Map<EquipmentSlot, Boolean> armorSlotFilled = new EnumMap<>(EquipmentSlot.class);
-    private final Set<RegistryEntry<StatusEffect>> activeEffects = new HashSet<>();
+    private final Set<Holder<MobEffect>> activeEffects = new HashSet<>();
     private final List<Trigger> triggers = new CopyOnWriteArrayList<>();
     private final Map<String, Macro> macros = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -424,9 +424,9 @@ public class Actions extends Module {
         lastXPLevel = mc.player != null ? mc.player.experienceLevel : 0;
         wasDead = false;
         pendingRespawn = false;
-        wasRaining = mc.world != null && mc.world.isRaining();
-        lastDimension = mc.world != null ? mc.world.getRegistryKey() : World.OVERWORLD;
-        lastPosition = mc.player != null ? mc.player.getEyePos() : Vec3d.ZERO;
+        wasRaining = mc.level != null && mc.level.isRaining();
+        lastDimension = mc.level != null ? mc.level.dimension() : Level.OVERWORLD;
+        lastPosition = mc.player != null ? mc.player.getEyePosition() : Vec3.ZERO;
         accumulatedDistance = 0.0;
         joinTick = currentTick;
         lastFireTime = 0;
@@ -436,14 +436,14 @@ public class Actions extends Module {
         armorSlotFilled.clear();
         if (mc.player != null) {
             for (EquipmentSlot slot : EquipmentSlot.values()) {
-                armorSlotFilled.put(slot, !mc.player.getEquippedStack(slot).isEmpty());
+                armorSlotFilled.put(slot, !mc.player.getItemBySlot(slot).isEmpty());
             }
         }
 
         activeEffects.clear();
         if (mc.player != null) {
-            for (StatusEffectInstance effect : mc.player.getStatusEffects()) {
-                activeEffects.add(effect.getEffectType());
+            for (MobEffectInstance effect : mc.player.getActiveEffects()) {
+                activeEffects.add(effect.getEffect());
             }
         }
 
@@ -463,7 +463,7 @@ public class Actions extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
         currentTick++;
 
         long now = System.currentTimeMillis();
@@ -525,15 +525,15 @@ public class Actions extends Module {
 
         lastHealth = mc.player.getHealth();
         lastXPLevel = mc.player.experienceLevel;
-        lastPosition = mc.player.getEyePos();
+        lastPosition = mc.player.getEyePosition();
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     private void onPacketReceive(PacketEvent.Receive event) {
         if (mc.player == null) return;
 
-        if (event.packet instanceof HealthUpdateS2CPacket) {
-            HealthUpdateS2CPacket packet = (HealthUpdateS2CPacket) event.packet;
+        if (event.packet instanceof ClientboundSetHealthPacket) {
+            ClientboundSetHealthPacket packet = (ClientboundSetHealthPacket) event.packet;
             float newHealth = packet.getHealth();
             float drop = lastHealth - newHealth;
 
@@ -549,12 +549,12 @@ public class Actions extends Module {
             lastHealth = newHealth;
         }
 
-        if (event.packet instanceof GameStateChangeS2CPacket) {
-            GameStateChangeS2CPacket packet = (GameStateChangeS2CPacket) event.packet;
+        if (event.packet instanceof ClientboundGameEventPacket) {
+            ClientboundGameEventPacket packet = (ClientboundGameEventPacket) event.packet;
 
             if (onGamemodeChangeEnabled.get()) {
                 try {
-                    var reason = packet.getReason();
+                    var reason = packet.getEvent();
                     String reasonStr = reason != null ? reason.toString() : "";
                     if (reasonStr.contains("GAME_MODE") || reasonStr.contains("WIN")) {
                         fire(onGamemodeChangeAction.get());
@@ -565,8 +565,8 @@ public class Actions extends Module {
             }
         }
 
-        if (event.packet instanceof GameMessageS2CPacket) {
-            GameMessageS2CPacket packet = (GameMessageS2CPacket) event.packet;
+        if (event.packet instanceof ClientboundSystemChatPacket) {
+            ClientboundSystemChatPacket packet = (ClientboundSystemChatPacket) event.packet;
             if (onChatMatchEnabled.get()) {
                 try {
                     String content = packet.content().getString();
@@ -578,12 +578,12 @@ public class Actions extends Module {
             }
         }
 
-        if (event.packet instanceof TitleS2CPacket || event.packet instanceof SubtitleS2CPacket) {
-            Text titleText = null;
-            if (event.packet instanceof TitleS2CPacket) {
-                titleText = ((TitleS2CPacket) event.packet).text();
-            } else if (event.packet instanceof SubtitleS2CPacket) {
-                titleText = ((SubtitleS2CPacket) event.packet).text();
+        if (event.packet instanceof ClientboundSetTitleTextPacket || event.packet instanceof ClientboundSetSubtitleTextPacket) {
+            Component titleText = null;
+            if (event.packet instanceof ClientboundSetTitleTextPacket) {
+                titleText = ((ClientboundSetTitleTextPacket) event.packet).text();
+            } else if (event.packet instanceof ClientboundSetSubtitleTextPacket) {
+                titleText = ((ClientboundSetSubtitleTextPacket) event.packet).text();
             }
             if (titleText != null && onTitleActionbarEnabled.get()) {
                 try {
@@ -596,8 +596,8 @@ public class Actions extends Module {
             }
         }
 
-        if (event.packet instanceof OverlayMessageS2CPacket) {
-            OverlayMessageS2CPacket overlay = (OverlayMessageS2CPacket) event.packet;
+        if (event.packet instanceof ClientboundSetActionBarTextPacket) {
+            ClientboundSetActionBarTextPacket overlay = (ClientboundSetActionBarTextPacket) event.packet;
             if (onTitleActionbarEnabled.get()) {
                 try {
                     String content = overlay.text().getString();
@@ -609,7 +609,7 @@ public class Actions extends Module {
             }
         }
 
-        if (event.packet instanceof PlayerRespawnS2CPacket) {
+        if (event.packet instanceof ClientboundRespawnPacket) {
 
             if (onDimensionChangeEnabled.get() && lastDimension != null) {
                 fire(onDimensionChangeAction.get());
@@ -619,12 +619,12 @@ public class Actions extends Module {
             }
         }
 
-        if (event.packet instanceof EntityStatusS2CPacket) {
-            EntityStatusS2CPacket statusPacket = (EntityStatusS2CPacket) event.packet;
+        if (event.packet instanceof ClientboundEntityEventPacket) {
+            ClientboundEntityEventPacket statusPacket = (ClientboundEntityEventPacket) event.packet;
 
-            if (statusPacket.getStatus() == 35) {
-                Entity entity = statusPacket.getEntity(mc.world);
-                if (entity instanceof PlayerEntity) {
+            if (statusPacket.getEventId() == 35) {
+                Entity entity = statusPacket.getEntity(mc.level);
+                if (entity instanceof Player) {
                     if (entity == mc.player && totemSelfEnabled.get()) {
                         fire(totemSelfAction.get());
                     } else if (entity != mc.player && totemEnemyEnabled.get()) {
@@ -633,8 +633,8 @@ public class Actions extends Module {
                 }
             }
 
-            if (statusPacket.getStatus() == 3) {
-                Entity entity = statusPacket.getEntity(mc.world);
+            if (statusPacket.getEventId() == 3) {
+                Entity entity = statusPacket.getEntity(mc.level);
                 if (entity == mc.player) {
                     wasDead = true;
                 }
@@ -646,7 +646,7 @@ public class Actions extends Module {
     private void onPacketSend(PacketEvent.Send event) {
         if (mc.player == null) return;
 
-        if (event.packet instanceof PlayerInteractBlockC2SPacket) {
+        if (event.packet instanceof ServerboundUseItemOnPacket) {
             if (onBlockPlaceEnabled.get()) {
                 fire(onBlockPlaceAction.get());
             }
@@ -657,8 +657,8 @@ public class Actions extends Module {
     private void onBreakBlock(BreakBlockEvent event) {
         if (onBlockBreakEnabled.get()) {
             String blockName = "";
-            if (mc.world != null) {
-                BlockState state = mc.world.getBlockState(event.blockPos);
+            if (mc.level != null) {
+                BlockState state = mc.level.getBlockState(event.blockPos);
                 blockName = state.getBlock().getName().getString().toLowerCase();
             }
 
@@ -692,8 +692,8 @@ public class Actions extends Module {
                 fire(pickupAction.get());
             } else {
 
-                ItemStack mainHand = mc.player.getMainHandStack();
-                if (mainHand != null && !mainHand.isEmpty() && mainHand.getName().getString().toLowerCase().contains(filter.toLowerCase())) {
+                ItemStack mainHand = mc.player.getMainHandItem();
+                if (mainHand != null && !mainHand.isEmpty() && mainHand.getItemName().getString().toLowerCase().contains(filter.toLowerCase())) {
                     fire(pickupAction.get());
                 }
             }
@@ -722,10 +722,10 @@ public class Actions extends Module {
     private void checkDurabilityTrigger() {
         if (!durabilityEnabled.get() || durabilityAction.get().isEmpty()) return;
         for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD}) {
-            ItemStack stack = mc.player.getEquippedStack(slot);
-            if (stack != null && !stack.isEmpty() && stack.isDamageable()) {
+            ItemStack stack = mc.player.getItemBySlot(slot);
+            if (stack != null && !stack.isEmpty() && stack.isDamageableItem()) {
                 int max = stack.getMaxDamage();
-                int current = stack.getDamage();
+                int current = stack.getDamageValue();
                 int remaining = max - current;
                 int percent = (int) ((remaining / (double) max) * 100);
                 if (percent <= durabilityThreshold.get()) {
@@ -734,12 +734,12 @@ public class Actions extends Module {
                 }
             }
         }
-        ItemStack mainHand = mc.player.getMainHandStack();
-        ItemStack offHand = mc.player.getOffHandStack();
+        ItemStack mainHand = mc.player.getMainHandItem();
+        ItemStack offHand = mc.player.getOffhandItem();
         for (ItemStack stack : new ItemStack[]{mainHand, offHand}) {
-            if (stack != null && stack.isDamageable()) {
+            if (stack != null && stack.isDamageableItem()) {
                 int max = stack.getMaxDamage();
-                int current = stack.getDamage();
+                int current = stack.getDamageValue();
                 int remaining = max - current;
                 int percent = (int) ((remaining / (double) max) * 100);
                 if (percent <= durabilityThreshold.get()) {
@@ -752,7 +752,7 @@ public class Actions extends Module {
 
     private void checkPlayerRangeTrigger() {
         if (!playerRangeEnabled.get() || playerRangeAction.get().isEmpty()) return;
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             if (player == mc.player) continue;
             double dist = mc.player.distanceTo(player);
             boolean inRange = dist <= playerRangeDistance.get();
@@ -770,7 +770,7 @@ public class Actions extends Module {
 
     private void checkEntityNearTrigger() {
         if (!entityNearEnabled.get() || entityNearAction.get().isEmpty()) return;
-        for (Entity entity : mc.world.getEntities()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (entity == mc.player) continue;
             double dist = mc.player.distanceTo(entity);
             if (dist <= entityNearDistance.get()) {
@@ -779,7 +779,7 @@ public class Actions extends Module {
                     fire(entityNearAction.get());
                     return;
                 }
-                String typeName = entity.getType().getName().getString().toLowerCase();
+                String typeName = entity.getType().getDescription().getString().toLowerCase();
                 if (typeName.contains(filter.toLowerCase())) {
                     fire(entityNearAction.get());
                     return;
@@ -790,10 +790,10 @@ public class Actions extends Module {
 
     private void checkHeldItemTrigger() {
         if (!heldItemEnabled.get() || heldItemAction.get().isEmpty()) return;
-        ItemStack held = mc.player.getMainHandStack();
+        ItemStack held = mc.player.getMainHandItem();
         String filter = heldItemFilter.get();
         if (held != null && !held.isEmpty()) {
-            String name = held.getName().getString().toLowerCase();
+            String name = held.getItemName().getString().toLowerCase();
             if (filter == null || filter.isEmpty() || name.contains(filter.toLowerCase())) {
                 fire(heldItemAction.get());
             }
@@ -804,10 +804,10 @@ public class Actions extends Module {
         if (!lowMaterialEnabled.get() || lowMaterialAction.get().isEmpty()) return;
         String itemName = lowMaterialItem.get().toLowerCase();
         int count = 0;
-        for (int i = 0; i < mc.player.getInventory().size(); i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+        for (int i = 0; i < mc.player.getInventory().getContainerSize(); i++) {
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (stack != null && !stack.isEmpty()) {
-                String name = stack.getName().getString().toLowerCase();
+                String name = stack.getItemName().getString().toLowerCase();
                 if (name.contains(itemName)) {
                     count += stack.getCount();
                 }
@@ -874,8 +874,8 @@ public class Actions extends Module {
 
     private void checkWeatherChangeTrigger() {
         if (!onWeatherChangeEnabled.get()) return;
-        if (mc.world == null) return;
-        boolean isRaining = mc.world.isRaining();
+        if (mc.level == null) return;
+        boolean isRaining = mc.level.isRaining();
         if (isRaining != wasRaining) {
             if (isRaining && onWeatherRainStart.get()) {
                 fire(onWeatherChangeAction.get());
@@ -889,8 +889,8 @@ public class Actions extends Module {
 
     private void checkDimensionChangeTrigger() {
         if (!onDimensionChangeEnabled.get()) return;
-        if (mc.world == null) return;
-        RegistryKey<World> currentDim = mc.world.getRegistryKey();
+        if (mc.level == null) return;
+        ResourceKey<Level> currentDim = mc.level.dimension();
         if (!currentDim.equals(lastDimension)) {
             fire(onDimensionChangeAction.get());
             lastDimension = currentDim;
@@ -899,7 +899,7 @@ public class Actions extends Module {
 
     private void checkMoveDistanceTrigger() {
         if (!onMoveDistanceEnabled.get()) return;
-        Vec3d currentPos = mc.player.getEyePos();
+        Vec3 currentPos = mc.player.getEyePosition();
         double dist = lastPosition.distanceTo(currentPos);
         if (dist > 0.1) {
             accumulatedDistance += dist;
@@ -928,17 +928,17 @@ public class Actions extends Module {
 
     private void checkPotionEffectTrigger() {
         if (!onPotionEffectEnabled.get()) return;
-        Set<RegistryEntry<StatusEffect>> currentEffects = new HashSet<>();
-        for (StatusEffectInstance inst : mc.player.getStatusEffects()) {
-            currentEffects.add(inst.getEffectType());
+        Set<Holder<MobEffect>> currentEffects = new HashSet<>();
+        for (MobEffectInstance inst : mc.player.getActiveEffects()) {
+            currentEffects.add(inst.getEffect());
         }
 
         if (onPotionEffectGained.get()) {
-            for (RegistryEntry<StatusEffect> effect : currentEffects) {
+            for (Holder<MobEffect> effect : currentEffects) {
                 if (!activeEffects.contains(effect)) {
                     String filter = onPotionEffectFilter.get();
                     if (filter == null || filter.isEmpty() ||
-                        effect.value().getName().getString().toLowerCase().contains(filter.toLowerCase())) {
+                        effect.value().getDisplayName().getString().toLowerCase().contains(filter.toLowerCase())) {
                         fire(onPotionEffectAction.get());
                     }
                 }
@@ -946,11 +946,11 @@ public class Actions extends Module {
         }
 
         if (onPotionEffectLost.get()) {
-            for (RegistryEntry<StatusEffect> effect : activeEffects) {
+            for (Holder<MobEffect> effect : activeEffects) {
                 if (!currentEffects.contains(effect)) {
                     String filter = onPotionEffectFilter.get();
                     if (filter == null || filter.isEmpty() ||
-                        effect.value().getName().getString().toLowerCase().contains(filter.toLowerCase())) {
+                        effect.value().getDisplayName().getString().toLowerCase().contains(filter.toLowerCase())) {
                         fire(onPotionEffectAction.get());
                     }
                 }
@@ -965,7 +965,7 @@ public class Actions extends Module {
         if (!onArmorBreakEnabled.get()) return;
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             boolean wasFilled = armorSlotFilled.getOrDefault(slot, false);
-            boolean isFilled = !mc.player.getEquippedStack(slot).isEmpty();
+            boolean isFilled = !mc.player.getItemBySlot(slot).isEmpty();
             if (wasFilled && !isFilled) {
                 String filter = onArmorBreakSlot.get();
                 if (filter == null || filter.isEmpty() ||
@@ -981,9 +981,9 @@ public class Actions extends Module {
     private void checkTargetSwitchTrigger() {
         if (!onTargetSwitchEnabled.get()) return;
 
-        if (mc.targetedEntity != null && mc.targetedEntity instanceof LivingEntity) {
-            LivingEntity target = (LivingEntity) mc.targetedEntity;
-            UUID targetUuid = target.getUuid();
+        if (mc.crosshairPickEntity != null && mc.crosshairPickEntity instanceof LivingEntity) {
+            LivingEntity target = (LivingEntity) mc.crosshairPickEntity;
+            UUID targetUuid = target.getUUID();
 
             if (lastTargetUuid != null && !lastTargetUuid.equals(targetUuid)) {
                 int lastComboCount = ComboTracker.getCombo(lastTargetUuid);
@@ -998,14 +998,14 @@ public class Actions extends Module {
 
     private void checkNearbyPlayerItem() {
         if (!nearbyPlayerItemEnabled.get()) return;
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             if (player == mc.player) continue;
             double dist = mc.player.distanceTo(player);
             if (dist <= nearbyPlayerItemRange.get()) {
-                ItemStack mainHand = player.getMainHandStack();
+                ItemStack mainHand = player.getMainHandItem();
                 String filter = nearbyPlayerItemFilter.get();
                 if (mainHand != null && !mainHand.isEmpty()) {
-                    String name = mainHand.getName().getString().toLowerCase();
+                    String name = mainHand.getItemName().getString().toLowerCase();
                     if (filter == null || filter.isEmpty() || name.contains(filter.toLowerCase())) {
                         fire(nearbyPlayerItemAction.get());
                         return;
@@ -1117,9 +1117,9 @@ public class Actions extends Module {
                 int slot = Integer.parseInt(action.substring(7).trim());
                 if (slot >= 0 && slot <= 8) {
                     mc.player.getInventory().setSelectedSlot(slot);
-                    ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+                    ClientPacketListener handler = mc.getConnection();
                     if (handler != null) {
-                        handler.sendPacket(new UpdateSelectedSlotC2SPacket(slot));
+                        handler.send(new ServerboundSetCarriedItemPacket(slot));
                     }
                 }
             } catch (NumberFormatException ignored) {}
@@ -1129,11 +1129,11 @@ public class Actions extends Module {
         if (action.startsWith("drop:")) {
             try {
                 int slot = Integer.parseInt(action.substring(5).trim());
-                if (slot >= 0 && slot < mc.player.getInventory().size()) {
-                    ItemStack stack = mc.player.getInventory().getStack(slot);
+                if (slot >= 0 && slot < mc.player.getInventory().getContainerSize()) {
+                    ItemStack stack = mc.player.getInventory().getItem(slot);
                     if (!stack.isEmpty()) {
-                        mc.player.dropItem(stack, true);
-                        mc.player.getInventory().setStack(slot, ItemStack.EMPTY);
+                        mc.player.drop(stack, true);
+                        mc.player.getInventory().setItem(slot, ItemStack.EMPTY);
                     }
                 }
             } catch (NumberFormatException ignored) {}
@@ -1141,24 +1141,24 @@ public class Actions extends Module {
         }
 
         if (action.equals("use-item")) {
-            if (mc.interactionManager != null) {
-                mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+            if (mc.gameMode != null) {
+                mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
             }
             return;
         }
 
         if (action.startsWith("sneak:")) {
             String mode = action.substring(6).trim().toLowerCase();
-            KeyBinding sneakKey = mc.options.sneakKey;
+            KeyMapping sneakKey = mc.options.keyShift;
             switch (mode) {
                 case "on":
-                    sneakKey.setPressed(true);
+                    sneakKey.setDown(true);
                     break;
                 case "off":
-                    sneakKey.setPressed(false);
+                    sneakKey.setDown(false);
                     break;
                 case "toggle":
-                    sneakKey.setPressed(!sneakKey.isPressed());
+                    sneakKey.setDown(!sneakKey.isDown());
                     break;
             }
             return;
@@ -1166,16 +1166,16 @@ public class Actions extends Module {
 
         if (action.startsWith("sprint:")) {
             String mode = action.substring(7).trim().toLowerCase();
-            KeyBinding sprintKey = mc.options.sprintKey;
+            KeyMapping sprintKey = mc.options.keySprint;
             switch (mode) {
                 case "on":
-                    sprintKey.setPressed(true);
+                    sprintKey.setDown(true);
                     break;
                 case "off":
-                    sprintKey.setPressed(false);
+                    sprintKey.setDown(false);
                     break;
                 case "toggle":
-                    sprintKey.setPressed(!sprintKey.isPressed());
+                    sprintKey.setDown(!sprintKey.isDown());
                     break;
             }
             return;
@@ -1188,14 +1188,14 @@ public class Actions extends Module {
                 if (parts.length >= 2) {
                     float yaw = Float.parseFloat(parts[0]);
                     float pitch = Float.parseFloat(parts[1]);
-                    mc.player.setYaw(yaw);
-                    mc.player.setPitch(pitch);
+                    mc.player.setYRot(yaw);
+                    mc.player.setXRot(pitch);
 
-                    ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+                    ClientPacketListener handler = mc.getConnection();
                     if (handler != null) {
-                        handler.sendPacket(new PlayerMoveC2SPacket.Full(
+                        handler.send(new ServerboundMovePlayerPacket.PosRot(
                             mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                            yaw, pitch, mc.player.isOnGround(), false
+                            yaw, pitch, mc.player.onGround(), false
                         ));
                     }
                 }
@@ -1206,12 +1206,12 @@ public class Actions extends Module {
         if (action.startsWith("yaw:")) {
             try {
                 float yaw = Float.parseFloat(action.substring(4).trim());
-                mc.player.setYaw(yaw);
-                ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+                mc.player.setYRot(yaw);
+                ClientPacketListener handler = mc.getConnection();
                 if (handler != null) {
-                    handler.sendPacket(new PlayerMoveC2SPacket.Full(
+                    handler.send(new ServerboundMovePlayerPacket.PosRot(
                         mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                        yaw, mc.player.getPitch(), mc.player.isOnGround(), false
+                        yaw, mc.player.getXRot(), mc.player.onGround(), false
                     ));
                 }
             } catch (NumberFormatException ignored) {}
@@ -1221,12 +1221,12 @@ public class Actions extends Module {
         if (action.startsWith("pitch:")) {
             try {
                 float pitch = Float.parseFloat(action.substring(6).trim());
-                mc.player.setPitch(pitch);
-                ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+                mc.player.setXRot(pitch);
+                ClientPacketListener handler = mc.getConnection();
                 if (handler != null) {
-                    handler.sendPacket(new PlayerMoveC2SPacket.Full(
+                    handler.send(new ServerboundMovePlayerPacket.PosRot(
                         mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                        mc.player.getYaw(), pitch, mc.player.isOnGround(), false
+                        mc.player.getYRot(), pitch, mc.player.onGround(), false
                     ));
                 }
             } catch (NumberFormatException ignored) {}
@@ -1234,7 +1234,7 @@ public class Actions extends Module {
         }
 
         if (action.equals("jump")) {
-            mc.player.jump();
+            mc.player.jumpFromGround();
             return;
         }
 
@@ -1249,13 +1249,13 @@ public class Actions extends Module {
                     int z = Integer.parseInt(parts[3]);
                     BlockPos pos = new BlockPos(x, y, z);
 
-                    ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+                    ClientPacketListener handler = mc.getConnection();
                     if (handler != null) {
                         BlockHitResult hitResult = new BlockHitResult(
-                            new Vec3d(x + 0.5, y + 0.5, z + 0.5),
+                            new Vec3(x + 0.5, y + 0.5, z + 0.5),
                             Direction.UP, pos, false
                         );
-                        mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hitResult);
+                        mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hitResult);
                     }
                 }
             } catch (NumberFormatException ignored) {}
@@ -1270,10 +1270,10 @@ public class Actions extends Module {
 
         if (action.startsWith("message:")) {
             String text = action.substring(8);
-            ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+            ClientPacketListener handler = mc.getConnection();
             if (handler != null) {
                 if (text.length() > 256) text = text.substring(0, 256);
-                handler.sendChatMessage(text);
+                handler.sendChat(text);
             }
             return;
         }
@@ -1281,17 +1281,17 @@ public class Actions extends Module {
         if (action.startsWith("command:")) {
             String cmd = action.substring(8);
             if (!cmd.startsWith("/")) cmd = "/" + cmd;
-            ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+            ClientPacketListener handler = mc.getConnection();
             if (handler != null) {
                 if (cmd.length() > 256) cmd = cmd.substring(0, 256);
-                handler.sendChatMessage(cmd);
+                handler.sendChat(cmd);
             }
             return;
         }
 
         if (action.equals("disconnect")) {
-            if (mc.world != null) {
-                mc.world.disconnect(Text.literal("Actions disconnect"));
+            if (mc.level != null) {
+                mc.level.disconnect(Component.literal("Actions disconnect"));
             }
             return;
         }
@@ -1322,9 +1322,9 @@ public class Actions extends Module {
         }
 
         if (action.startsWith("/")) {
-            ClientPlayNetworkHandler handler = mc.getNetworkHandler();
+            ClientPacketListener handler = mc.getConnection();
             if (handler != null && action.length() <= 256) {
-                handler.sendChatMessage(action);
+                handler.sendChat(action);
             }
         }
     }
@@ -1341,7 +1341,7 @@ public class Actions extends Module {
             }
 
             if (condition.startsWith("hunger")) {
-                int hunger = mc.player.getHungerManager().getFoodLevel();
+                int hunger = mc.player.getFoodData().getFoodLevel();
                 return compareIntValue(condition.substring(6), hunger);
             }
 
@@ -1352,33 +1352,33 @@ public class Actions extends Module {
 
             if (condition.startsWith("holding:")) {
                 String itemName = condition.substring(8).toLowerCase();
-                ItemStack mainHand = mc.player.getMainHandStack();
-                ItemStack offHand = mc.player.getOffHandStack();
-                return mainHand.getName().getString().toLowerCase().contains(itemName) ||
-                       offHand.getName().getString().toLowerCase().contains(itemName);
+                ItemStack mainHand = mc.player.getMainHandItem();
+                ItemStack offHand = mc.player.getOffhandItem();
+                return mainHand.getItemName().getString().toLowerCase().contains(itemName) ||
+                       offHand.getItemName().getString().toLowerCase().contains(itemName);
             }
 
             if (condition.startsWith("dimension:")) {
                 String dim = condition.substring(10).toLowerCase();
-                String current = mc.world.getRegistryKey().getValue().toString().toLowerCase();
+                String current = mc.level.dimension().identifier().toString().toLowerCase();
                 return current.contains(dim);
             }
 
-            if (condition.equals("sneaking")) return mc.player.isSneaking();
-            if (condition.equals("!sneaking")) return !mc.player.isSneaking();
+            if (condition.equals("sneaking")) return mc.player.isShiftKeyDown();
+            if (condition.equals("!sneaking")) return !mc.player.isShiftKeyDown();
 
             if (condition.equals("sprinting")) return mc.player.isSprinting();
             if (condition.equals("!sprinting")) return !mc.player.isSprinting();
 
-            if (condition.equals("raining")) return mc.world.isRaining();
-            if (condition.equals("!raining")) return !mc.world.isRaining();
+            if (condition.equals("raining")) return mc.level.isRaining();
+            if (condition.equals("!raining")) return !mc.level.isRaining();
 
             if (condition.equals("day")) {
-                long time = mc.world.getTimeOfDay() % 24000;
+                long time = mc.level.getLevelData().getGameTime() % 24000;
                 return time >= 0 && time < 12000;
             }
             if (condition.equals("night")) {
-                long time = mc.world.getTimeOfDay() % 24000;
+                long time = mc.level.getLevelData().getGameTime() % 24000;
                 return time >= 12000 && time < 24000;
             }
 
@@ -1393,9 +1393,9 @@ public class Actions extends Module {
                 if (parts.length == 2) {
                     int slot = Integer.parseInt(parts[0]);
                     String itemName = parts[1].toLowerCase();
-                    if (slot >= 0 && slot < mc.player.getInventory().size()) {
-                        ItemStack stack = mc.player.getInventory().getStack(slot);
-                        return stack.getName().getString().toLowerCase().contains(itemName);
+                    if (slot >= 0 && slot < mc.player.getInventory().getContainerSize()) {
+                        ItemStack stack = mc.player.getInventory().getItem(slot);
+                        return stack.getItemName().getString().toLowerCase().contains(itemName);
                     }
                 }
             }
@@ -2224,11 +2224,11 @@ public class Actions extends Module {
         }
     }
 
-    private Vec3d lastVelocity = Vec3d.ZERO;
+    private Vec3 lastVelocity = Vec3.ZERO;
 
     private void trackVelocity() {
         if (mc.player == null) return;
-        Vec3d currentVelocity = mc.player.getVelocity();
+        Vec3 currentVelocity = mc.player.getDeltaMovement();
         double magnitude = currentVelocity.length();
 
         if (velocityEnabled.get() && magnitude >= velocityThreshold.get()) {
@@ -2269,10 +2269,10 @@ public class Actions extends Module {
         if (mc.player == null) return;
 
         Map<String, Integer> currentCounts = new HashMap<>();
-        for (int i = 0; i < mc.player.getInventory().size(); i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+        for (int i = 0; i < mc.player.getInventory().getContainerSize(); i++) {
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (!stack.isEmpty()) {
-                String name = stack.getName().getString().toLowerCase();
+                String name = stack.getItemName().getString().toLowerCase();
                 currentCounts.merge(name, stack.getCount(), Integer::sum);
             }
         }
@@ -2406,7 +2406,7 @@ public class Actions extends Module {
     }
 
     public int getCurrentHunger() {
-        return mc.player != null ? mc.player.getHungerManager().getFoodLevel() : 0;
+        return mc.player != null ? mc.player.getFoodData().getFoodLevel() : 0;
     }
 
     public int getCurrentXPLevel() {
@@ -2414,8 +2414,8 @@ public class Actions extends Module {
     }
 
     public String getCurrentDimension() {
-        if (mc.world == null) return "unknown";
-        return mc.world.getRegistryKey().getValue().toString();
+        if (mc.level == null) return "unknown";
+        return mc.level.dimension().identifier().toString();
     }
 
     public double getDistanceTraveled() {
@@ -2431,12 +2431,12 @@ public class Actions extends Module {
     }
 
     public boolean isInCombat() {
-        return mc.targetedEntity != null && mc.targetedEntity instanceof LivingEntity;
+        return mc.crosshairPickEntity != null && mc.crosshairPickEntity instanceof LivingEntity;
     }
 
     public int getCurrentCombo() {
-        if (mc.targetedEntity != null && mc.targetedEntity instanceof LivingEntity) {
-            return ComboTracker.getCombo(mc.targetedEntity.getUuid());
+        if (mc.crosshairPickEntity != null && mc.crosshairPickEntity instanceof LivingEntity) {
+            return ComboTracker.getCombo(mc.crosshairPickEntity.getUUID());
         }
         return 0;
     }
@@ -2444,22 +2444,22 @@ public class Actions extends Module {
     public boolean isFullyArmored() {
         if (mc.player == null) return false;
         for (EquipmentSlot slot : EquipmentSlot.values()) {
-            if (mc.player.getEquippedStack(slot).isEmpty()) return false;
+            if (mc.player.getItemBySlot(slot).isEmpty()) return false;
         }
         return true;
     }
 
     public int getTotalArmorPoints() {
         if (mc.player == null) return 0;
-        return mc.player.getArmor();
+        return mc.player.getArmorValue();
     }
 
     public int getItemCount(String itemName) {
         if (mc.player == null) return 0;
         int count = 0;
-        for (int i = 0; i < mc.player.getInventory().size(); i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
-            if (!stack.isEmpty() && stack.getName().getString().toLowerCase().contains(itemName.toLowerCase())) {
+        for (int i = 0; i < mc.player.getInventory().getContainerSize(); i++) {
+            ItemStack stack = mc.player.getInventory().getItem(i);
+            if (!stack.isEmpty() && stack.getItemName().getString().toLowerCase().contains(itemName.toLowerCase())) {
                 count += stack.getCount();
             }
         }
@@ -2467,8 +2467,8 @@ public class Actions extends Module {
     }
 
     public String getCurrentGamemode() {
-        if (mc.interactionManager == null) return "unknown";
-        return mc.interactionManager.getCurrentGameMode().name().toLowerCase();
+        if (mc.gameMode == null) return "unknown";
+        return mc.gameMode.getPlayerMode().name().toLowerCase();
     }
 
     public float getTPS() {
@@ -2480,25 +2480,25 @@ public class Actions extends Module {
     }
 
     public boolean isInNether() {
-        return mc.world != null && mc.world.getRegistryKey() == World.NETHER;
+        return mc.level != null && mc.level.dimension() == Level.NETHER;
     }
 
     public boolean isInEnd() {
-        return mc.world != null && mc.world.getRegistryKey() == World.END;
+        return mc.level != null && mc.level.dimension() == Level.END;
     }
 
     public boolean isInOverworld() {
-        return mc.world != null && mc.world.getRegistryKey() == World.OVERWORLD;
+        return mc.level != null && mc.level.dimension() == Level.OVERWORLD;
     }
 
     public int getActiveEffectCount() {
-        return mc.player != null ? mc.player.getStatusEffects().size() : 0;
+        return mc.player != null ? mc.player.getActiveEffects().size() : 0;
     }
 
     public boolean hasEffect(String effectName) {
         if (mc.player == null) return false;
-        for (StatusEffectInstance inst : mc.player.getStatusEffects()) {
-            if (inst.getEffectType().value().getName().getString().toLowerCase().contains(effectName.toLowerCase())) {
+        for (MobEffectInstance inst : mc.player.getActiveEffects()) {
+            if (inst.getEffect().value().getDisplayName().getString().toLowerCase().contains(effectName.toLowerCase())) {
                 return true;
             }
         }
@@ -2506,9 +2506,9 @@ public class Actions extends Module {
     }
 
     public int getNearbyPlayerCount(double range) {
-        if (mc.player == null || mc.world == null) return 0;
+        if (mc.player == null || mc.level == null) return 0;
         int count = 0;
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             if (player != mc.player && mc.player.distanceTo(player) <= range) {
                 count++;
             }
@@ -2516,11 +2516,11 @@ public class Actions extends Module {
         return count;
     }
 
-    public PlayerEntity getClosestPlayer(double range) {
-        if (mc.player == null || mc.world == null) return null;
-        PlayerEntity closest = null;
+    public Player getClosestPlayer(double range) {
+        if (mc.player == null || mc.level == null) return null;
+        Player closest = null;
         double closestDist = range;
-        for (PlayerEntity player : mc.world.getPlayers()) {
+        for (Player player : mc.level.players()) {
             if (player != mc.player) {
                 double dist = mc.player.distanceTo(player);
                 if (dist < closestDist) {
@@ -2543,8 +2543,8 @@ public class Actions extends Module {
     public List<String> getActiveEffectNames() {
         if (mc.player == null) return Collections.emptyList();
         List<String> names = new ArrayList<>();
-        for (StatusEffectInstance inst : mc.player.getStatusEffects()) {
-            names.add(inst.getEffectType().value().getName().getString());
+        for (MobEffectInstance inst : mc.player.getActiveEffects()) {
+            names.add(inst.getEffect().value().getDisplayName().getString());
         }
         return names;
     }
@@ -2554,9 +2554,9 @@ public class Actions extends Module {
         lastXPLevel = mc.player != null ? mc.player.experienceLevel : 0;
         wasDead = false;
         pendingRespawn = false;
-        wasRaining = mc.world != null && mc.world.isRaining();
-        lastDimension = mc.world != null ? mc.world.getRegistryKey() : World.OVERWORLD;
-        lastPosition = mc.player != null ? mc.player.getEyePos() : Vec3d.ZERO;
+        wasRaining = mc.level != null && mc.level.isRaining();
+        lastDimension = mc.level != null ? mc.level.dimension() : Level.OVERWORLD;
+        lastPosition = mc.player != null ? mc.player.getEyePosition() : Vec3.ZERO;
         accumulatedDistance = 0;
         joinTick = currentTick;
         lastTargetUuid = null;

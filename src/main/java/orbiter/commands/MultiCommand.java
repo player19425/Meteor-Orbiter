@@ -5,10 +5,11 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import meteordevelopment.meteorclient.commands.Command;
-import net.minecraft.command.CommandSource;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.scoreboard.Team;
-import net.minecraft.util.math.Box;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.scores.PlayerTeam;
+import net.minecraft.world.level.entity.EntityTypeTest;
+import net.minecraft.world.phys.AABB;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -40,7 +41,7 @@ public class MultiCommand extends Command {
         §7Examples (correct placement):
         §r  .multicommand {all} give {player} diamond
         §r  .multicommand {near:20} tp {player} 0 100 0
-        §r  .multicommand {team:Red} say Team Red rocks!
+        §r  .multicommand {team:Red} say PlayerTeam Red rocks!
         §r  .multicommand {random:3} kick {player} Bye ; {all} say Cleanup done.
         §r  .multicommand {all} tp {player} ~ 100 ~
         §r  .multicommand {nearest} tp {player} 0 64 0
@@ -55,7 +56,7 @@ public class MultiCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<CommandSource> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.then(literal("help")
             .executes(context -> {
                 for (String line : HELP_TEXT.split("\n")) {
@@ -67,7 +68,7 @@ public class MultiCommand extends Command {
         builder.then(argument("args", StringArgumentType.greedyString())
             .suggests(this::suggestInputs)
             .executes(context -> {
-                if (mc.player == null || mc.world == null) {
+                if (mc.player == null || mc.level == null) {
                     error("Not connected to a server.");
                     return SINGLE_SUCCESS;
                 }
@@ -156,10 +157,10 @@ public class MultiCommand extends Command {
     }
 
     private void sendCommand(String command) {
-        if (mc.player == null || mc.getNetworkHandler() == null) return;
+        if (mc.player == null || mc.getConnection() == null) return;
 
         if (command.startsWith("/")) command = command.substring(1);
-        mc.getNetworkHandler().sendChatCommand(command);
+        mc.getConnection().sendCommand(command);
     }
 
     private List<String> resolveSelector(String raw) {
@@ -220,33 +221,33 @@ public class MultiCommand extends Command {
             return getRandomPlayers(count);
         }
 
-        if (mc.world != null && mc.world.getPlayers().stream().anyMatch(p -> p.getName().getString().equalsIgnoreCase(selector))) {
+        if (mc.level != null && mc.level.players().stream().anyMatch(p -> p.getName().getString().equalsIgnoreCase(selector))) {
             return Set.of(selector);
         }
         return Collections.emptySet();
     }
 
     private Set<String> getAllPlayers() {
-        if (mc.world == null) return Collections.emptySet();
-        return mc.world.getPlayers().stream()
+        if (mc.level == null) return Collections.emptySet();
+        return mc.level.players().stream()
             .map(p -> p.getName().getString())
             .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private Set<String> getTeamPlayers(String teamName) {
-        if (mc.world == null || mc.world.getScoreboard() == null) return Collections.emptySet();
-        Team team = mc.world.getScoreboard().getTeam(teamName);
+        if (mc.level == null || mc.level.getScoreboard() == null) return Collections.emptySet();
+        PlayerTeam team = mc.level.getScoreboard().getPlayerTeam(teamName);
         if (team == null) return Collections.emptySet();
-        return mc.world.getPlayers().stream()
-            .filter(p -> team.getPlayerList().contains(p.getName().getString()))
+        return mc.level.players().stream()
+            .filter(p -> team.getPlayers().contains(p.getName().getString()))
             .map(p -> p.getName().getString())
             .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private Set<String> getNearbyPlayers(double radius) {
-        if (mc.player == null || mc.world == null) return Collections.emptySet();
-        Box box = mc.player.getBoundingBox().expand(radius);
-        return mc.world.getEntitiesByClass(PlayerEntity.class, box, p -> p != mc.player).stream()
+        if (mc.player == null || mc.level == null) return Collections.emptySet();
+        AABB box = mc.player.getBoundingBox().inflate(radius);
+        return mc.level.getEntities(EntityTypeTest.forClass(Player.class), box, p -> p != mc.player).stream()
             .map(p -> p.getName().getString())
             .collect(Collectors.toCollection(LinkedHashSet::new));
     }
@@ -259,24 +260,22 @@ public class MultiCommand extends Command {
     }
 
     private Set<String> getNearestPlayer() {
-        if (mc.player == null || mc.world == null) return Collections.emptySet();
-        return mc.world.getEntitiesByClass(PlayerEntity.class,
-                mc.player.getBoundingBox().expand(2048), p -> p != mc.player).stream()
+        if (mc.player == null || mc.level == null) return Collections.emptySet();
+        return mc.level.getEntities(EntityTypeTest.forClass(Player.class), mc.player.getBoundingBox().inflate(2048), p -> p != mc.player).stream()
             .min((a, b) -> Double.compare(a.distanceTo(mc.player), b.distanceTo(mc.player)))
             .map(p -> Set.of(p.getName().getString()))
             .orElse(Collections.emptySet());
     }
 
     private Set<String> getFurthestPlayer() {
-        if (mc.player == null || mc.world == null) return Collections.emptySet();
-        return mc.world.getEntitiesByClass(PlayerEntity.class,
-                mc.player.getBoundingBox().expand(2048), p -> p != mc.player).stream()
+        if (mc.player == null || mc.level == null) return Collections.emptySet();
+        return mc.level.getEntities(EntityTypeTest.forClass(Player.class), mc.player.getBoundingBox().inflate(2048), p -> p != mc.player).stream()
             .max((a, b) -> Double.compare(a.distanceTo(mc.player), b.distanceTo(mc.player)))
             .map(p -> Set.of(p.getName().getString()))
             .orElse(Collections.emptySet());
     }
 
-    private CompletableFuture<Suggestions> suggestInputs(com.mojang.brigadier.context.CommandContext<CommandSource> ctx, SuggestionsBuilder builder) {
+    private CompletableFuture<Suggestions> suggestInputs(com.mojang.brigadier.context.CommandContext<ClientSuggestionProvider> ctx, SuggestionsBuilder builder) {
         String remaining = builder.getRemaining().toLowerCase();
 
         if (remaining.endsWith("{") || remaining.isEmpty() || remaining.endsWith(";")) {
@@ -303,8 +302,8 @@ public class MultiCommand extends Command {
     }
 
     private void suggestTeams(SuggestionsBuilder builder, String prefix) {
-        if (mc.world == null || mc.world.getScoreboard() == null) return;
-        for (Team team : mc.world.getScoreboard().getTeams()) {
+        if (mc.level == null || mc.level.getScoreboard() == null) return;
+        for (PlayerTeam team : mc.level.getScoreboard().getPlayerTeams()) {
             String name = team.getName();
             if (name.toLowerCase().startsWith(prefix.toLowerCase())) {
                 builder.suggest("{team:" + name + "}");

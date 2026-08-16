@@ -1,11 +1,11 @@
 package orbiter.mixin;
 
 import orbiter.modules.misc.ItemInfo;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.tooltip.TooltipType;
-import net.minecraft.text.Text;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -16,9 +16,9 @@ import java.util.List;
 
 @Mixin(ItemStack.class)
 public class ItemInfoMixin {
-    @Inject(method = "getTooltip", at = @At("RETURN"))
-    private void orbiter$appendItemInfo(Item.TooltipContext context, PlayerEntity player, TooltipType type, CallbackInfoReturnable<List<Text>> cir) {
-        List<Text> original = cir.getReturnValue();
+    @Inject(method = "getTooltipLines", at = @At("RETURN"))
+    private void orbiter$appendItemInfo(Item.TooltipContext context, Player player, TooltipFlag type, CallbackInfoReturnable<List<Component>> cir) {
+        List<Component> original = cir.getReturnValue();
         if (original == null) return;
 
         ItemInfo.appendTooltip((ItemStack) (Object) this, original);

@@ -1,26 +1,26 @@
 package orbiter.util;
 
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
 
 public final class LegacyTextFormatter {
     private LegacyTextFormatter() {}
 
-    public static MutableText parse(String input) {
+    public static MutableComponent parse(String input) {
         String value = input == null ? "" : input;
-        MutableText result = Text.empty();
+        MutableComponent result = Component.empty();
         StringBuilder plain = new StringBuilder();
-        Formatting pending = null;
+        ChatFormatting pending = null;
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
             if (c == '&' && i + 1 < value.length()) {
                 char code = Character.toLowerCase(value.charAt(i + 1));
                 if (code == '&') { plain.append('&'); i++; continue; }
-                Formatting formatting = Formatting.byCode(code);
+                ChatFormatting formatting = ChatFormatting.getByCode(code);
                 if (formatting != null) {
                     if (!plain.isEmpty()) {
-                        result.append(Text.literal(plain.toString()).formatted(pending == null ? Formatting.RESET : pending));
+                        result.append(Component.literal(plain.toString()).withStyle(pending == null ? ChatFormatting.RESET : pending));
                         plain.setLength(0);
                     }
                     pending = formatting;
@@ -30,7 +30,7 @@ public final class LegacyTextFormatter {
             }
             plain.append(c);
         }
-        if (!plain.isEmpty()) result.append(Text.literal(plain.toString()).formatted(pending == null ? Formatting.RESET : pending));
+        if (!plain.isEmpty()) result.append(Component.literal(plain.toString()).withStyle(pending == null ? ChatFormatting.RESET : pending));
         return result;
     }
 
@@ -42,7 +42,7 @@ public final class LegacyTextFormatter {
             if (c == '&' && i + 1 < input.length()) {
                 char code = Character.toLowerCase(input.charAt(i + 1));
                 if (code == '&') { result.append('&'); i++; continue; }
-                if (Formatting.byCode(code) != null) { result.append('\u00a7').append(code); i++; continue; }
+                if (ChatFormatting.getByCode(code) != null) { result.append('\u00a7').append(code); i++; continue; }
             }
             result.append(c);
         }

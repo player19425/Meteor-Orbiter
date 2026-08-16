@@ -3,26 +3,28 @@ package orbiter.modules;
 import orbiter.Orbiter;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.component.type.*;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.entity.attribute.EntityAttribute;
-import net.minecraft.entity.attribute.EntityAttributeModifier;
-import net.minecraft.entity.attribute.EntityAttributes;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.NbtList;
-import net.minecraft.network.packet.c2s.play.CreativeInventoryActionC2SPacket;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.component.*;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.world.entity.EquipmentSlotGroup;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.entity.ai.attributes.Attribute;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.core.Holder;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Unit;
 
 import java.util.ArrayList;
@@ -33,7 +35,7 @@ public class ItemCreator extends CreativeSafetyModule {
         private final SettingGroup sgGeneral = settings.getDefaultGroup();
         private final SettingGroup sgPresets = settings.createGroup("Presets");
         private final SettingGroup sgName = settings.createGroup("Custom Name");
-        private final SettingGroup sgLore = settings.createGroup("Lore");
+        private final SettingGroup sgLore = settings.createGroup("ItemLore");
         private final SettingGroup sgEnchants = settings.createGroup("Enchantments");
         private final SettingGroup sgAttributes = settings.createGroup("Attributes");
         private final SettingGroup sgFlags = settings.createGroup("Item Flags");
@@ -392,7 +394,7 @@ public class ItemCreator extends CreativeSafetyModule {
                         return;
                 }
 
-                if (!mc.player.getAbilities().creativeMode) {
+                if (!mc.player.getAbilities().instabuild) {
                         warning("You must be in Creative mode!");
                         toggle();
                         return;
@@ -415,7 +417,7 @@ public class ItemCreator extends CreativeSafetyModule {
                                 }
 
                                 giveItem(stack);
-                                info("Created item: " + stack.getName().getString());
+                                info("Created item: " + stack.getHoverName().getString());
                         } catch (Exception e) {
                                 error("Error creating item: " + e.getMessage());
                         }
@@ -425,10 +427,10 @@ public class ItemCreator extends CreativeSafetyModule {
         }
 
         private void applyPreset(PresetType preset) {
-                if (mc.player == null || mc.player.networkHandler == null) return;
+                if (mc.player == null || mc.player.connection == null) return;
                 switch (preset) {
                         case GodSword -> {
-                                mc.player.networkHandler.sendChatCommand(
+                                mc.player.connection.sendCommand(
                                                 "give @s netherite_sword[" +
                                                                 "custom_name='{\"text\":\"God Sword\",\"color\":\"gold\",\"bold\":true}',"
                                                                 +
@@ -445,7 +447,7 @@ public class ItemCreator extends CreativeSafetyModule {
                                 info("Loaded preset: God Sword");
                         }
                         case GodAxe -> {
-                                mc.player.networkHandler.sendChatCommand(
+                                mc.player.connection.sendCommand(
                                                 "give @s netherite_axe[" +
                                                                 "custom_name='{\"text\":\"God Axe\",\"color\":\"red\",\"bold\":true}',"
                                                                 +
@@ -460,7 +462,7 @@ public class ItemCreator extends CreativeSafetyModule {
                                 info("Loaded preset: God Axe");
                         }
                         case GodBow -> {
-                                mc.player.networkHandler.sendChatCommand(
+                                mc.player.connection.sendCommand(
                                                 "give @s bow[" +
                                                                 "custom_name='{\"text\":\"God Bow\",\"color\":\"aqua\",\"bold\":true}',"
                                                                 +
@@ -473,7 +475,7 @@ public class ItemCreator extends CreativeSafetyModule {
                         case GodArmor -> {
                                 String[] pieces = { "helmet", "chestplate", "leggings", "boots" };
                                 for (String piece : pieces) {
-                                        mc.player.networkHandler.sendChatCommand(
+                                        mc.player.connection.sendCommand(
                                                         "give @s netherite_" + piece + "[" +
                                                                         "custom_name='{\"text\":\"God "
                                                                         + piece.substring(0, 1).toUpperCase()
@@ -501,14 +503,14 @@ public class ItemCreator extends CreativeSafetyModule {
                                                 pages.append(",");
                                         pages.append("'{\"text\":\"" + "\u00A7k\u2588".repeat(200) + "\"}'");
                                 }
-                                mc.player.networkHandler.sendChatCommand(
+                                mc.player.connection.sendCommand(
                                                 "give @s written_book[written_book_content={title:\"Crash\",author:\"Orbiter\",pages:["
                                                                 + pages + "]}]");
                                 info("Loaded preset: Crash Book");
                         }
                         case BanItem -> {
-                                mc.player.networkHandler.sendChatCommand(
-                                                "give @s shulker_box[custom_name='{\"text\":\"Ban Box\",\"color\":\"dark_red\",\"bold\":true}',"
+                                mc.player.connection.sendCommand(
+                                                "give @s shulker_box[custom_name='{\"text\":\"Ban AABB\",\"color\":\"dark_red\",\"bold\":true}',"
                                                                 +
                                                                 "lore=['\"Opens = crash\"']," +
                                                                 "container=[" +
@@ -524,13 +526,13 @@ public class ItemCreator extends CreativeSafetyModule {
         }
 
         private void giveItem(ItemStack stack) {
-                if (mc.player == null || mc.player.networkHandler == null) return;
+                if (mc.player == null || mc.player.connection == null) return;
                 if (dropItem.get()) {
-                        mc.player.networkHandler.sendPacket(new CreativeInventoryActionC2SPacket(-1, stack));
+                        mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(-1, stack));
                 } else {
                         int slot = 36 + giveSlot.get();
-                        mc.player.networkHandler.sendPacket(new CreativeInventoryActionC2SPacket(slot, stack));
-                        mc.player.getInventory().setStack(giveSlot.get(), stack);
+                        mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(slot, stack));
+                        mc.player.getInventory().setItem(giveSlot.get(), stack);
                 }
         }
 
@@ -544,7 +546,7 @@ public class ItemCreator extends CreativeSafetyModule {
                 if (overrideStackSize.get() > 0) {
                         stackSize = overrideStackSize.get();
                 } else {
-                        stackSize = Math.min(count.get(), Math.max(1, item.getMaxCount()));
+                        stackSize = Math.min(count.get(), Math.max(1, item.getDefaultMaxStackSize()));
                 }
                 ItemStack stack = new ItemStack(item, stackSize);
 
@@ -555,7 +557,7 @@ public class ItemCreator extends CreativeSafetyModule {
                 applyEnchantments(stack);
 
                 if (enchantGlint.get()) {
-                        stack.set(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true);
+                        stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
                 }
 
                 applyAttributes(stack);
@@ -583,23 +585,23 @@ public class ItemCreator extends CreativeSafetyModule {
                                 .replace("&m", "\u00A7m").replace("&n", "\u00A7n").replace("&o", "\u00A7o")
                                 .replace("&r", "\u00A7r");
 
-                MutableText nameText = Text.literal(nameStr);
+                MutableComponent nameText = Component.literal(nameStr);
                 Style style = Style.EMPTY
                                 .withColor(getFormatting(nameColor.get()))
                                 .withBold(nameBold.get())
                                 .withItalic(nameItalic.get())
                                 .withObfuscated(nameObfuscated.get())
                                 .withStrikethrough(nameStrikethrough.get())
-                                .withUnderline(nameUnderline.get());
+                                .withUnderlined(nameUnderline.get());
                 nameText.setStyle(style);
-                stack.set(DataComponentTypes.CUSTOM_NAME, nameText);
+                stack.set(DataComponents.CUSTOM_NAME, nameText);
         }
 
         private void applyLore(ItemStack stack) {
                 if (!enableLore.get())
                         return;
 
-                List<Text> loreLines = new ArrayList<>();
+                List<Component> loreLines = new ArrayList<>();
                 addLoreLine(loreLines, lore1.get());
                 addLoreLine(loreLines, lore2.get());
                 addLoreLine(loreLines, lore3.get());
@@ -610,20 +612,20 @@ public class ItemCreator extends CreativeSafetyModule {
                 addLoreLine(loreLines, lore8.get());
 
                 if (!loreLines.isEmpty()) {
-                        stack.set(DataComponentTypes.LORE, new LoreComponent(loreLines));
+                        stack.set(DataComponents.LORE, new ItemLore(loreLines));
                 }
         }
 
         private void applyEnchantments(ItemStack stack) {
-                if (!enableEnchants.get() || mc.world == null)
+                if (!enableEnchants.get() || mc.level == null)
                         return;
 
-                ItemEnchantmentsComponent.Builder enchBuilder = new ItemEnchantmentsComponent.Builder(
-                                ItemEnchantmentsComponent.DEFAULT);
+                ItemEnchantments.Mutable enchBuilder = new ItemEnchantments.Mutable(
+                                ItemEnchantments.EMPTY);
 
                 if (allEnchantments.get()) {
-                        var registry = mc.world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
-                        registry.streamEntries().forEach(ref -> enchBuilder.add(ref, allEnchantLevel.get()));
+                        var registry = mc.level.registryAccess().getOrThrow(Registries.ENCHANTMENT);
+                        registry.value().entrySet().forEach(e -> enchBuilder.set(registry.value().wrapAsHolder(e.getValue()), allEnchantLevel.get()));
                 } else {
                         addEnchantment(enchBuilder, enchant1.get(), enchant1Level.get());
                         addEnchantment(enchBuilder, enchant2.get(), enchant2Level.get());
@@ -637,14 +639,14 @@ public class ItemCreator extends CreativeSafetyModule {
                         addEnchantment(enchBuilder, enchant10.get(), enchant10Level.get());
                 }
 
-                stack.set(DataComponentTypes.ENCHANTMENTS, enchBuilder.build());
+                stack.set(DataComponents.ENCHANTMENTS, enchBuilder.toImmutable());
         }
 
         private void applyAttributes(ItemStack stack) {
                 if (!enableAttributes.get())
                         return;
 
-                AttributeModifiersComponent.Builder attrBuilder = AttributeModifiersComponent.builder();
+                ItemAttributeModifiers.Builder attrBuilder = ItemAttributeModifiers.builder();
 
                 if (allAttributes.get()) {
                         int idx = 0;
@@ -662,35 +664,35 @@ public class ItemCreator extends CreativeSafetyModule {
                         addAttribute(attrBuilder, attribute5Type.get(), attribute5Value.get(), "orbiter_attr_5");
                 }
 
-                stack.set(DataComponentTypes.ATTRIBUTE_MODIFIERS, attrBuilder.build());
+                stack.set(DataComponents.ATTRIBUTE_MODIFIERS, attrBuilder.build());
         }
 
         private void applyFlags(ItemStack stack) {
                 if (unbreakable.get()) {
-                        stack.set(DataComponentTypes.UNBREAKABLE, Unit.INSTANCE);
+                        stack.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
                 }
 
                 if (maxDamage.get() > 0) {
-                        stack.set(DataComponentTypes.MAX_DAMAGE, maxDamage.get());
+                        stack.set(DataComponents.MAX_DAMAGE, maxDamage.get());
                 }
 
                 if (customModelData.get() > 0) {
-                        stack.set(DataComponentTypes.CUSTOM_MODEL_DATA, new CustomModelDataComponent(
+                        stack.set(DataComponents.CUSTOM_MODEL_DATA, new CustomModelData(
                                         List.of((float) customModelData.get()), List.of(), List.of(), List.of()));
                 }
 
                 if (maxStackOverride.get() > 0) {
-                        stack.set(DataComponentTypes.MAX_STACK_SIZE, maxStackOverride.get());
+                        stack.set(DataComponents.MAX_STACK_SIZE, maxStackOverride.get());
                 }
 
                 if (repairCost.get() > 0) {
-                        stack.set(DataComponentTypes.REPAIR_COST, repairCost.get());
+                        stack.set(DataComponents.REPAIR_COST, repairCost.get());
                 }
         }
 
-        private void addLoreLine(List<Text> loreLines, String text) {
+        private void addLoreLine(List<Component> loreLines, String text) {
                 if (text != null && !text.isEmpty()) {
-                        MutableText loreText = Text.literal(text);
+                        MutableComponent loreText = Component.literal(text);
                         Style style = Style.EMPTY
                                         .withColor(getFormatting(loreColor.get()))
                                         .withItalic(false)
@@ -700,8 +702,8 @@ public class ItemCreator extends CreativeSafetyModule {
                 }
         }
 
-        private void addEnchantment(ItemEnchantmentsComponent.Builder builder, String enchantId, int level) {
-                if (enchantId == null || enchantId.isEmpty() || mc.world == null)
+        private void addEnchantment(ItemEnchantments.Mutable builder, String enchantId, int level) {
+                if (enchantId == null || enchantId.isEmpty() || mc.level == null)
                         return;
 
                 String cleanId = enchantId.toLowerCase().replace(" ", "_");
@@ -709,70 +711,70 @@ public class ItemCreator extends CreativeSafetyModule {
                         cleanId = "minecraft:" + cleanId;
                 String[] parts = cleanId.split(":");
                 if (parts.length < 2) return;
-                Identifier id = Identifier.of(parts[0], parts[1]);
+                Identifier id = Identifier.fromNamespaceAndPath(parts[0], parts[1]);
 
-                var key = net.minecraft.registry.RegistryKey.of(RegistryKeys.ENCHANTMENT, id);
-                var registry = mc.world.getRegistryManager().getOrThrow(RegistryKeys.ENCHANTMENT);
-                Optional<RegistryEntry.Reference<Enchantment>> entry = registry.getOptional(key);
+                var key = net.minecraft.resources.ResourceKey.create(Registries.ENCHANTMENT, id);
+                var registry = mc.level.registryAccess().getOrThrow(Registries.ENCHANTMENT);
+                Optional<Enchantment> entry = registry.value().getOptional(key);
 
-                entry.ifPresent(ref -> builder.add(ref, level));
+                entry.ifPresent(ench -> builder.set(registry.value().wrapAsHolder(ench), level));
         }
 
-        private void addAttribute(AttributeModifiersComponent.Builder builder, AttributeType type, double value,
+        private void addAttribute(ItemAttributeModifiers.Builder builder, AttributeType type, double value,
                         String name) {
                 if (type == AttributeType.None)
                         return;
 
-                RegistryEntry<EntityAttribute> attribute = getAttributeEntry(type);
+                Holder<Attribute> attribute = getAttributeEntry(type);
                 if (attribute == null)
                         return;
 
-                EntityAttributeModifier.Operation op = switch (attributeOperation.get()) {
-                        case Add -> EntityAttributeModifier.Operation.ADD_VALUE;
-                        case MultiplyBase -> EntityAttributeModifier.Operation.ADD_MULTIPLIED_BASE;
-                        case MultiplyTotal -> EntityAttributeModifier.Operation.ADD_MULTIPLIED_TOTAL;
+                AttributeModifier.Operation op = switch (attributeOperation.get()) {
+                        case Add -> AttributeModifier.Operation.ADD_VALUE;
+                        case MultiplyBase -> AttributeModifier.Operation.ADD_MULTIPLIED_BASE;
+                        case MultiplyTotal -> AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL;
                 };
 
-                EntityAttributeModifier modifier = new EntityAttributeModifier(
-                                Identifier.of("orbiter", name), value, op);
+                AttributeModifier modifier = new AttributeModifier(
+                                Identifier.fromNamespaceAndPath("orbiter", name), value, op);
 
-                builder.add(attribute, modifier, AttributeModifierSlot.ANY);
+                builder.add(attribute, modifier, EquipmentSlotGroup.ANY);
         }
 
-        private RegistryEntry<EntityAttribute> getAttributeEntry(AttributeType type) {
+        private Holder<Attribute> getAttributeEntry(AttributeType type) {
                 return switch (type) {
-                        case AttackDamage -> EntityAttributes.ATTACK_DAMAGE;
-                        case AttackSpeed -> EntityAttributes.ATTACK_SPEED;
-                        case MaxHealth -> EntityAttributes.MAX_HEALTH;
-                        case MovementSpeed -> EntityAttributes.MOVEMENT_SPEED;
-                        case Armor -> EntityAttributes.ARMOR;
-                        case ArmorToughness -> EntityAttributes.ARMOR_TOUGHNESS;
-                        case KnockbackResistance -> EntityAttributes.KNOCKBACK_RESISTANCE;
-                        case Luck -> EntityAttributes.LUCK;
-                        case AttackKnockback -> EntityAttributes.ATTACK_KNOCKBACK;
-                        case FlyingSpeed -> EntityAttributes.FLYING_SPEED;
-                        case FollowRange -> EntityAttributes.FOLLOW_RANGE;
+                        case AttackDamage -> Attributes.ATTACK_DAMAGE;
+                        case AttackSpeed -> Attributes.ATTACK_SPEED;
+                        case MaxHealth -> Attributes.MAX_HEALTH;
+                        case MovementSpeed -> Attributes.MOVEMENT_SPEED;
+                        case Armor -> Attributes.ARMOR;
+                        case ArmorToughness -> Attributes.ARMOR_TOUGHNESS;
+                        case KnockbackResistance -> Attributes.KNOCKBACK_RESISTANCE;
+                        case Luck -> Attributes.LUCK;
+                        case AttackKnockback -> Attributes.ATTACK_KNOCKBACK;
+                        case FlyingSpeed -> Attributes.FLYING_SPEED;
+                        case FollowRange -> Attributes.FOLLOW_RANGE;
                         default -> null;
                 };
         }
 
         private void applyEntityData(ItemStack stack) {
-                NbtCompound entityTag = new NbtCompound();
+                CompoundTag entityTag = new CompoundTag();
 
                 if (!entityCustomName.get().isEmpty()) {
-                        Formatting fmt = getFormatting(entityNameColor.get());
+                        ChatFormatting fmt = getFormatting(entityNameColor.get());
                         String jsonName = "{\"text\":\"" + entityCustomName.get().replace("\"", "\\\"")
-                                        + "\",\"color\":\"" + fmt.getName() + "\"}";
+                                        + "\",\"color\":\"" + fmt.name().toLowerCase() + "\"}";
                         entityTag.putString("CustomName", jsonName);
                         entityTag.putBoolean("CustomNameVisible", entityNameVisible.get());
                 }
 
                 if (entityHealth.get() > 0) {
                         entityTag.putFloat("Health", entityHealth.get());
-                        NbtCompound healthAttr = new NbtCompound();
+                        CompoundTag healthAttr = new CompoundTag();
                         healthAttr.putString("id", "minecraft:max_health");
                         healthAttr.putDouble("base", entityHealth.get());
-                        NbtList attrList = new NbtList();
+                        ListTag attrList = new ListTag();
                         attrList.add(healthAttr);
                         entityTag.put("attributes", attrList);
                 }
@@ -803,31 +805,31 @@ public class ItemCreator extends CreativeSafetyModule {
                         entityTag.putInt("Size", entitySlimeSize.get());
 
                 if (!entityTag.isEmpty()) {
-                        String itemId = Registries.ITEM.getId(stack.getItem()).toString();
+                        String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
                         String entityId = itemId.replace("minecraft:", "").replace("_spawn_egg", "");
                         entityTag.putString("id", "minecraft:" + entityId);
-                        stack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(entityTag));
+                        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(entityTag));
                 }
         }
 
-        private Formatting getFormatting(NameColor color) {
+        private ChatFormatting getFormatting(NameColor color) {
                 return switch (color) {
-                        case Black -> Formatting.BLACK;
-                        case DarkBlue -> Formatting.DARK_BLUE;
-                        case DarkGreen -> Formatting.DARK_GREEN;
-                        case DarkAqua -> Formatting.DARK_AQUA;
-                        case DarkRed -> Formatting.DARK_RED;
-                        case DarkPurple -> Formatting.DARK_PURPLE;
-                        case Gold -> Formatting.GOLD;
-                        case Gray -> Formatting.GRAY;
-                        case DarkGray -> Formatting.DARK_GRAY;
-                        case Blue -> Formatting.BLUE;
-                        case Green -> Formatting.GREEN;
-                        case Aqua -> Formatting.AQUA;
-                        case Red -> Formatting.RED;
-                        case LightPurple -> Formatting.LIGHT_PURPLE;
-                        case Yellow -> Formatting.YELLOW;
-                        case White -> Formatting.WHITE;
+                        case Black -> ChatFormatting.BLACK;
+                        case DarkBlue -> ChatFormatting.DARK_BLUE;
+                        case DarkGreen -> ChatFormatting.DARK_GREEN;
+                        case DarkAqua -> ChatFormatting.DARK_AQUA;
+                        case DarkRed -> ChatFormatting.DARK_RED;
+                        case DarkPurple -> ChatFormatting.DARK_PURPLE;
+                        case Gold -> ChatFormatting.GOLD;
+                        case Gray -> ChatFormatting.GRAY;
+                        case DarkGray -> ChatFormatting.DARK_GRAY;
+                        case Blue -> ChatFormatting.BLUE;
+                        case Green -> ChatFormatting.GREEN;
+                        case Aqua -> ChatFormatting.AQUA;
+                        case Red -> ChatFormatting.RED;
+                        case LightPurple -> ChatFormatting.LIGHT_PURPLE;
+                        case Yellow -> ChatFormatting.YELLOW;
+                        case White -> ChatFormatting.WHITE;
                 };
         }
 

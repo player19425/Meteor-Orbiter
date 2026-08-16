@@ -1,17 +1,14 @@
 package orbiter.mixin;
 
-import net.minecraft.network.packet.s2c.play.CommandTreeS2CPacket;
+import net.minecraft.network.protocol.game.ClientboundCommandsPacket;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
 import java.util.List;
 
-@Mixin(CommandTreeS2CPacket.class)
+@Mixin(ClientboundCommandsPacket.class)
 public interface ServerProtectCommandTreeAccessor {
 
-    @Accessor("nodes")
-    List<?> orbiter$getNodes();
-
-    @Accessor("rootSize")
-    int orbiter$getRootSize();
+    @Accessor("entries")
+    List<?> orbiter$getEntries();
 }

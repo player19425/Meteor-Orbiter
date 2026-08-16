@@ -246,7 +246,7 @@ public class PluginDatabase {
         ns("worldguard", "WorldGuard");
         ns("worldinfo", "WorldInfo");
         ns("xaerominimap", "Xaero Minimap");
-        ns("xaeroworldmap", "Xaero World Map");
+        ns("xaeroworldmap", "Xaero Level Map");
         ns("zauctionhouse", "zAuctionHouse");
         ns("zshop", "zShop");
 
@@ -358,45 +358,45 @@ public class PluginDatabase {
         cmd("lp suffix", "LuckPerms", "Permissions");
         cmd("lp meta", "LuckPerms", "Permissions");
 
-        cmd("worldedit", "WorldEdit", "World Editing");
-        cmd("we", "WorldEdit", "World Editing");
-        cmd("//", "WorldEdit", "World Editing");
-        cmd("//set", "WorldEdit", "World Editing");
-        cmd("//replace", "WorldEdit", "World Editing");
-        cmd("//walls", "WorldEdit", "World Editing");
-        cmd("//outline", "WorldEdit", "World Editing");
-        cmd("//undo", "WorldEdit", "World Editing");
-        cmd("//redo", "WorldEdit", "World Editing");
-        cmd("//copy", "WorldEdit", "World Editing");
-        cmd("//cut", "WorldEdit", "World Editing");
-        cmd("//paste", "WorldEdit", "World Editing");
-        cmd("//move", "WorldEdit", "World Editing");
-        cmd("//stack", "WorldEdit", "World Editing");
-        cmd("//expand", "WorldEdit", "World Editing");
-        cmd("//contract", "WorldEdit", "World Editing");
-        cmd("//gen", "WorldEdit", "World Editing");
-        cmd("//cyl", "WorldEdit", "World Editing");
-        cmd("//sphere", "WorldEdit", "World Editing");
-        cmd("//forestgen", "WorldEdit", "World Editing");
-        cmd("//regen", "WorldEdit", "World Editing");
-        cmd("//wand", "WorldEdit", "World Editing");
-        cmd("//sel", "WorldEdit", "World Editing");
-        cmd("//desel", "WorldEdit", "World Editing");
-        cmd("//limit", "WorldEdit", "World Editing");
-        cmd("//history", "WorldEdit", "World Editing");
-        cmd("/toggleeditwand", "WorldEdit", "World Editing");
-        cmd("/up", "WorldEdit", "World Editing");
-        cmd("/jumpto", "WorldEdit", "World Editing");
-        cmd("/thru", "WorldEdit", "World Editing");
-        cmd("/ceil", "WorldEdit", "World Editing");
-        cmd("/chunk", "WorldEdit", "World Editing");
-        cmd("/drawsel", "WorldEdit", "World Editing");
-        cmd("/gmask", "WorldEdit", "World Editing");
-        cmd("//mask", "WorldEdit", "World Editing");
-        cmd("//fast", "WorldEdit", "World Editing");
-        cmd("/search", "WorldEdit", "World Editing");
-        cmd("//count", "WorldEdit", "World Editing");
-        cmd("//distr", "WorldEdit", "World Editing");
+        cmd("worldedit", "WorldEdit", "Level Editing");
+        cmd("we", "WorldEdit", "Level Editing");
+        cmd("//", "WorldEdit", "Level Editing");
+        cmd("//set", "WorldEdit", "Level Editing");
+        cmd("//replace", "WorldEdit", "Level Editing");
+        cmd("//walls", "WorldEdit", "Level Editing");
+        cmd("//outline", "WorldEdit", "Level Editing");
+        cmd("//undo", "WorldEdit", "Level Editing");
+        cmd("//redo", "WorldEdit", "Level Editing");
+        cmd("//copy", "WorldEdit", "Level Editing");
+        cmd("//cut", "WorldEdit", "Level Editing");
+        cmd("//paste", "WorldEdit", "Level Editing");
+        cmd("//move", "WorldEdit", "Level Editing");
+        cmd("//stack", "WorldEdit", "Level Editing");
+        cmd("//expand", "WorldEdit", "Level Editing");
+        cmd("//contract", "WorldEdit", "Level Editing");
+        cmd("//gen", "WorldEdit", "Level Editing");
+        cmd("//cyl", "WorldEdit", "Level Editing");
+        cmd("//sphere", "WorldEdit", "Level Editing");
+        cmd("//forestgen", "WorldEdit", "Level Editing");
+        cmd("//regen", "WorldEdit", "Level Editing");
+        cmd("//wand", "WorldEdit", "Level Editing");
+        cmd("//sel", "WorldEdit", "Level Editing");
+        cmd("//desel", "WorldEdit", "Level Editing");
+        cmd("//limit", "WorldEdit", "Level Editing");
+        cmd("//history", "WorldEdit", "Level Editing");
+        cmd("/toggleeditwand", "WorldEdit", "Level Editing");
+        cmd("/up", "WorldEdit", "Level Editing");
+        cmd("/jumpto", "WorldEdit", "Level Editing");
+        cmd("/thru", "WorldEdit", "Level Editing");
+        cmd("/ceil", "WorldEdit", "Level Editing");
+        cmd("/chunk", "WorldEdit", "Level Editing");
+        cmd("/drawsel", "WorldEdit", "Level Editing");
+        cmd("/gmask", "WorldEdit", "Level Editing");
+        cmd("//mask", "WorldEdit", "Level Editing");
+        cmd("//fast", "WorldEdit", "Level Editing");
+        cmd("/search", "WorldEdit", "Level Editing");
+        cmd("//count", "WorldEdit", "Level Editing");
+        cmd("//distr", "WorldEdit", "Level Editing");
 
         cmd("worldguard", "WorldGuard", "Protection");
         cmd("rg", "WorldGuard", "Protection");
@@ -963,15 +963,15 @@ public class PluginDatabase {
         cmd("vault", "Vault", "Economy");
         cmd("vault-info", "Vault", "Economy");
 
-        cmd("wb", "WorldBorder", "World");
-        cmd("worldborder", "WorldBorder", "World");
-        cmd("wb set", "WorldBorder", "World");
-        cmd("wb fill", "WorldBorder", "World");
-        cmd("wb reset", "WorldBorder", "World");
-        cmd("wb center", "WorldBorder", "World");
-        cmd("wb shape", "WorldBorder", "World");
-        cmd("wb msg", "WorldBorder", "World");
-        cmd("wb bypass", "WorldBorder", "World");
+        cmd("wb", "WorldBorder", "Level");
+        cmd("worldborder", "WorldBorder", "Level");
+        cmd("wb set", "WorldBorder", "Level");
+        cmd("wb fill", "WorldBorder", "Level");
+        cmd("wb reset", "WorldBorder", "Level");
+        cmd("wb center", "WorldBorder", "Level");
+        cmd("wb shape", "WorldBorder", "Level");
+        cmd("wb msg", "WorldBorder", "Level");
+        cmd("wb bypass", "WorldBorder", "Level");
 
         cmd("rtp", "BetterRTP", "Teleport");
         cmd("betterrtp", "BetterRTP", "Teleport");
@@ -1030,8 +1030,8 @@ public class PluginDatabase {
         cmd("spark tps", "Spark", "Admin");
         cmd("spark gc", "Spark", "Admin");
 
-        cmd("chunky", "Chunky", "World");
-        cmd("chunkyworld", "Chunky", "World");
+        cmd("chunky", "Chunky", "Level");
+        cmd("chunkyworld", "Chunky", "Level");
 
         cmd("lwc", "LWC", "Protection");
         cmd("lwcx", "LWCX", "Protection");
@@ -1080,13 +1080,13 @@ public class PluginDatabase {
 
         cmd("chatcontrol", "ChatControlRed", "Chat");
 
-        cmd("mv", "Multiverse-Core", "World");
-        cmd("multiverse", "Multiverse-Core", "World");
-        cmd("mvtp", "Multiverse-Core", "World");
-        cmd("mvcreate", "Multiverse-Core", "World");
-        cmd("mvmodify", "Multiverse-Core", "World");
-        cmd("mvlist", "Multiverse-Core", "World");
-        cmd("mvreload", "Multiverse-Core", "World");
+        cmd("mv", "Multiverse-Core", "Level");
+        cmd("multiverse", "Multiverse-Core", "Level");
+        cmd("mvtp", "Multiverse-Core", "Level");
+        cmd("mvcreate", "Multiverse-Core", "Level");
+        cmd("mvmodify", "Multiverse-Core", "Level");
+        cmd("mvlist", "Multiverse-Core", "Level");
+        cmd("mvreload", "Multiverse-Core", "Level");
 
         cmd("protectionstones", "ProtectionStones", "Land Claim");
         cmd("ps", "ProtectionStones", "Land Claim");
@@ -1111,9 +1111,9 @@ public class PluginDatabase {
         cmd("plasmovoice", "Plasmo Voice", "Voice");
         cmd("vc", "Plasmo Voice", "Voice");
 
-        cmd("iris", "Iris", "World");
+        cmd("iris", "Iris", "Level");
 
-        cmd("terra", "Terra", "World");
+        cmd("terra", "Terra", "Level");
 
         cmd("journeymap", "JourneyMap", "Maps");
 
@@ -1150,8 +1150,8 @@ public class PluginDatabase {
         ch("headatabase:*");
         ch("head:*");
 
-        cmd("wesui", "WorldEditSUI", "World Editing");
-        cmd("worldeditsui", "WorldEditSUI", "World Editing");
+        cmd("wesui", "WorldEditSUI", "Level Editing");
+        cmd("worldeditsui", "WorldEditSUI", "Level Editing");
         ns("worldeditsui", "WorldEditSUI");
         ch("worldeditsui:*");
 
@@ -1173,8 +1173,8 @@ public class PluginDatabase {
         ns("crazyenchantments", "CrazyEnchantments");
         ch("crazyenchantments:*");
 
-        cmd("fawe", "FAWE", "World Editing");
-        cmd("fastasyncworldedit", "FAWE", "World Editing");
+        cmd("fawe", "FAWE", "Level Editing");
+        cmd("fastasyncworldedit", "FAWE", "Level Editing");
         ns("fawe", "FAWE");
         ch("fawe:*");
 

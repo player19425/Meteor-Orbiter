@@ -5,14 +5,14 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.gui.screen.ingame.CraftingScreen;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.client.gui.screen.ingame.InventoryScreen;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.screen.slot.Slot;
-import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.client.gui.screens.inventory.CraftingScreen;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.inventory.ContainerInput;
 
 public class AutoCraftPlus extends Module {
 
@@ -201,7 +201,7 @@ public class AutoCraftPlus extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null || mc.interactionManager == null) return;
+        if (mc.player == null || mc.level == null || mc.gameMode == null) return;
 
         if (tickWaiter > 0) {
             tickWaiter--;
@@ -229,16 +229,16 @@ public class AutoCraftPlus extends Module {
         switch (craftState) {
             case OPEN_SCREEN -> {
                 if (useInventoryCrafting.get()) {
-                    if (!(mc.currentScreen instanceof InventoryScreen)) {
+                    if (!(mc.gui.screen() instanceof InventoryScreen)) {
                         if (openInventoryAutomatically.get()) {
-                            mc.setScreen(new InventoryScreen(mc.player));
+                            mc.gui.setScreen(new InventoryScreen(mc.player));
                         } else {
                             return false;
                         }
                     }
                 } else {
 
-                    if (!(mc.currentScreen instanceof CraftingScreen)) {
+                    if (!(mc.gui.screen() instanceof CraftingScreen)) {
                         info("Please open a crafting table.");
                         return false;
                     }
@@ -248,13 +248,13 @@ public class AutoCraftPlus extends Module {
             }
 
             case PLACE_INGREDIENTS -> {
-                if (!(mc.currentScreen instanceof HandledScreen<?>)) {
+                if (!(mc.gui.screen() instanceof AbstractContainerScreen<?>)) {
                     craftState = CraftState.OPEN_SCREEN;
                     return false;
                 }
 
-                HandledScreen<?> screen = (HandledScreen<?>) mc.currentScreen;
-                int syncId = screen.getScreenHandler().syncId;
+                AbstractContainerScreen<?> screen = (AbstractContainerScreen<?>) mc.gui.screen();
+                int syncId = screen.getMenu().containerId;
 
                 Item[] recipe = getRecipe();
                 int gridStart = getCraftingGridStart(screen);
@@ -274,9 +274,9 @@ public class AutoCraftPlus extends Module {
                     if (needed == Items.AIR || needed == null) continue;
 
                     int craftSlot = gridStart + i;
-                    Slot slot = screen.getScreenHandler().slots.get(craftSlot);
+                    Slot slot = screen.getMenu().slots.get(craftSlot);
 
-                    if (!slot.getStack().isEmpty() && slot.getStack().getItem() == needed) continue;
+                    if (!slot.getItem().isEmpty() && slot.getItem().getItem() == needed) continue;
 
                     int srcSlot = findItemInInventory(screen, needed, gridStart, gridSize);
                     if (srcSlot < 0) {
@@ -288,11 +288,11 @@ public class AutoCraftPlus extends Module {
                         return false;
                     }
 
-                    mc.interactionManager.clickSlot(syncId, srcSlot, 0, SlotActionType.PICKUP, mc.player);
-                    mc.interactionManager.clickSlot(syncId, craftSlot, 1, SlotActionType.PICKUP, mc.player);
+                    mc.gameMode.handleContainerInput(syncId, srcSlot, 0, ContainerInput.PICKUP, mc.player);
+                    mc.gameMode.handleContainerInput(syncId, craftSlot, 1, ContainerInput.PICKUP, mc.player);
 
-                    if (!mc.player.currentScreenHandler.getCursorStack().isEmpty()) {
-                        mc.interactionManager.clickSlot(syncId, srcSlot, 0, SlotActionType.PICKUP, mc.player);
+                    if (!mc.player.containerMenu.getCarried().isEmpty()) {
+                        mc.gameMode.handleContainerInput(syncId, srcSlot, 0, ContainerInput.PICKUP, mc.player);
                     }
                 }
 
@@ -302,29 +302,29 @@ public class AutoCraftPlus extends Module {
             }
 
             case TAKE_RESULT -> {
-                if (!(mc.currentScreen instanceof HandledScreen<?>)) {
+                if (!(mc.gui.screen() instanceof AbstractContainerScreen<?>)) {
                     craftState = CraftState.OPEN_SCREEN;
                     return false;
                 }
 
-                HandledScreen<?> screen = (HandledScreen<?>) mc.currentScreen;
-                int syncId = screen.getScreenHandler().syncId;
+                AbstractContainerScreen<?> screen = (AbstractContainerScreen<?>) mc.gui.screen();
+                int syncId = screen.getMenu().containerId;
                 int resultSlot = getResultSlot(screen);
 
-                Slot result = screen.getScreenHandler().slots.get(resultSlot);
-                if (!result.getStack().isEmpty()) {
+                Slot result = screen.getMenu().slots.get(resultSlot);
+                if (!result.getItem().isEmpty()) {
 
-                    mc.interactionManager.clickSlot(syncId, resultSlot, 0, SlotActionType.QUICK_MOVE, mc.player);
+                    mc.gameMode.handleContainerInput(syncId, resultSlot, 0, ContainerInput.QUICK_MOVE, mc.player);
                     totalCrafted++;
                 }
 
-                if (!mc.player.currentScreenHandler.getCursorStack().isEmpty()) {
+                if (!mc.player.containerMenu.getCarried().isEmpty()) {
 
                     for (int i = getCraftingGridStart(screen) + (useInventoryCrafting.get() ? 4 : 9);
-                         i < screen.getScreenHandler().slots.size(); i++) {
-                        Slot s = screen.getScreenHandler().slots.get(i);
-                        if (s.getStack().isEmpty()) {
-                            mc.interactionManager.clickSlot(syncId, i, 0, SlotActionType.PICKUP, mc.player);
+                         i < screen.getMenu().slots.size(); i++) {
+                        Slot s = screen.getMenu().slots.get(i);
+                        if (s.getItem().isEmpty()) {
+                            mc.gameMode.handleContainerInput(syncId, i, 0, ContainerInput.PICKUP, mc.player);
                             break;
                         }
                     }
@@ -355,13 +355,13 @@ public class AutoCraftPlus extends Module {
         };
     }
 
-    private int getCraftingGridStart(HandledScreen<?> screen) {
+    private int getCraftingGridStart(AbstractContainerScreen<?> screen) {
         if (screen instanceof CraftingScreen) return 1;
         if (screen instanceof InventoryScreen) return 1;
         return 1;
     }
 
-    private int getResultSlot(HandledScreen<?> screen) {
+    private int getResultSlot(AbstractContainerScreen<?> screen) {
         return 0;
     }
 
@@ -379,7 +379,7 @@ public class AutoCraftPlus extends Module {
         for (var entry : needed.entrySet()) {
             int count = 0;
             for (int i = 0; i < 36; i++) {
-                ItemStack stack = mc.player.getInventory().getStack(i);
+                ItemStack stack = mc.player.getInventory().getItem(i);
                 if (!stack.isEmpty() && stack.getItem() == entry.getKey()) {
                     count += stack.getCount();
                 }
@@ -389,12 +389,12 @@ public class AutoCraftPlus extends Module {
         return true;
     }
 
-    private int findItemInInventory(HandledScreen<?> screen, Item item, int gridStart, int gridSize) {
+    private int findItemInInventory(AbstractContainerScreen<?> screen, Item item, int gridStart, int gridSize) {
 
         int invStart = gridStart + gridSize;
-        for (int i = invStart; i < screen.getScreenHandler().slots.size(); i++) {
-            Slot slot = screen.getScreenHandler().slots.get(i);
-            if (!slot.getStack().isEmpty() && slot.getStack().getItem() == item) {
+        for (int i = invStart; i < screen.getMenu().slots.size(); i++) {
+            Slot slot = screen.getMenu().slots.get(i);
+            if (!slot.getItem().isEmpty() && slot.getItem().getItem() == item) {
                 return i;
             }
         }
@@ -405,7 +405,7 @@ public class AutoCraftPlus extends Module {
         if (mc.player == null) return 0;
         int empty = 0;
         for (int i = 0; i < 36; i++) {
-            if (mc.player.getInventory().getStack(i).isEmpty()) empty++;
+            if (mc.player.getInventory().getItem(i).isEmpty()) empty++;
         }
         return empty;
     }

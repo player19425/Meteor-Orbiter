@@ -5,10 +5,10 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.entity.CommandBlockBlockEntity;
-import net.minecraft.network.packet.c2s.play.UpdateCommandBlockC2SPacket;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
+import net.minecraft.world.level.block.entity.CommandBlockEntity;
+import net.minecraft.network.protocol.game.ServerboundSetCommandBlockPacket;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,10 +22,10 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
 
     private final Setting<Integer> amount = sgGeneral.add(new IntSetting.Builder()
             .name("amount")
-            .description("Number of command blocks to place.")
+            .description("Number of command blocks to place. Commands repeat when there are more blocks than command slots.")
             .defaultValue(1)
             .min(1)
-            .sliderRange(1, 50)
+            .sliderRange(1, 100)
             .build());
 
     private final Setting<CmdBlockType> blockType = sgGeneral.add(new EnumSetting.Builder<CmdBlockType>()
@@ -34,50 +34,15 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
             .defaultValue(CmdBlockType.Impulse)
             .build());
 
-    private final Setting<String> command1 = sgCommands.add(new StringSetting.Builder()
-            .name("command-1")
-            .description("Command for the first block (without /).")
-            .defaultValue("say Orbiter On Crack!")
+    private final Setting<Integer> commandSlots = sgCommands.add(new IntSetting.Builder()
+            .name("command-slots")
+            .description("Number of command slots to show. The more slots, the more command blocks get their own command.")
+            .defaultValue(10)
+            .min(1)
+            .sliderRange(1, 100)
             .build());
 
-    private final Setting<String> command2 = sgCommands.add(new StringSetting.Builder()
-            .name("command-2")
-            .description("Command for the second block (leave empty to reuse command-1).")
-            .defaultValue("")
-            .build());
-
-    private final Setting<String> command3 = sgCommands.add(new StringSetting.Builder()
-            .name("command-3")
-            .description("Command for the third block.")
-            .defaultValue("")
-            .build());
-
-    private final Setting<String> command4 = sgCommands.add(new StringSetting.Builder()
-            .name("command-4")
-            .description("Command for the fourth block.")
-            .defaultValue("")
-            .build());
-
-    private final Setting<String> command5 = sgCommands.add(new StringSetting.Builder()
-            .name("command-5")
-            .description("Command for the fifth block.")
-            .defaultValue("")
-            .build());
-
-    private final Setting<String> command6 = sgCommands.add(new StringSetting.Builder()
-            .name("command-6").defaultValue("").build());
-
-    private final Setting<String> command7 = sgCommands.add(new StringSetting.Builder()
-            .name("command-7").defaultValue("").build());
-
-    private final Setting<String> command8 = sgCommands.add(new StringSetting.Builder()
-            .name("command-8").defaultValue("").build());
-
-    private final Setting<String> command9 = sgCommands.add(new StringSetting.Builder()
-            .name("command-9").defaultValue("").build());
-
-    private final Setting<String> command10 = sgCommands.add(new StringSetting.Builder()
-            .name("command-10").defaultValue("").build());
+    private final List<Setting<String>> commandSettings = buildCommandSettings();
 
     private final Setting<PlaceDirection> direction = sgPlacement.add(new EnumSetting.Builder<PlaceDirection>()
             .name("direction")
@@ -159,7 +124,7 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
             return;
         }
 
-        if (!mc.player.getAbilities().creativeMode) {
+        if (!mc.player.getAbilities().instabuild) {
             warning("You must be in Creative mode!");
             toggle();
             return;
@@ -173,18 +138,18 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
         phaseTickCounter = 0;
         positions = new ArrayList<>();
 
-        BlockPos start = mc.player.getBlockPos();
+        BlockPos start = mc.player.blockPosition();
         Direction dir = getDirection();
 
         for (int i = 0; i < amount.get(); i++) {
-            BlockPos pos = start.offset(dir, startDistance.get() + i);
+            BlockPos pos = start.offset(dir.getStepX() * (startDistance.get() + i), dir.getStepY() * (startDistance.get() + i), dir.getStepZ() * (startDistance.get() + i));
             positions.add(pos);
         }
     }
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.player.networkHandler == null || mc.interactionManager == null || positions == null)
+        if (mc.player == null || mc.player.connection == null || mc.gameMode == null || positions == null)
             return;
 
         if (placedCount >= positions.size()) {
@@ -214,7 +179,7 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
 
             String cmd = String.format("setblock %d %d %d %s[facing=%s]",
                     pos.getX(), pos.getY(), pos.getZ(), blockId, facingState);
-            mc.player.networkHandler.sendChatCommand(cmd);
+            mc.player.connection.sendCommand(cmd);
 
             phase = 1;
             phaseTickCounter = 0;
@@ -235,15 +200,15 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
                 actualType = CmdBlockType.Chain;
             }
 
-            CommandBlockBlockEntity.Type cbType = switch (actualType) {
-                case Impulse -> CommandBlockBlockEntity.Type.REDSTONE;
-                case Chain -> CommandBlockBlockEntity.Type.SEQUENCE;
-                case Repeat -> CommandBlockBlockEntity.Type.AUTO;
+            CommandBlockEntity.Mode cbType = switch (actualType) {
+                case Impulse -> CommandBlockEntity.Mode.REDSTONE;
+                case Chain -> CommandBlockEntity.Mode.SEQUENCE;
+                case Repeat -> CommandBlockEntity.Mode.AUTO;
             };
 
             boolean autoAct = quickRepeat.get() || autoActivate.get();
 
-            mc.player.networkHandler.sendPacket(new UpdateCommandBlockC2SPacket(
+            mc.player.connection.send(new ServerboundSetCommandBlockPacket(
                     pos,
                     cmd,
                     cbType,
@@ -262,16 +227,25 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
         positions = null;
     }
 
-    private String getCommandForIndex(int index) {
-        String[] commands = {
-                command1.get(), command2.get(), command3.get(), command4.get(), command5.get(),
-                command6.get(), command7.get(), command8.get(), command9.get(), command10.get()
-        };
-
-        if (index < commands.length && !commands[index].isEmpty()) {
-            return commands[index];
+    private List<Setting<String>> buildCommandSettings() {
+        List<Setting<String>> list = new ArrayList<>();
+        for (int i = 1; i <= 100; i++) {
+            final int slot = i;
+            list.add(sgCommands.add(new StringSetting.Builder()
+                    .name("command-" + slot)
+                    .description("Command for block " + slot + " (without /, empty reuses command-1).")
+                    .defaultValue(slot == 1 ? "say Orbiter On Crack!" : "")
+                    .visible(() -> commandSlots.get() >= slot)
+                    .build()));
         }
-        return command1.get();
+        return list;
+    }
+
+    private String getCommandForIndex(int index) {
+        if (index < commandSettings.size() && !commandSettings.get(index).get().isEmpty()) {
+            return commandSettings.get(index).get();
+        }
+        return commandSettings.get(0).get();
     }
 
     private String getBlockId(CmdBlockType type) {

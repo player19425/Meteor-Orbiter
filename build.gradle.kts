@@ -25,11 +25,11 @@ repositories {
 dependencies {
     // Fabric
     minecraft(libs.minecraft)
-    mappings("net.fabricmc:yarn:${libs.versions.yarn.mappings.get()}:v2")
-    modImplementation(libs.fabric.loader)
+    implementation(libs.fabric.loader)
+    implementation(libs.fabric.resource.loader)
 
     // Meteor
-    modImplementation(libs.meteor.client)
+    implementation(libs.meteor.client)
 }
 
 java {
@@ -86,7 +86,9 @@ tasks {
         options.compilerArgs.addAll(
             listOf(
                 "-Xlint:deprecation",
-                "-Xlint:unchecked"
+                "-Xlint:unchecked",
+                "-Xmaxerrs",
+                "10000"
             )
         )
     }

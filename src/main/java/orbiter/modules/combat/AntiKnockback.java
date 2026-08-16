@@ -8,7 +8,7 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 
 public class AntiKnockback extends Module {
     public enum Mode {
@@ -51,24 +51,24 @@ public class AntiKnockback extends Module {
         if (!isActive() || mc.player == null) return;
         var player = mc.player;
 
-        if (event.packet instanceof EntityVelocityUpdateS2CPacket packet) {
-            if (packet.getEntityId() != player.getId()) return;
+        if (event.packet instanceof net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket packet) {
+            if (packet.id() != player.getId()) return;
             event.cancel();
 
             if (mode.get() == Mode.Cancel) {
                 mc.execute(() -> {
                     if (mc.player != player) return;
-                    player.setVelocity(0.0, 0.0, 0.0);
+                    player.setDeltaMovement(0.0, 0.0, 0.0);
                 });
                 return;
             }
 
-            double vx = packet.getVelocity().x * horizontal.get();
-            double vy = packet.getVelocity().y * vertical.get();
-            double vz = packet.getVelocity().z * horizontal.get();
+            double vx = packet.movement().x * horizontal.get();
+            double vy = packet.movement().y * vertical.get();
+            double vz = packet.movement().z * horizontal.get();
             mc.execute(() -> {
                 if (mc.player != player) return;
-                player.setVelocity(vx, vy, vz);
+                player.setDeltaMovement(vx, vy, vz);
             });
         }
     }

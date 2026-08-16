@@ -5,10 +5,10 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.block.BlockState;
-import net.minecraft.registry.Registries;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.core.BlockPos;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -128,7 +128,7 @@ public class OperatorNuker extends CreativeSafetyModule {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.player.networkHandler == null || pendingCommands == null)
+        if (mc.player == null || mc.player.connection == null || pendingCommands == null)
             return;
 
         if (cmdIndex < pendingCommands.size()) {
@@ -139,7 +139,7 @@ public class OperatorNuker extends CreativeSafetyModule {
 
             int sent = 0;
             while (cmdIndex < pendingCommands.size() && sent < commandsPerTick.get()) {
-                mc.player.networkHandler.sendChatCommand(pendingCommands.get(cmdIndex));
+                mc.player.connection.sendCommand(pendingCommands.get(cmdIndex));
                 cmdIndex++;
                 sent++;
             }
@@ -159,15 +159,15 @@ public class OperatorNuker extends CreativeSafetyModule {
 
     private List<String> buildCommands() {
         List<String> commands = new ArrayList<>();
-        if (mc.player == null || mc.world == null) return commands;
+        if (mc.player == null || mc.level == null) return commands;
 
-        BlockPos center = mc.player.getBlockPos();
+        BlockPos center = mc.player.blockPosition();
         int r = radius.get();
 
         BlockPos nukeCenter = switch (nukeDirection.get()) {
             case Around -> center;
             case Forward -> {
-                double yaw = Math.toRadians(mc.player.getYaw());
+                double yaw = Math.toRadians(mc.player.getYRot());
                 yield new BlockPos(
                         center.getX() + (int) (-Math.sin(yaw) * r),
                         center.getY(),
@@ -198,6 +198,11 @@ public class OperatorNuker extends CreativeSafetyModule {
         maxY = Math.min(worldTopY(), maxY);
         if (minY > maxY) return commands;
 
+        if (!hasBlocksInArea(nukeCenter, minX, maxX, minY, maxY, minZ, maxZ, r)) {
+            warning("No non-air blocks found in the nuke area.");
+            return commands;
+        }
+
         if (method.get() == NukeMethod.Fill) {
             for (int y = minY; y <= maxY; y++) {
                 for (int z = minZ; z <= maxZ; z++) {
@@ -220,7 +225,7 @@ public class OperatorNuker extends CreativeSafetyModule {
             }
         } else {
             Identifier targetId = target == null ? null : Identifier.tryParse(target);
-            BlockPos.Mutable mutable = new BlockPos.Mutable();
+            BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
 
             for (int x = minX; x <= maxX; x++) {
                 for (int y = minY; y <= maxY; y++) {
@@ -228,12 +233,12 @@ public class OperatorNuker extends CreativeSafetyModule {
                         if (!isInsideShape(nukeCenter, x, y, z, r)) continue;
 
                         mutable.set(x, y, z);
-                        BlockState state = mc.world.getBlockState(mutable);
+                        BlockState state = mc.level.getBlockState(mutable);
 
-                        if (!includeBedrock.get() && state.isOf(net.minecraft.block.Blocks.BEDROCK)) continue;
+                        if (!includeBedrock.get() && state.is(net.minecraft.world.level.block.Blocks.BEDROCK)) continue;
 
                         if (targetId != null) {
-                            Identifier stateId = Registries.BLOCK.getId(state.getBlock());
+                            Identifier stateId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
                             if (!targetId.equals(stateId)) continue;
                         }
 
@@ -244,6 +249,20 @@ public class OperatorNuker extends CreativeSafetyModule {
         }
 
         return commands;
+    }
+
+    private boolean hasBlocksInArea(BlockPos center, int minX, int maxX, int minY, int maxY, int minZ, int maxZ, int r) {
+        BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    if (!isInsideShape(center, x, y, z, r)) continue;
+                    mutable.set(x, y, z);
+                    if (!mc.level.getBlockState(mutable).isAir()) return true;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean isInsideShape(BlockPos center, int x, int y, int z, int radius) {
@@ -273,9 +292,9 @@ public class OperatorNuker extends CreativeSafetyModule {
     }
 
     private boolean hasCommandPermission() {
-        if (mc.player == null || mc.player.networkHandler == null) return false;
+        if (mc.player == null || mc.player.connection == null) return false;
 
-        var dispatcher = mc.player.networkHandler.getCommandDispatcher();
+        var dispatcher = mc.player.connection.getCommands();
         if (dispatcher == null || dispatcher.getRoot() == null) return false;
 
         return dispatcher.getRoot().getChild("fill") != null
@@ -283,11 +302,11 @@ public class OperatorNuker extends CreativeSafetyModule {
     }
 
     private int worldBottomY() {
-        return mc.world.getBottomY();
+        return mc.level.getMinY();
     }
 
     private int worldTopY() {
-        return mc.world.getBottomY() + mc.world.getDimension().height() - 1;
+        return mc.level.getMinY() + mc.level.dimensionType().height() - 1;
     }
 
     @Override

@@ -10,15 +10,18 @@ import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.component.DataComponentTypes;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.util.Hand;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.Set;
 
 public class MaceAssist extends Module {
     public enum TargetMode {
@@ -100,6 +103,12 @@ public class MaceAssist extends Module {
         .build()
     );
 
+    private final Setting<Set<EntityType<?>>> entities = sgGeneral.add(new EntityTypeListSetting.Builder()
+        .name("entities")
+        .description("Which entity types to target. Empty targets all living entities.")
+        .build()
+    );
+
     private final Setting<TargetMode> targetMode = sgTargeting.add(new EnumSetting.Builder<TargetMode>()
         .name("target-mode")
         .description("How to select the target.")
@@ -167,7 +176,7 @@ public class MaceAssist extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc.player == null || mc.level == null) return;
 
         if (!isHoldingMace()) {
             target = null;
@@ -201,26 +210,26 @@ public class MaceAssist extends Module {
         }
 
         if (onlyCrits.get() && !canCrit) return;
-        if (!ignoreCooldown.get() && mc.player.getAttackCooldownProgress(0.5f) < 1) return;
-        if (mc.player.squaredDistanceTo(target) > range.get() * range.get()) return;
+        if (!ignoreCooldown.get() && mc.player.getAttackStrengthScale(0.5f) < 1) return;
+        if (mc.player.distanceToSqr(target) > range.get() * range.get()) return;
 
-        mc.interactionManager.attackEntity(mc.player, target);
-        mc.player.swingHand(Hand.MAIN_HAND);
+        mc.gameMode.attack(mc.player, target);
+        mc.player.swing(InteractionHand.MAIN_HAND);
     }
 
     private boolean isHoldingMace() {
-        return mc.player.getMainHandStack().isOf(Items.MACE);
+        return mc.player.getMainHandItem().is(Items.MACE);
     }
 
     private LivingEntity findTarget() {
         LivingEntity bestTarget = null;
         double bestScore = Double.MAX_VALUE;
 
-        for (var entity : mc.world.getEntities()) {
+        for (var entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (!isValidTarget(living)) continue;
 
-            double distSq = mc.player.squaredDistanceTo(living);
+            double distSq = mc.player.distanceToSqr(living);
             if (distSq > range.get() * range.get()) continue;
 
             if (targetMode.get() == TargetMode.Closest) {
@@ -245,20 +254,22 @@ public class MaceAssist extends Module {
         if (entity == mc.player) return false;
         if (!entity.isAttackable()) return false;
 
-        if (ignoreFriends.get() && entity instanceof PlayerEntity player) {
+        if (ignoreFriends.get() && entity instanceof Player player) {
             if (!Friends.get().shouldAttack(player)) return false;
         }
 
+        if (!entities.get().isEmpty() && !entities.get().contains(entity.getType())) return false;
+
         if (!ignoreWalls.get()) {
-            if (mc.world != null && mc.player != null) {
-                var result = mc.world.raycast(new net.minecraft.world.RaycastContext(
-                    mc.player.getEyePos(),
+            if (mc.level != null && mc.player != null) {
+                var result = mc.level.clip(new net.minecraft.world.level.ClipContext(
+                    mc.player.getEyePosition(),
                     entity.getBoundingBox().getCenter(),
-                    net.minecraft.world.RaycastContext.ShapeType.COLLIDER,
-                    net.minecraft.world.RaycastContext.FluidHandling.NONE,
+                    net.minecraft.world.level.ClipContext.Block.COLLIDER,
+                    net.minecraft.world.level.ClipContext.Fluid.NONE,
                     mc.player
                 ));
-                if (result.getType() != net.minecraft.util.hit.HitResult.Type.MISS) return false;
+                if (result.getType() != net.minecraft.world.phys.HitResult.Type.MISS) return false;
             }
         }
 
@@ -266,28 +277,28 @@ public class MaceAssist extends Module {
     }
 
     private double getAngleToEntity(LivingEntity entity) {
-        Vec3d playerEyes = mc.player.getEyePos();
-        Vec3d targetCenter = entity.getBoundingBox().getCenter();
-        Vec3d diff = targetCenter.subtract(playerEyes).normalize();
+        Vec3 playerEyes = mc.player.getEyePosition();
+        Vec3 targetCenter = entity.getBoundingBox().getCenter();
+        Vec3 diff = targetCenter.subtract(playerEyes).normalize();
 
-        float yaw = mc.player.getYaw() * ((float) Math.PI / 180f);
-        float pitch = mc.player.getPitch() * ((float) Math.PI / 180f);
+        float yaw = mc.player.getYRot() * ((float) Math.PI / 180f);
+        float pitch = mc.player.getXRot() * ((float) Math.PI / 180f);
 
-        Vec3d look = new Vec3d(
-            -MathHelper.sin(yaw) * MathHelper.cos(pitch),
-            -MathHelper.sin(pitch),
-            MathHelper.cos(yaw) * MathHelper.cos(pitch)
+        Vec3 look = new Vec3(
+            -Mth.sin(yaw) * Mth.cos(pitch),
+            -Mth.sin(pitch),
+            Mth.cos(yaw) * Mth.cos(pitch)
         ).normalize();
 
-        double dot = look.dotProduct(diff);
-        return Math.acos(MathHelper.clamp(dot, -1.0, 1.0));
+        double dot = look.dot(diff);
+        return Math.acos(Mth.clamp(dot, -1.0, 1.0));
     }
 
     private boolean canCriticalHit(LivingEntity target) {
-        if (!mc.player.isOnGround() && !mc.player.isGliding() && mc.player.getVelocity().y < -0.1) {
+        if (!mc.player.onGround() && !mc.player.isFallFlying() && mc.player.getDeltaMovement().y < -0.1) {
             return true;
         }
-        if (!mc.player.isOnGround() && !mc.player.isSprinting() && !mc.player.isClimbing() && mc.player.getVelocity().y < -0.08) {
+        if (!mc.player.onGround() && !mc.player.isSprinting() && !mc.player.onClimbable() && mc.player.getDeltaMovement().y < -0.08) {
             return true;
         }
         return false;
@@ -295,15 +306,15 @@ public class MaceAssist extends Module {
 
     private boolean canSmashAttack() {
         if (mc.player == null) return false;
-        if (mc.player.isOnGround()) return false;
-        if (mc.player.isGliding()) return false;
+        if (mc.player.onGround()) return false;
+        if (mc.player.isFallFlying()) return false;
         double fallDist = mc.player.fallDistance;
         return fallDist >= minFallBlocks.get();
     }
 
     private int findMaceSlot() {
         for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getStack(i).isOf(Items.MACE)) {
+            if (mc.player.getInventory().getItem(i).is(Items.MACE)) {
                 return i;
             }
         }
@@ -313,10 +324,10 @@ public class MaceAssist extends Module {
     private void handleElytraSwap(LivingEntity target, boolean canCrit) {
         if (!elytraSwap.get()) return;
 
-        ItemStack chestItem = mc.player.getEquippedStack(EquipmentSlot.CHEST);
-        boolean hasElytraEquipped = chestItem.contains(DataComponentTypes.GLIDER);
+        ItemStack chestItem = mc.player.getItemBySlot(EquipmentSlot.CHEST);
+        boolean hasElytraEquipped = chestItem.hasNonDefault(DataComponents.GLIDER);
 
-        if (hasElytraEquipped && canCrit && mc.player.getVelocity().y < -0.5) {
+        if (hasElytraEquipped && canCrit && mc.player.getDeltaMovement().y < -0.5) {
             if (willHitTargetSoon(target)) {
                 int cpSlot = findChestplateSlot();
                 if (cpSlot != -1) {
@@ -326,7 +337,7 @@ public class MaceAssist extends Module {
                 }
             }
         } else if (wasAutoSwapped) {
-            if (!canCrit || mc.player.isOnGround() || mc.player.getVelocity().y >= 0) {
+            if (!canCrit || mc.player.onGround() || mc.player.getDeltaMovement().y >= 0) {
                 restoreElytra();
             } else if (!willHitTargetSoon(target)) {
                 restoreElytra();
@@ -335,9 +346,9 @@ public class MaceAssist extends Module {
     }
 
     private boolean willHitTargetSoon(LivingEntity target) {
-        Vec3d vel = mc.player.getVelocity();
-        Vec3d futurePos = new Vec3d(mc.player.getX(), mc.player.getY(), mc.player.getZ()).add(vel.multiply(swapTicks.get()));
-        double futureDistSq = futurePos.squaredDistanceTo(target.getX(), target.getY(), target.getZ());
+        Vec3 vel = mc.player.getDeltaMovement();
+        Vec3 futurePos = new Vec3(mc.player.getX(), mc.player.getY(), mc.player.getZ()).add(vel.scale(swapTicks.get()));
+        double futureDistSq = futurePos.distanceToSqr(target.getX(), target.getY(), target.getZ());
         double rangeSq = range.get() * range.get();
         return futureDistSq <= rangeSq * 1.5;
     }
@@ -356,7 +367,7 @@ public class MaceAssist extends Module {
 
     private int findChestplateSlot() {
         for (int i = 0; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
+            ItemStack stack = mc.player.getInventory().getItem(i);
             if (stack.isEmpty()) continue;
             if (isChestplate(stack)) return i;
         }
@@ -365,17 +376,17 @@ public class MaceAssist extends Module {
 
     private int findElytraSlot() {
         for (int i = 0; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
-            if (stack.contains(DataComponentTypes.GLIDER)) return i;
+            ItemStack stack = mc.player.getInventory().getItem(i);
+            if (stack.has(DataComponents.GLIDER)) return i;
         }
         return -1;
     }
 
     private boolean isChestplate(ItemStack stack) {
         if (stack.isEmpty()) return false;
-        if (stack.contains(DataComponentTypes.GLIDER)) return false;
-        if (!stack.contains(DataComponentTypes.EQUIPPABLE)) return false;
-        var equippable = stack.get(DataComponentTypes.EQUIPPABLE);
+        if (stack.has(DataComponents.GLIDER)) return false;
+        if (!stack.has(DataComponents.EQUIPPABLE)) return false;
+        var equippable = stack.get(DataComponents.EQUIPPABLE);
         return equippable != null && equippable.slot() == EquipmentSlot.CHEST;
     }
 }

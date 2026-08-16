@@ -10,13 +10,13 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
-import net.minecraft.entity.player.PlayerInventory;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.screen.ScreenHandler;
-import net.minecraft.screen.slot.Slot;
-import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.inventory.ContainerInput;
 
 import java.util.List;
 
@@ -84,15 +84,15 @@ public class Restock extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.interactionManager == null) return;
+        if (mc.player == null || mc.gameMode == null) return;
 
-        if (!(mc.currentScreen instanceof HandledScreen<?> handledScreen)) return;
-        ScreenHandler handler = handledScreen.getScreenHandler();
+        if (!(mc.gui.screen() instanceof AbstractContainerScreen<?> handledScreen)) return;
+        AbstractContainerMenu handler = handledScreen.getMenu();
         if (handler == null) return;
 
-        PlayerInventory playerInv = mc.player.getInventory();
+        Inventory playerInv = mc.player.getInventory();
 
-        boolean isContainerOpen = handler.slots.stream().anyMatch(slot -> slot.inventory != playerInv);
+        boolean isContainerOpen = handler.slots.stream().anyMatch(slot -> slot.container != playerInv);
         if (!isContainerOpen) return;
 
         if (timer > 0) {
@@ -101,7 +101,7 @@ public class Restock extends Module {
         }
 
         for (int hotbarIndex = 0; hotbarIndex < 9; hotbarIndex++) {
-            ItemStack hotbarStack = playerInv.getStack(hotbarIndex);
+            ItemStack hotbarStack = playerInv.getItem(hotbarIndex);
             boolean needsRestock = hotbarStack.isEmpty()
                 ? restockEmptySlots.get()
                 : hotbarStack.getCount() < minCount.get();
@@ -114,7 +114,7 @@ public class Restock extends Module {
 
             if (inventoryFirst.get() && wanted != null) {
                 int playerSlotId = findMatchingPlayerInventorySlot(handler, playerInv, wanted);
-                if (playerSlotId != -1 && moveStackByPickup(handler.syncId, playerSlotId, hotbarSlotId)) {
+                if (playerSlotId != -1 && moveStackByPickup(handler.containerId, playerSlotId, hotbarSlotId)) {
                     timer = tickDelay.get();
                     return;
                 }
@@ -124,47 +124,47 @@ public class Restock extends Module {
             if (containerSlotId == -1) continue;
 
             if (useQuickMove.get()) {
-                mc.interactionManager.clickSlot(handler.syncId, containerSlotId, 0, SlotActionType.QUICK_MOVE, mc.player);
+                mc.gameMode.handleContainerInput(handler.containerId, containerSlotId, 0, ContainerInput.QUICK_MOVE, mc.player);
                 timer = tickDelay.get();
                 return;
             }
 
-            if (moveStackByPickup(handler.syncId, containerSlotId, hotbarSlotId)) {
+            if (moveStackByPickup(handler.containerId, containerSlotId, hotbarSlotId)) {
                 timer = tickDelay.get();
                 return;
             }
         }
     }
 
-    private int findHandlerSlotForHotbar(ScreenHandler handler, int hotbarIndex, PlayerInventory playerInv) {
+    private int findHandlerSlotForHotbar(AbstractContainerMenu handler, int hotbarIndex, Inventory playerInv) {
         for (Slot slot : handler.slots) {
-            if (slot.inventory == playerInv && slot.getIndex() == hotbarIndex) return slot.id;
+            if (slot.container == playerInv && slot.index == hotbarIndex) return slot.index;
         }
         return -1;
     }
 
-    private int findMatchingPlayerInventorySlot(ScreenHandler handler, PlayerInventory playerInv, Item wanted) {
+    private int findMatchingPlayerInventorySlot(AbstractContainerMenu handler, Inventory playerInv, Item wanted) {
         for (Slot slot : handler.slots) {
-            if (slot.inventory != playerInv) continue;
-            if (slot.getIndex() < 9 || slot.getIndex() >= 36) continue;
-            if (!slot.hasStack()) continue;
-            if (!slot.getStack().isOf(wanted)) continue;
-            return slot.id;
+            if (slot.container != playerInv) continue;
+            if (slot.index < 9 || slot.index >= 36) continue;
+            if (!slot.hasItem()) continue;
+            if (!slot.getItem().is(wanted)) continue;
+            return slot.index;
         }
         return -1;
     }
 
-    private int findMatchingContainerSlot(ScreenHandler handler, PlayerInventory playerInv, Item wanted) {
+    private int findMatchingContainerSlot(AbstractContainerMenu handler, Inventory playerInv, Item wanted) {
         for (Slot slot : handler.slots) {
-            if (slot.inventory == playerInv) continue;
-            if (!slot.hasStack()) continue;
+            if (slot.container == playerInv) continue;
+            if (!slot.hasItem()) continue;
 
-            ItemStack stack = slot.getStack();
+            ItemStack stack = slot.getItem();
             if (stack.isEmpty()) continue;
             if (!passesFilter(stack.getItem())) continue;
             if (wanted != null && stack.getItem() != wanted) continue;
 
-            return slot.id;
+            return slot.index;
         }
         return -1;
     }
@@ -181,13 +181,13 @@ public class Restock extends Module {
     }
 
     private boolean moveStackByPickup(int syncId, int fromSlot, int toSlot) {
-        if (mc.player == null || mc.interactionManager == null) return false;
+        if (mc.player == null || mc.gameMode == null) return false;
 
-        mc.interactionManager.clickSlot(syncId, fromSlot, 0, SlotActionType.PICKUP, mc.player);
-        mc.interactionManager.clickSlot(syncId, toSlot, 0, SlotActionType.PICKUP, mc.player);
+        mc.gameMode.handleContainerInput(syncId, fromSlot, 0, ContainerInput.PICKUP, mc.player);
+        mc.gameMode.handleContainerInput(syncId, toSlot, 0, ContainerInput.PICKUP, mc.player);
 
-        if (!mc.player.currentScreenHandler.getCursorStack().isEmpty()) {
-            mc.interactionManager.clickSlot(syncId, fromSlot, 0, SlotActionType.PICKUP, mc.player);
+        if (!mc.player.containerMenu.getCarried().isEmpty()) {
+            mc.gameMode.handleContainerInput(syncId, fromSlot, 0, ContainerInput.PICKUP, mc.player);
         }
 
         return true;

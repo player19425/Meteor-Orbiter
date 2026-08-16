@@ -15,7 +15,6 @@ import orbiter.commands.TNTRainCommand;
 import orbiter.commands.TransferCommand;
 import orbiter.commands.VerifyProtectCommand;
 import orbiter.commands.PeakPluginScannerCommand;
-import orbiter.commands.DestroyNowCommand;
 import orbiter.commands.UUIDBanCommand;
 import orbiter.commands.WorldEditCommand;
 import orbiter.commands.HideKeybindCommand;
@@ -23,7 +22,18 @@ import orbiter.commands.SetPrefixCommand;
 import orbiter.hud.CustomTextHud;
 import orbiter.hud.NearestPlayerHud;
 import orbiter.hud.RenderDistanceHud;
-import orbiter.hud.ServerInfoHud;
+import orbiter.hud.ServerBrandHud;
+import orbiter.hud.ServerDifficultyHud;
+import orbiter.hud.ServerIpHud;
+import orbiter.hud.ServerPluginsHud;
+import orbiter.hud.ServerProtocolHud;
+import orbiter.hud.ServerTimeHud;
+import orbiter.hud.ServerTpsHud;
+import orbiter.hud.ServerPlayersHud;
+import orbiter.hud.ServerRealIpHud;
+import orbiter.hud.ServerRealVersionHud;
+import orbiter.hud.ServerVersionNoteHud;
+import orbiter.hud.ServerVersionHud;
 import orbiter.hud.WeaponCooldownHud;
 import orbiter.modules.render.BlockSpoof;
 import orbiter.modules.render.BossbarFlash;
@@ -44,7 +54,6 @@ import orbiter.modules.misc.ExploitPreventer;
 import orbiter.modules.misc.ServerProtect;
 import orbiter.modules.misc.PeakPluginScanner;
 import orbiter.modules.misc.SpamPlus;
-import orbiter.modules.misc.StupidModules;
 import orbiter.modules.world.WorldDownloader;
 import orbiter.modules.world.ControlPlayer;
 import orbiter.util.ConfigModifier;
@@ -53,7 +62,6 @@ import orbiter.modules.movement.SlimeJump;
 import orbiter.modules.movement.JumpA;
 import orbiter.modules.misc.InfiniReach;
 import orbiter.modules.misc.ISellWand;
-import orbiter.modules.world.DestroyNow;
 import orbiter.modules.world.UUIDBan;
 import orbiter.modules.*;
 import meteordevelopment.meteorclient.addons.GithubRepo;
@@ -63,16 +71,16 @@ import meteordevelopment.meteorclient.systems.hud.Hud;
 import meteordevelopment.meteorclient.systems.hud.HudGroup;
 import meteordevelopment.meteorclient.systems.modules.Category;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.item.Items;
+import net.minecraft.world.item.Items;
 import org.slf4j.Logger;
 
 public class Orbiter extends MeteorAddon {
     public static final Logger LOG = LogUtils.getLogger();
 
-    public static final Category CATEGORY = new Category("Orbiter Survival", Items.DIAMOND_BLOCK.getDefaultStack());
-    public static final Category CATEGORY_VANILLA = new Category("Orbiter Vanilla", Items.NETHERITE_SWORD.getDefaultStack());
-    public static final Category CATEGORY_OP = new Category("Orbiter Creative/OP", Items.DIAMOND_BLOCK.getDefaultStack());
-    public static final Category CATEGORY_STUPID = new Category("Orbiter Stupid", Items.SLIME_BLOCK.getDefaultStack());
+    public static final Category CATEGORY = new Category("Orbiter Survival", () -> Items.DIAMOND_BLOCK.getDefaultInstance());
+    public static final Category CATEGORY_VANILLA = new Category("Orbiter Vanilla", () -> Items.NETHERITE_SWORD.getDefaultInstance());
+    public static final Category CATEGORY_OP = new Category("Orbiter Creative/OP", () -> Items.DIAMOND_BLOCK.getDefaultInstance());
+    public static final Category CATEGORY_STUPID = new Category("Orbiter Stupid", () -> Items.SLIME_BLOCK.getDefaultInstance());
     public static final HudGroup HUD_GROUP = new HudGroup("Orbiter");
 
     @Override
@@ -118,7 +126,6 @@ public class Orbiter extends MeteorAddon {
         modules.add(new AutoClutch());
         modules.add(new AutoFarming());
         modules.add(new Restock());
-        modules.add(new AutoBuild());
         modules.add(new LeaveMessage());
         modules.add(new SpamPlus());
         modules.add(new ItemStealer());
@@ -126,7 +133,6 @@ public class Orbiter extends MeteorAddon {
         modules.add(new ServerProtect());
         modules.add(new PeakPluginScanner());
         modules.add(new ExploitPreventer());
-        modules.add(new StupidModules());
         modules.add(new ISellWand());
 
         modules.add(new ItemGenerator());
@@ -146,7 +152,6 @@ public class Orbiter extends MeteorAddon {
         modules.add(new FireworkShow());
         modules.add(new OperatorNuker());
         modules.add(new WorldDownloader());
-        modules.add(new DestroyNow());
         modules.add(new UUIDBan());
 
         try {
@@ -166,7 +171,6 @@ public class Orbiter extends MeteorAddon {
             Commands.add(new GivePresetCommand());
             Commands.add(new VerifyProtectCommand());
             Commands.add(new PeakPluginScannerCommand());
-            Commands.add(new DestroyNowCommand());
             Commands.add(new UUIDBanCommand());
             Commands.add(new HideKeybindCommand());
             Commands.add(new SetPrefixCommand());
@@ -183,7 +187,18 @@ public class Orbiter extends MeteorAddon {
                 hud.register(WeaponCooldownHud.INFO);
                 hud.register(RenderDistanceHud.INFO);
                 hud.register(NearestPlayerHud.INFO);
-                hud.register(ServerInfoHud.INFO);
+                hud.register(ServerTpsHud.INFO);
+                hud.register(ServerPlayersHud.INFO);
+                hud.register(ServerRealIpHud.INFO);
+                hud.register(ServerRealVersionHud.INFO);
+                hud.register(ServerVersionNoteHud.INFO);
+                hud.register(ServerIpHud.INFO);
+                hud.register(ServerBrandHud.INFO);
+                hud.register(ServerVersionHud.INFO);
+                hud.register(ServerProtocolHud.INFO);
+                hud.register(ServerDifficultyHud.INFO);
+                hud.register(ServerTimeHud.INFO);
+                hud.register(ServerPluginsHud.INFO);
             }
         } catch (Exception e) {
             LOG.warn("Failed to register HUD elements", e);
