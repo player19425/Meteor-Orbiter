@@ -164,6 +164,7 @@ public final class MojangApiUtil {
     public static void clearCache() {
         NAME_TO_UUID.clear();
         UUID_TO_NAME.clear();
+        NEGATIVE_CACHE.clear();
     }
 
     public static int cacheSize() {

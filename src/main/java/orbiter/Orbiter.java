@@ -232,6 +232,6 @@ public class Orbiter extends MeteorAddon {
 
     @Override
     public GithubRepo getRepo() {
-        return new GithubRepo("EJJ-GH", "orbiter");
+        return new GithubRepo("player19425", "Meteor-Orbiter");
     }
 }

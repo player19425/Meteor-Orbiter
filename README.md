@@ -101,7 +101,6 @@ All assists support selecting which entity types to target (players, armor stand
 
 | Module | Description |
 |---|---|
-| **Beacon Optimizer** | Reduces beacon lag. |
 | **Block Spam** | Let the blocks rain. Rain, animate, or setblock blocks around a target. OP. |
 | **Block Spoof** | Spoofs block textures client-side. |
 | **Bossbar Flash** | Flash random boss bars. OP required. |

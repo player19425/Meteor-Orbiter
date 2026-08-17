@@ -387,11 +387,6 @@ public class Actions extends Module {
     private final Set<Holder<MobEffect>> activeEffects = new HashSet<>();
     private final List<Trigger> triggers = new CopyOnWriteArrayList<>();
     private final Map<String, Macro> macros = new ConcurrentHashMap<>();
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "Orbiter-Actions-Scheduler");
-        t.setDaemon(true);
-        return t;
-    });
     private final Queue<DelayedAction> delayedActions = new ConcurrentLinkedQueue<>();
     private final Queue<ScheduledAction> scheduledActions = new ConcurrentLinkedQueue<>();
     private boolean pendingRespawn = false;
@@ -455,7 +450,6 @@ public class Actions extends Module {
     public void onDeactivate() {
         triggers.clear();
 
-        scheduler.shutdownNow();
         delayedActions.clear();
         scheduledActions.clear();
         info("Actions module deactivated.");

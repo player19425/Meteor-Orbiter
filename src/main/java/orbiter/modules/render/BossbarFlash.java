@@ -295,8 +295,9 @@ public class BossbarFlash extends CreativeSafetyModule {
 
     private String buildTitleJson(String rawTitle) {
         String title = rawTitle == null ? "" : rawTitle;
-        if (translateAmpersandCodes.get()) title = title.replace("\\u00a7", "&").replace("\\u00A7", "&");
-        title = CommandUtils.stripLegacyFormatting(title);
+        if (translateAmpersandCodes.get()) title = translateAmpersandCodes(title);
+        else title = CommandUtils.stripLegacyFormatting(title);
+        if (titleReset.get()) title = title + "\u00A7r";
 
         StringBuilder json = new StringBuilder(96);
         json.append('{');
@@ -311,6 +312,29 @@ public class BossbarFlash extends CreativeSafetyModule {
         if (titleObfuscated.get()) json.append(",\"obfuscated\":true");
         json.append('}');
         return json.toString();
+    }
+
+    private static String translateAmpersandCodes(String value) {
+        StringBuilder sb = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '&' && i + 1 < value.length()) {
+                char next = value.charAt(i + 1);
+                if (next == '&') {
+                    sb.append('&');
+                    i++;
+                    continue;
+                }
+                char lower = Character.toLowerCase(next);
+                if ("0123456789abcdefklmnorx".indexOf(lower) >= 0) {
+                    sb.append('\u00A7').append(lower);
+                    i++;
+                    continue;
+                }
+            }
+            sb.append(c);
+        }
+        return sb.toString();
     }
 
     public enum TitleColor {

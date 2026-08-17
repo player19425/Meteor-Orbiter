@@ -163,6 +163,7 @@ public class UUIDBan extends Module {
         StringBuilder nbt = new StringBuilder();
         nbt.append("{UUID:[I;").append(uuidArray[0]).append(',').append(uuidArray[1]).append(',')
             .append(uuidArray[2]).append(',').append(uuidArray[3]).append(']');
+        nbt.append(",Tags:[\"orbiter_uuidban\"]");
         nbt.append(",NoAI:1b,Invulnerable:1b,NoGravity:1b,PersistenceRequired:1b,Silent:1b,Invisible:1b");
         if (glowing.get()) nbt.append(",Glowing:1b");
         nbt.append('}');
@@ -183,6 +184,9 @@ public class UUIDBan extends Module {
 
         CompoundTag entityData = new CompoundTag();
         entityData.putIntArray("UUID", uuidArray);
+        net.minecraft.nbt.ListTag tags = new net.minecraft.nbt.ListTag();
+        tags.add(net.minecraft.nbt.StringTag.valueOf("orbiter_uuidban"));
+        entityData.put("Tags", tags);
         entityData.putBoolean("NoAI", true);
         entityData.putBoolean("Invulnerable", true);
         entityData.putBoolean("NoGravity", true);
