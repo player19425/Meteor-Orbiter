@@ -58,8 +58,6 @@ Everything is organized into four in-game categories:
 | **Spear Assist** | Melee assist for close combat. |
 | **Trident Assist** | Auto-aims and throws the trident. |
 
-All assists support selecting which entity types to target (players, armor stands, and more).
-
 ## Movement:
 
 | Module | Description |
@@ -180,7 +178,7 @@ All assists support selecting which entity types to target (players, armor stand
 # Building from Source:
 
 ### Prerequisites:
-- [JDK](https://adoptium.net/temurin/releases) 25 or higher
+- [JDK](https://adoptium.net/temurin/releases) 21 or higher
 - Gradlew
 
 ### Steps:
