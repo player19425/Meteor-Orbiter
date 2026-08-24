@@ -18,16 +18,18 @@ import java.util.stream.Collectors;
 @Mixin(value = Modules.class, priority = 500)
 public abstract class ModulesMixin {
 
-    private static boolean orbiter$isStupidEnabled() {
-        return ConfigModifier.get().stupidModulesEnabled();
+    private static boolean orbiter$isHidden(Category category) {
+        ConfigModifier config = ConfigModifier.get();
+        if (category == Orbiter.CATEGORY_STUPID && !config.stupidModulesEnabled()) return true;
+        if (category == Orbiter.CATEGORY_WIP && !config.wipModulesEnabled()) return true;
+        return false;
     }
 
     @ModifyReturnValue(method = "loopCategories", at = @At("RETURN"))
-    private static Iterable<Category> orbiter$filterStupidCategory(Iterable<Category> original) {
-        if (orbiter$isStupidEnabled()) return original;
+    private static Iterable<Category> orbiter$filterHiddenCategories(Iterable<Category> original) {
         List<Category> filtered = new ArrayList<>();
         for (Category cat : original) {
-            if (cat != Orbiter.CATEGORY_STUPID) filtered.add(cat);
+            if (!orbiter$isHidden(cat)) filtered.add(cat);
         }
         return filtered;
     }
@@ -35,20 +37,15 @@ public abstract class ModulesMixin {
     @SuppressWarnings("unchecked")
     @ModifyReturnValue(method = "searchTitles", at = @At("RETURN"))
     private static List<?> orbiter$filterSearchTitles(List<?> original) {
-        if (orbiter$isStupidEnabled()) return original;
         return original.stream()
-            .filter(entry -> {
-                Module m = (Module) ((Pair<?, ?>) entry).getFirst();
-                return m.category != Orbiter.CATEGORY_STUPID;
-            })
+            .filter(entry -> !orbiter$isHidden(((Module) ((Pair<?, ?>) entry).getFirst()).category))
             .collect(Collectors.toList());
     }
 
     @ModifyReturnValue(method = "searchSettingTitles", at = @At("RETURN"))
     private static Set<Module> orbiter$filterSearchSettingTitles(Set<Module> original) {
-        if (orbiter$isStupidEnabled()) return original;
         return original.stream()
-            .filter(m -> m.category != Orbiter.CATEGORY_STUPID)
+            .filter(m -> !orbiter$isHidden(m.category))
             .collect(Collectors.toSet());
     }
 }

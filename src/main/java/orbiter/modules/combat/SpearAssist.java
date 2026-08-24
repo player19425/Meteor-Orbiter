@@ -22,6 +22,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.ClipContext;
 import orbiter.Orbiter;
+import orbiter.util.ConfigModifier;
 import orbiter.util.ComboTracker;
 
 import java.util.ArrayList;
@@ -215,12 +216,17 @@ public class SpearAssist extends Module {
     private boolean lastJabWasJab = false;
 
     public SpearAssist() {
-        super(Orbiter.CATEGORY_VANILLA, "spear-assist",
+        super(Orbiter.CATEGORY_WIP, "spear-assist",
             "Melee assist for close combat.");
     }
 
     @Override
     public void onActivate() {
+        if (!ConfigModifier.get().wipModulesEnabled()) {
+            info("WIP Modules is disabled. Enable it in Meteor Config, Orbiter section.");
+            toggle();
+            return;
+        }
         currentTarget = null;
         jabCooldown = 0;
         tickCounter = 0;

@@ -19,6 +19,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import orbiter.Orbiter;
+import orbiter.util.ConfigModifier;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -170,12 +171,17 @@ public class ShieldAssist extends Module {
     private final Set<UUID> trackedAxeUsers = new HashSet<>();
 
     public ShieldAssist() {
-        super(Orbiter.CATEGORY_VANILLA, "shield-assist",
+        super(Orbiter.CATEGORY_WIP, "shield-assist",
             "Auto-blocks with the shield.");
     }
 
     @Override
     public void onActivate() {
+        if (!ConfigModifier.get().wipModulesEnabled()) {
+            info("WIP Modules is disabled. Enable it in Meteor Config, Orbiter section.");
+            toggle();
+            return;
+        }
         isBlocking = false;
         blockTimer = 0;
         releaseTimer = 0;

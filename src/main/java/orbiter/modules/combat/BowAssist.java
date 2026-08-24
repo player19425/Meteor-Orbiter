@@ -19,6 +19,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.ClipContext;
 import orbiter.Orbiter;
+import orbiter.util.ConfigModifier;
 import orbiter.util.ComboTracker;
 
 import java.util.ArrayList;
@@ -284,12 +285,17 @@ public class BowAssist extends Module {
     private float currentCharge;
 
     public BowAssist() {
-        super(Orbiter.CATEGORY_VANILLA, "bow-assist",
+        super(Orbiter.CATEGORY_WIP, "bow-assist",
             "Auto-aims the bow.");
     }
 
     @Override
     public void onActivate() {
+        if (!ConfigModifier.get().wipModulesEnabled()) {
+            info("WIP Modules is disabled. Enable it in Meteor Config, Orbiter section.");
+            toggle();
+            return;
+        }
         currentTarget = null;
         lastTarget = null;
         lastTargetSwitchTime = 0;

@@ -59,8 +59,7 @@
     "CrashFixerEntityNameMixin",
     "CrashFixerTextDisplayMixin",
     "CrashFixerAreaEffectCloudMixin",
-    "CrashFixerClientPacketListenerMixin",
-    "ItemDefaultInstanceMixin"
+    "CrashFixerClientPacketListenerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -23,6 +23,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.ClipContext;
 import orbiter.Orbiter;
+import orbiter.util.ConfigModifier;
 import orbiter.util.ComboTracker;
 
 import java.util.ArrayList;
@@ -218,12 +219,17 @@ public class CrossbowAssist extends Module {
     private boolean hasFireworkLoaded = false;
 
     public CrossbowAssist() {
-        super(Orbiter.CATEGORY_VANILLA, "crossbow-assist",
+        super(Orbiter.CATEGORY_WIP, "crossbow-assist",
             "Auto-aims the crossbow.");
     }
 
     @Override
     public void onActivate() {
+        if (!ConfigModifier.get().wipModulesEnabled()) {
+            info("WIP Modules is disabled. Enable it in Meteor Config, Orbiter section.");
+            toggle();
+            return;
+        }
         currentTarget = null;
         lastTargetSwitchTime = 0;
         trajectoryPoints.clear();

@@ -77,7 +77,7 @@ import meteordevelopment.meteorclient.systems.hud.Hud;
 import meteordevelopment.meteorclient.systems.hud.HudGroup;
 import meteordevelopment.meteorclient.systems.modules.Category;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.world.item.Item;
+import meteordevelopment.meteorclient.utils.render.DisplayItemUtils;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.slf4j.Logger;
@@ -85,18 +85,11 @@ import org.slf4j.Logger;
 public class Orbiter extends MeteorAddon {
     public static final Logger LOG = LogUtils.getLogger();
 
-    private static ItemStack safeIcon(Item item) {
-        try {
-            return item.getDefaultInstance();
-        } catch (Throwable t) {
-            return ItemStack.EMPTY;
-        }
-    }
-
-    public static final Category CATEGORY = new Category("Orbiter Survival", () -> safeIcon(Items.DIAMOND_BLOCK));
-    public static final Category CATEGORY_VANILLA = new Category("Orbiter Vanilla", () -> safeIcon(Items.NETHERITE_SWORD));
-    public static final Category CATEGORY_OP = new Category("Orbiter Creative/OP", () -> safeIcon(Items.DIAMOND_BLOCK));
-    public static final Category CATEGORY_STUPID = new Category("Orbiter Stupid", () -> safeIcon(Items.SLIME_BLOCK));
+    public static final Category CATEGORY = new Category("Orbiter Survival", () -> DisplayItemUtils.toStack(Items.DIAMOND_BLOCK));
+    public static final Category CATEGORY_VANILLA = new Category("Orbiter Vanilla", () -> DisplayItemUtils.toStack(Items.NETHERITE_SWORD));
+    public static final Category CATEGORY_OP = new Category("Orbiter Creative/OP", () -> DisplayItemUtils.toStack(Items.COMMAND_BLOCK));
+    public static final Category CATEGORY_STUPID = new Category("Orbiter Stupid", () -> DisplayItemUtils.toStack(Items.SLIME_BLOCK));
+    public static final Category CATEGORY_WIP = new Category("Orbiter W.I.P", () -> DisplayItemUtils.toStack(Items.WRITABLE_BOOK));
     public static final HudGroup HUD_GROUP = new HudGroup("Orbiter");
 
     @Override
@@ -156,7 +149,6 @@ public class Orbiter extends MeteorAddon {
         modules.add(new CommandBlockPlacer());
         modules.add(new ItemCreator());
         modules.add(new WorldEraser());
-        modules.add(new NBTLecternCrasher());
         modules.add(new WorldEditModule());
         modules.add(new ParticleControl());
         modules.add(new BlockSpam());
@@ -233,6 +225,7 @@ public class Orbiter extends MeteorAddon {
         Modules.registerCategory(CATEGORY_VANILLA);
         Modules.registerCategory(CATEGORY_OP);
         Modules.registerCategory(CATEGORY_STUPID);
+        Modules.registerCategory(CATEGORY_WIP);
     }
 
     @Override

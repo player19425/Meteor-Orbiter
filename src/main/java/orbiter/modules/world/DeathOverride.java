@@ -84,7 +84,7 @@ public class DeathOverride extends CreativeSafetyModule {
 
     public DeathOverride() {
         super("death-override",
-                "After repeated deaths it skips the death screen, blocks the world reload and keeps you as a free camera ghost with chat and commands working.");
+                "Removes DieScreen incase of kill commandblock.");
         instance = this;
     }
 

@@ -10,10 +10,11 @@ public class ConfigModifier {
 
     public SettingGroup sgOrbiter;
     public Setting<Boolean> stupidModules;
+    public Setting<Boolean> wipModules;
 
     public static ConfigModifier get() {
         if (INSTANCE == null) INSTANCE = new ConfigModifier();
-        if (INSTANCE.stupidModules == null) INSTANCE.tryInit();
+        if (INSTANCE.stupidModules == null || INSTANCE.wipModules == null) INSTANCE.tryInit();
         return INSTANCE;
     }
 
@@ -30,10 +31,21 @@ public class ConfigModifier {
             .defaultValue(false)
             .build()
         );
+        wipModules = sgOrbiter.add(new BoolSetting.Builder()
+            .name("wip-modules")
+            .description("Enable work-in-progress modules that are normally hidden/disabled by default.")
+            .defaultValue(false)
+            .build()
+        );
     }
 
     public boolean stupidModulesEnabled() {
         Setting<Boolean> setting = stupidModules;
+        return setting != null && setting.get();
+    }
+
+    public boolean wipModulesEnabled() {
+        Setting<Boolean> setting = wipModules;
         return setting != null && setting.get();
     }
 }

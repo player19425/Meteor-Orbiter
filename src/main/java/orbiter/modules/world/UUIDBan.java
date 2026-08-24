@@ -61,7 +61,7 @@ public class UUIDBan extends Module {
     private UUID resolvedUuid = null;
 
     public UUIDBan() {
-        super(Orbiter.CATEGORY_OP, "uuid-ban",
+        super(Orbiter.CATEGORY_OP, "UUID Ban (W.I.P)",
             "Locks players out with their UUID. OP.");
     }
 

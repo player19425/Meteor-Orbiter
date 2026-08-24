@@ -27,6 +27,7 @@ Everything is organized into four in-game categories:
 - **Orbiter Vanilla** • modules that only use vanilla mechanics
 - **Orbiter Creative/OP** • modules that require Creative mode or operator permissions
 - **Orbiter Stupid** • joke / experimental modules
+- **Orbiter W.I.P** • work-in-progress modules (enable them in Meteor Config → Orbiter)
 
 # Requirements
 
@@ -49,14 +50,9 @@ Everything is organized into four in-game categories:
 |---|---|
 | **Aim Assist Plus** | Aim assist with prediction. |
 | **Anti Knockback** | No knockback. |
-| **Bow Assist** | Auto-aims the bow. |
-| **Crossbow Assist** | Auto-aims the crossbow. |
 | **Mace Assist** | Auto-aim and strike with the Mace. |
 | **No Friend Hit** | Don't hit Meteor friends. |
 | **Out Of Reach**
-| **Shield Assist** | Auto-blocks with the shield. |
-| **Spear Assist** | Melee assist for close combat. |
-| **Trident Assist** | Auto-aims and throws the trident. |
 
 All assists support selecting which entity types to target (players, armor stands, and more).
 
@@ -85,15 +81,14 @@ All assists support selecting which entity types to target (players, armor stand
 | **Auto Farming** | Auto-farms crops and animals. |
 | **Command Block Placer** | Places command blocks. Creative + OP. |
 | **Control Player** | Rotates players around you. OP. |
-| **Death Override** | Hides the death screen and keeps you playing after fatal hits. |
+| **Death Override** | Removes DieScreen incase of kill commandblock. |
 | **Entity Spammer** | Spawns and animates entities. OP required. |
 | **Item Creator** | Creates custom items. Creative only. |
 | **Item Generator** | Spawns items with random enchants. Creative. |
-| **NBT Lectern Crasher** | Crashes servers with NBT books. Creative + OP. |
 | **Operator Nuker** | Nukes blocks with /fill. OP. |
 | **RNG Spammer** | Spawns loot tables around players. OP. |
 | **TNT Rain** | Rain of TNT. OP. |
-| **UUID Ban** | Locks players out with their UUID. OP. |
+| **UUID Ban (W.I.P)** | Locks players out with their UUID. OP. |
 | **World Downloader** | Saves the server world locally. |
 | **World Edit** | Client-side WorldEdit. `.we <command>` |
 | **World Eraser** | Erases blocks in a radius. Toggle twice to trigger. OP. |
