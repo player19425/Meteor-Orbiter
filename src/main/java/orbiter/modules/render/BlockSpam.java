@@ -12,6 +12,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import orbiter.modules.CreativeSafetyModule;
 import orbiter.util.CommandUtils;
+import orbiter.util.FastSend;
+import orbiter.util.GlobalSendLimiter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,7 +23,8 @@ import java.util.Random;
 public final class BlockSpam extends CreativeSafetyModule {
     public enum Mode { Animation, Rain }
     public enum Delivery { FallingBlock, Setblock }
-    public enum BlockPickMode { Single, List, AllBlocks }
+    public enum MotionMode { Random, Custom }
+    public enum BlockPickMode { Single, List, AllBlocks, Containers, Colorful, ColorfulWool }
     public enum Shape {
         Cube, Sphere, Ring, Torus, Helix, DoubleHelix, Pyramid, Diamond,
         Cone, Cylinder, Spiral, Galaxy, Heart, Star, Wave, Atom
@@ -43,7 +46,7 @@ public final class BlockSpam extends CreativeSafetyModule {
         .name("delivery").description("FallingBlock summons falling block entities; Setblock places blocks directly with /setblock.")
         .defaultValue(Delivery.FallingBlock).build());
     private final Setting<BlockPickMode> blockSource = sgGeneral.add(new EnumSetting.Builder<BlockPickMode>()
-        .name("block-source").description("Single uses the block setting; List picks a random block from the block list; AllBlocks picks from every valid Minecraft block (air, water and lava excluded).")
+        .name("block-source").description("Single uses the block setting; List picks from the block list; AllBlocks picks every valid block; Containers picks chests, shulkers, barrels and similar storage; Colorful picks every block that comes in the 16 dye colors; Colorful Wool is Colorful limited to wool and carpets.")
         .defaultValue(BlockPickMode.Single).build());
     private final Setting<String> block = sgGeneral.add(new StringSetting.Builder()
         .name("block").description("Block to spam. Accepts ids with or without the minecraft: prefix and optional properties, e.g. minecraft:stone or minecraft:oak_stairs[facing=north].")
@@ -109,17 +112,33 @@ public final class BlockSpam extends CreativeSafetyModule {
         .name("rain-spread").description("Horizontal radius around the target where blocks rain.").defaultValue(5.0).min(0.5).sliderRange(0.5, 20)
         .visible(() -> mode.get() == Mode.Rain).build());
     private final Setting<Boolean> motion = sgRain.add(new BoolSetting.Builder()
-        .name("motion").description("Apply a Motion tag to raining blocks so they scatter sideways as they fall.")
+        .name("motion").description("Apply a Motion tag to raining blocks so they move as they fall.")
         .defaultValue(true)
         .visible(() -> mode.get() == Mode.Rain).build());
+    private final Setting<MotionMode> motionMode = sgRain.add(new EnumSetting.Builder<MotionMode>()
+        .name("motion-mode").description("Random picks a random direction each block; Custom uses the exact X/Y/Z values below.")
+        .defaultValue(MotionMode.Random)
+        .visible(() -> mode.get() == Mode.Rain && motion.get()).build());
     private final Setting<Double> motionSpeed = sgRain.add(new DoubleSetting.Builder()
         .name("motion-speed").description("Horizontal motion speed in blocks per tick, applied in a random direction.")
         .defaultValue(0.15).min(0.0).sliderRange(0.0, 1.0)
-        .visible(() -> mode.get() == Mode.Rain).build());
+        .visible(() -> mode.get() == Mode.Rain && motion.get() && motionMode.get() == MotionMode.Random).build());
     private final Setting<Double> motionVertical = sgRain.add(new DoubleSetting.Builder()
-        .name("motion-vertical").description("Vertical motion speed. Negative pushes blocks down faster, positive launches them up.")
+        .name("motion-vertical").description("Vertical motion speed used by Random mode. Negative pushes blocks down faster, positive launches them up.")
         .defaultValue(0.0).sliderRange(-2.0, 2.0)
-        .visible(() -> mode.get() == Mode.Rain).build());
+        .visible(() -> mode.get() == Mode.Rain && motion.get() && motionMode.get() == MotionMode.Random).build());
+    private final Setting<Double> customMotionX = sgRain.add(new DoubleSetting.Builder()
+        .name("custom-motion-x").description("Exact X motion in blocks per tick for Custom mode.")
+        .defaultValue(0.0).sliderRange(-3.0, 3.0)
+        .visible(() -> mode.get() == Mode.Rain && motion.get() && motionMode.get() == MotionMode.Custom).build());
+    private final Setting<Double> customMotionY = sgRain.add(new DoubleSetting.Builder()
+        .name("custom-motion-y").description("Exact Y motion in blocks per tick for Custom mode.")
+        .defaultValue(-0.5).sliderRange(-3.0, 3.0)
+        .visible(() -> mode.get() == Mode.Rain && motion.get() && motionMode.get() == MotionMode.Custom).build());
+    private final Setting<Double> customMotionZ = sgRain.add(new DoubleSetting.Builder()
+        .name("custom-motion-z").description("Exact Z motion in blocks per tick for Custom mode.")
+        .defaultValue(0.0).sliderRange(-3.0, 3.0)
+        .visible(() -> mode.get() == Mode.Rain && motion.get() && motionMode.get() == MotionMode.Custom).build());
 
     private final Setting<Integer> maxCommandsPerBatch = sgRate.add(new IntSetting.Builder()
         .name("max-commands-per-batch").description("Commands sent per batch. In Rain mode this is how many blocks rain per batch; in Animation it caps shape points per batch.")
@@ -145,6 +164,12 @@ public final class BlockSpam extends CreativeSafetyModule {
         samplePhase = 0;
         tickCounter = 0;
         fixedCenter = mc.player == null ? null : playerPosition();
+        safetyActivate();
+    }
+
+    @Override
+    public void onDeactivate() {
+        safetyDeactivate();
     }
 
     @EventHandler
@@ -154,13 +179,13 @@ public final class BlockSpam extends CreativeSafetyModule {
         tickCounter = 0;
 
         if (mode.get() == Mode.Rain) {
-            rainTick();
+            rainTick(sliceDeadline());
         } else {
-            animationTick();
+            animationTick(sliceDeadline());
         }
     }
 
-    private void animationTick() {
+    private void animationTick(long deadline) {
         String target = resolveTargetString();
         if (target == null && centerTargetMode.get() != CenterTargetMode.FixedPosition) return;
         if (centerTargetMode.get() == CenterTargetMode.FixedPosition && fixedCenter == null) fixedCenter = playerPosition();
@@ -176,31 +201,33 @@ public final class BlockSpam extends CreativeSafetyModule {
 
         Vec3 base = fixedCenter;
         for (int n = 0; n < commands; n++) {
+            if ((n & 7) == 0 && System.nanoTime() >= deadline) break;
             double distributed = fractional((n + samplePhase) / commands);
             int index = Math.min(pointCount - 1, (int) Math.floor(distributed * pointCount));
             Vec3 offset = rotate(pointFor(shape.get(), index, pointCount, radius.get(), phase), ax, ay, az)
                 .add(translateX.get(), translateY.get(), translateZ.get());
 
             if (delivery.get() == Delivery.FallingBlock) {
-                emitFallingBlock(target, base, offset, true, false);
+                if (!emitFallingBlock(target, base, offset, true, false)) break;
             } else {
-                emitSetblock(target, base, offset);
+                if (!emitSetblock(target, base, offset)) break;
             }
         }
     }
 
-    private void rainTick() {
+    private void rainTick(long deadline) {
         if (centerTargetMode.get() == CenterTargetMode.FixedPosition && fixedCenter == null) fixedCenter = playerPosition();
 
         double spread = rainSpread.get();
-        int count = Math.min(maxCommandsPerBatch.get(), 5000);
+        int count = maxCommandsPerBatch.get();
 
         if (delivery.get() == Delivery.FallingBlock) {
             String target = resolveTargetString();
             boolean withMotion = motion.get();
             for (int i = 0; i < count; i++) {
+                if ((i & 7) == 0 && System.nanoTime() >= deadline) break;
                 Vec3 offset = new Vec3(randomOffset(spread), rainHeight.get(), randomOffset(spread));
-                emitFallingBlock(target, fixedCenter, offset, false, withMotion);
+                if (!emitFallingBlock(target, fixedCenter, offset, false, withMotion)) break;
             }
         } else {
             Vec3 center = resolveTargetPosition();
@@ -208,59 +235,108 @@ public final class BlockSpam extends CreativeSafetyModule {
                 warning("Could not resolve the target position client-side for Rain + Setblock. Use Self, Nearest Player, a player name, or Fixed Position.");
                 return;
             }
+            StringBuilder sb = new StringBuilder(96);
             for (int i = 0; i < count; i++) {
+                if ((i & 7) == 7 && System.nanoTime() >= deadline) break;
+                if (!GlobalSendLimiter.tryAcquireOne()) break;
                 double rx = randomOffset(spread);
                 double rz = randomOffset(spread);
                 BlockPos floor = floorAt(center.x + rx, center.z + rz);
                 if (floor == null) continue;
-                String cmd = CommandUtils.formatCommand("setblock %d %d %d %s",
-                    floor.getX(), floor.getY(), floor.getZ(), normalizeBlock(pickBlock()));
-                mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
+                sb.setLength(0);
+                sb.append("setblock ").append(floor.getX()).append(' ').append(floor.getY())
+                    .append(' ').append(floor.getZ()).append(' ').append(pickedBlockNormalized());
+                FastSend.command(CommandUtils.vanilla(sb.toString()));
             }
         }
     }
 
-    private void emitFallingBlock(String target, Vec3 base, Vec3 offset, boolean floating, boolean withMotion) {
+    private boolean emitFallingBlock(String target, Vec3 base, Vec3 offset, boolean floating, boolean withMotion) {
+        if (!GlobalSendLimiter.tryAcquireOne()) return false;
         String nbt = fallingBlockNbt(floating, withMotion);
-        String cmd;
+        StringBuilder sb = new StringBuilder(128);
         if (target != null) {
-            cmd = CommandUtils.formatCommand("execute at %s run summon minecraft:falling_block ~%.2f ~%.2f ~%.2f %s",
-                target, offset.x, offset.y, offset.z, nbt);
+            sb.append("execute at ").append(target).append(" run summon minecraft:falling_block ~")
+                .append(fmt(offset.x)).append(" ~").append(fmt(offset.y)).append(" ~").append(fmt(offset.z))
+                .append(' ').append(nbt);
         } else {
             Vec3 abs = base.add(offset);
-            cmd = CommandUtils.formatCommand("summon minecraft:falling_block %.2f %.2f %.2f %s",
-                abs.x, abs.y, abs.z, nbt);
+            sb.append("summon minecraft:falling_block ")
+                .append(fmt(abs.x)).append(' ').append(fmt(abs.y)).append(' ').append(fmt(abs.z))
+                .append(' ').append(nbt);
         }
-        mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
+        FastSend.command(CommandUtils.vanilla(sb.toString()));
+        return true;
     }
 
-    private void emitSetblock(String target, Vec3 base, Vec3 offset) {
-        String blockStr = normalizeBlock(pickBlock());
-        String cmd;
+    private boolean emitSetblock(String target, Vec3 base, Vec3 offset) {
+        if (!GlobalSendLimiter.tryAcquireOne()) return false;
+        String blockStr = pickedBlockNormalized();
+        StringBuilder sb = new StringBuilder(96);
         if (target != null) {
-            cmd = CommandUtils.formatCommand("execute at %s run setblock ~%d ~%d ~%d %s",
-                target, (int) Math.floor(offset.x), (int) Math.floor(offset.y), (int) Math.floor(offset.z), blockStr);
+            sb.append("execute at ").append(target).append(" run setblock ~")
+                .append((int) Math.floor(offset.x)).append(" ~").append((int) Math.floor(offset.y))
+                .append(" ~").append((int) Math.floor(offset.z)).append(' ').append(blockStr);
         } else {
             Vec3 abs = base.add(offset);
-            cmd = CommandUtils.formatCommand("setblock %d %d %d %s",
-                (int) Math.floor(abs.x), (int) Math.floor(abs.y), (int) Math.floor(abs.z), blockStr);
+            sb.append("setblock ").append((int) Math.floor(abs.x)).append(' ')
+                .append((int) Math.floor(abs.y)).append(' ').append((int) Math.floor(abs.z))
+                .append(' ').append(blockStr);
         }
-        mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
+        FastSend.command(CommandUtils.vanilla(sb.toString()));
+        return true;
+    }
+
+    private String lastPickedBlock;
+    private String lastNormalizedBlock;
+    private String lastStateNbt;
+
+    private String pickedBlockNormalized() {
+        String raw = pickBlock();
+        if (raw != lastPickedBlock) {
+            lastPickedBlock = raw;
+            lastNormalizedBlock = normalizeBlock(raw);
+            lastStateNbt = null;
+        }
+        return lastNormalizedBlock;
+    }
+
+    private String blockStateNbtCached() {
+        String raw = pickBlock();
+        if (raw != lastPickedBlock) {
+            lastPickedBlock = raw;
+            lastNormalizedBlock = normalizeBlock(raw);
+            lastStateNbt = null;
+        }
+        if (lastStateNbt == null) lastStateNbt = blockStateNbt(lastPickedBlock);
+        return lastStateNbt;
     }
 
     private String fallingBlockNbt(boolean floating, boolean withMotion) {
-        StringBuilder sb = new StringBuilder("{").append(blockStateNbt(pickBlock()));
+        StringBuilder sb = new StringBuilder("{").append(blockStateNbtCached());
         if (floating) {
             sb.append(",NoGravity:1b");
         }
         sb.append(",DropItem:0b");
         if (withMotion) {
-            double angle = random.nextDouble() * Math.PI * 2;
-            double h = motionSpeed.get();
-            sb.append(",Motion:[")
-                .append(fmt(Math.cos(angle) * h)).append(',')
-                .append(fmt(motionVertical.get())).append(',')
-                .append(fmt(Math.sin(angle) * h)).append(']');
+            double mx, my, mz;
+            if (motionMode.get() == MotionMode.Custom) {
+                mx = customMotionX.get();
+                my = customMotionY.get();
+                mz = customMotionZ.get();
+            } else {
+                double angle = random.nextDouble() * Math.PI * 2;
+                double h = motionSpeed.get();
+                mx = Math.cos(angle) * h;
+                mz = Math.sin(angle) * h;
+                my = motionVertical.get();
+            }
+            if (mx != 0 || my != 0 || mz != 0) {
+                sb.append(",Motion:[")
+                    .append(fmt(mx)).append(',')
+                    .append(fmt(my)).append(',')
+                    .append(fmt(mz)).append(']');
+            }
         }
         sb.append('}');
         return sb.toString();
@@ -275,33 +351,87 @@ public final class BlockSpam extends CreativeSafetyModule {
                 String picked = list.get(random.nextInt(list.size()));
                 yield picked == null || picked.isBlank() ? block.get() : picked.trim();
             }
-            case AllBlocks -> {
-                String[] all = allBlocks();
-                yield all.length == 0 ? block.get() : all[random.nextInt(all.length)];
+            default -> {
+                String[] pool = poolFor(blockSource.get());
+                yield pool.length == 0 ? "minecraft:stone" : pool[random.nextInt(pool.length)];
             }
         };
     }
 
-    private static volatile String[] allBlocksCache;
+    private static final String[] DYE_COLORS = {
+            "white", "orange", "magenta", "light_blue", "yellow", "lime", "pink",
+            "gray", "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"
+    };
 
-    private String[] allBlocks() {
-        String[] cached = allBlocksCache;
-        if (cached != null) return cached;
+    private static volatile String[] allBlocksPool;
+    private static volatile String[] containersPool;
+    private static volatile String[] colorfulPool;
+    private static volatile String[] colorfulWoolPool;
+
+    private static String[] poolFor(BlockPickMode mode) {
         synchronized (BlockSpam.class) {
-            cached = allBlocksCache;
-            if (cached != null) return cached;
-            List<String> ids = new ArrayList<>();
-            for (Block block : BuiltInRegistries.BLOCK) {
-                BlockState state = block.defaultBlockState();
-                if (state.isAir()) continue;
-                if (!state.getFluidState().isEmpty()) continue;
-                Identifier id = BuiltInRegistries.BLOCK.getKey(block);
-                if (id != null) ids.add(id.toString());
-            }
-            cached = ids.toArray(new String[0]);
-            allBlocksCache = cached;
+            return switch (mode) {
+                case AllBlocks -> allBlocksPool != null ? allBlocksPool : (allBlocksPool = buildAllBlocks());
+                case Containers -> containersPool != null ? containersPool : (containersPool = buildContainers());
+                case Colorful -> colorfulPool != null ? colorfulPool : (colorfulPool = buildColorful());
+                case ColorfulWool -> colorfulWoolPool != null ? colorfulWoolPool : (colorfulWoolPool = buildColorfulWool());
+                default -> new String[0];
+            };
         }
-        return cached;
+    }
+
+    private static void collectValidBlocks(List<String> ids) {
+        for (Block block : BuiltInRegistries.BLOCK) {
+            BlockState state = block.defaultBlockState();
+            if (state.isAir()) continue;
+            if (!state.getFluidState().isEmpty()) continue;
+            Identifier id = BuiltInRegistries.BLOCK.getKey(block);
+            if (id != null) ids.add(id.toString());
+        }
+    }
+
+    private static String[] buildAllBlocks() {
+        List<String> ids = new ArrayList<>();
+        collectValidBlocks(ids);
+        return ids.toArray(new String[0]);
+    }
+
+    private static String[] buildContainers() {
+        List<String> ids = new ArrayList<>();
+        for (String id : buildAllBlocks()) {
+            String path = id.substring(id.indexOf(':') + 1);
+            if (path.contains("chest") || path.contains("shulker_box")
+                    || path.equals("barrel") || path.equals("hopper") || path.equals("dropper")
+                    || path.equals("dispenser") || path.equals("furnace") || path.equals("blast_furnace")
+                    || path.equals("smoker") || path.equals("crafter")) {
+                ids.add(id);
+            }
+        }
+        return ids.toArray(new String[0]);
+    }
+
+    private static boolean isColorful(String path) {
+        for (String color : DYE_COLORS) {
+            if (path.startsWith(color + "_")) return true;
+        }
+        return false;
+    }
+
+    private static String[] buildColorful() {
+        List<String> ids = new ArrayList<>();
+        for (String id : buildAllBlocks()) {
+            if (isColorful(id.substring(id.indexOf(':') + 1))) ids.add(id);
+        }
+        return ids.toArray(new String[0]);
+    }
+
+    private static String[] buildColorfulWool() {
+        List<String> ids = new ArrayList<>();
+        for (String id : buildAllBlocks()) {
+            String path = id.substring(id.indexOf(':') + 1);
+            if (isColorful(path) && (path.endsWith("_wool") || path.endsWith("_carpet"))) ids.add(id);
+        }
+        return ids.toArray(new String[0]);
     }
 
     private String resolveTargetString() {

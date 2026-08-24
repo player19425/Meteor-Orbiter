@@ -3,6 +3,8 @@ package orbiter.modules.render;
 import orbiter.Orbiter;
 import orbiter.modules.CreativeSafetyModule;
 import orbiter.util.CommandUtils;
+import orbiter.util.FastSend;
+import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
@@ -157,6 +159,12 @@ public class ParticleSpam extends CreativeSafetyModule {
         public void onActivate() {
                 tickCounter = 0;
                 particleIndex = 0;
+                safetyActivate();
+        }
+
+        @Override
+        public void onDeactivate() {
+                safetyDeactivate();
         }
 
         @EventHandler
@@ -170,8 +178,11 @@ public class ParticleSpam extends CreativeSafetyModule {
                 tickCounter = 0;
 
                 int burstBudget = maxParticlesPerBurst.get();
+                long deadline = sliceDeadline();
                 for (int i = 0; i < commandsPerTick.get() && burstBudget > 0; i++) {
-                        String particle = getNextParticle();
+                        if ((i & 3) == 3 && System.nanoTime() >= deadline) break;
+                        if (!GlobalSendLimiter.tryAcquireOne()) break;
+                        String particle = particleWithOptions(getNextParticle());
                         int emitted = Math.min(particleCount.get(), burstBudget);
                         double x, y, z;
 
@@ -189,7 +200,7 @@ public class ParticleSpam extends CreativeSafetyModule {
                         String cmd = CommandUtils.formatCommand("particle %s %.2f %.2f %.2f %.2f %.2f %.2f %.2f %d %s @a",
                                         particle, x, y, z, deltaX.get(), deltaY.get(), deltaZ.get(),
                                         speed.get(), emitted, forceStr);
-                        mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
+                        FastSend.command(CommandUtils.vanilla(cmd));
                         burstBudget -= emitted;
                 }
 
@@ -225,6 +236,17 @@ public class ParticleSpam extends CreativeSafetyModule {
                 String p = "minecraft:" + ALL_PARTICLES[particleIndex % ALL_PARTICLES.length];
                 particleIndex++;
                 return p;
+        }
+
+        private static String particleWithOptions(String particleId) {
+                return switch (particleId) {
+                        case "minecraft:dust" -> particleId + "{scale:1.0,color:[1.0,0.0,0.0]}";
+                        case "minecraft:dust_color_transition" ->
+                                particleId + "{scale:1.0,from_color:[1.0,0.0,0.0],to_color:[0.0,1.0,1.0]}";
+                        case "minecraft:sculk_charge" -> particleId + "{roll:0.3f}";
+                        case "minecraft:shriek" -> particleId + "{delay:0}";
+                        default -> particleId;
+                };
         }
 
         public enum ParticleMode {

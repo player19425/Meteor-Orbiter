@@ -2,6 +2,8 @@ package orbiter.modules;
 
 import orbiter.Orbiter;
 import orbiter.util.CommandUtils;
+import orbiter.util.FastSend;
+import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.EntityTypeListSetting;
 import meteordevelopment.meteorclient.settings.*;
@@ -400,6 +402,8 @@ public class EntitySpammer extends CreativeSafetyModule {
         fillPositions = null;
         fillIndex = 0;
 
+        safetyActivate();
+
         SpammerMode m = mode.get();
 
         if (m == SpammerMode.FillArea || m == SpammerMode.Dominate || m == SpammerMode.All) {
@@ -411,6 +415,7 @@ public class EntitySpammer extends CreativeSafetyModule {
 
     @Override
     public void onDeactivate() {
+        safetyDeactivate();
         info("Entity Spammer stopped. Total spawned: " + spawnedCount);
     }
 
@@ -428,23 +433,23 @@ public class EntitySpammer extends CreativeSafetyModule {
         tickCounter = 0;
 
         SpammerMode m = mode.get();
+        long deadline = sliceDeadline();
 
         for (int i = 0; i < commandsPerTick.get(); i++) {
+            if ((i & 15) == 15 && System.nanoTime() >= deadline) break;
             boolean didSomething = false;
 
             if (m == SpammerMode.Spawn || m == SpammerMode.All) {
                 if (spawnAmount.get() > 0 && spawnedCount >= spawnAmount.get()) {
                     if (m == SpammerMode.Spawn) { toggle(); return; }
                 } else {
-                    doSpawn();
-                    didSomething = true;
+                    didSomething = doSpawn();
                 }
             }
 
             if (m == SpammerMode.FillArea || m == SpammerMode.All) {
                 if (fillPositions != null && fillIndex < fillPositions.size()) {
-                    doFill();
-                    didSomething = true;
+                    didSomething |= doFill();
                 } else if (m == SpammerMode.FillArea) {
                     info("Fill complete!");
                     toggle();
@@ -453,14 +458,12 @@ public class EntitySpammer extends CreativeSafetyModule {
             }
 
             if (m == SpammerMode.Animate || m == SpammerMode.All) {
-                doAnimate();
-                didSomething = true;
+                didSomething |= doAnimate();
             }
 
             if (m == SpammerMode.Dominate || m == SpammerMode.All) {
                 if (fillPositions != null && fillIndex < fillPositions.size()) {
-                    doDominate();
-                    didSomething = true;
+                    didSomething |= doDominate();
                 } else if (m == SpammerMode.Dominate) {
                     info("Domination complete! Spawned " + spawnedCount);
                     toggle();
@@ -472,7 +475,7 @@ public class EntitySpammer extends CreativeSafetyModule {
         }
     }
 
-    private void doSpawn() {
+    private boolean doSpawn() {
         double x, y, z;
 
         if (formation.get() != Formation.None) {
@@ -499,35 +502,39 @@ public class EntitySpammer extends CreativeSafetyModule {
         }
 
         String target = resolveSpawnTarget();
-        if (target == null) return;
+        if (target == null) return false;
+        if (!GlobalSendLimiter.tryAcquireOne()) return false;
         String nbt = buildNBT();
         String entity = getNextEntityId("minecraft:zombie");
         String cmd = nbt.isEmpty()
             ? CommandUtils.formatCommand("execute at %s run summon %s ~%.2f ~%.2f ~%.2f", target, entity, x, y, z)
             : CommandUtils.formatCommand("execute at %s run summon %s ~%.2f ~%.2f ~%.2f {%s}", target, entity, x, y, z, nbt);
 
-        mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
+        FastSend.command(CommandUtils.vanilla(cmd));
         spawnedCount++;
+        return true;
     }
 
-    private void doFill() {
-        if (fillPositions == null || fillIndex >= fillPositions.size()) return;
+    private boolean doFill() {
+        if (fillPositions == null || fillIndex >= fillPositions.size()) return false;
 
         BlockPos pos = fillPositions.get(fillIndex);
         String target = resolveSpawnTarget();
-        if (target == null) return;
+        if (target == null) return false;
+        if (!GlobalSendLimiter.tryAcquireOne()) return false;
         String nbt = buildNBT();
         String entity = getNextEntityId("minecraft:zombie");
         String cmd = nbt.isEmpty()
             ? CommandUtils.formatCommand("execute at %s run summon %s ~%d ~%d ~%d", target, entity, pos.getX(), pos.getY(), pos.getZ())
             : CommandUtils.formatCommand("execute at %s run summon %s ~%d ~%d ~%d {%s}", target, entity, pos.getX(), pos.getY(), pos.getZ(), nbt);
 
-        mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
+        FastSend.command(CommandUtils.vanilla(cmd));
         fillIndex++;
         spawnedCount++;
+        return true;
     }
 
-    private void doAnimate() {
+    private boolean doAnimate() {
         double cx, cy, cz;
         if (relativeToPlayer.get()) {
             cx = mc.player.getX();
@@ -586,20 +593,24 @@ public class EntitySpammer extends CreativeSafetyModule {
             facing = " facing entity @s feet";
         }
 
+        if (!GlobalSendLimiter.tryAcquireOne()) return false;
         String cmd = CommandUtils.formatCommand("tp %s %.2f %.2f %.2f%s",
             getResolvedSelector(), tx, ty, tz, facing);
-        mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
+        FastSend.command(CommandUtils.vanilla(cmd));
+        return true;
     }
 
-    private void doDominate() {
-        if (fillPositions == null || fillIndex >= fillPositions.size()) return;
+    private boolean doDominate() {
+        if (fillPositions == null || fillIndex >= fillPositions.size()) return false;
 
         BlockPos pos = fillPositions.get(fillIndex);
         String cmd = buildDominateCommand(pos);
-        if (cmd == null) return;
-        mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
+        if (cmd == null) return false;
+        if (!GlobalSendLimiter.tryAcquireOne()) return false;
+        FastSend.command(CommandUtils.vanilla(cmd));
         fillIndex++;
         spawnedCount++;
+        return true;
     }
 
     private String buildDominateCommand(BlockPos pos) {

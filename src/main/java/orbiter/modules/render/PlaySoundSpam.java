@@ -3,6 +3,8 @@ package orbiter.modules.render;
 import orbiter.Orbiter;
 import orbiter.modules.CreativeSafetyModule;
 import orbiter.util.CommandUtils;
+import orbiter.util.FastSend;
+import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
@@ -95,6 +97,7 @@ public class PlaySoundSpam extends CreativeSafetyModule {
     public void onActivate() {
         tickCounter = 0;
         soundIndex = 0;
+        safetyActivate();
 
         allSounds = new ArrayList<>();
         for (SoundEvent sound : BuiltInRegistries.SOUND_EVENT) {
@@ -118,6 +121,7 @@ public class PlaySoundSpam extends CreativeSafetyModule {
         tickCounter = 0;
 
         for (int i = 0; i < commandsPerTick.get(); i++) {
+            if (!GlobalSendLimiter.tryAcquireOne()) break;
             String sound;
             if (soundMode.get() == SoundMode.Specific) {
                 sound = specificSound.get();
@@ -131,12 +135,13 @@ public class PlaySoundSpam extends CreativeSafetyModule {
 
             String cmd = CommandUtils.formatCommand("playsound %s %s %s ~ ~ ~ %.2f %.2f",
                     sound, sourceStr, target.get(), volume.get(), p);
-            mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
+            FastSend.command(CommandUtils.vanilla(cmd));
         }
     }
 
     @Override
     public void onDeactivate() {
+        safetyDeactivate();
         allSounds = null;
         soundIndex = 0;
     }

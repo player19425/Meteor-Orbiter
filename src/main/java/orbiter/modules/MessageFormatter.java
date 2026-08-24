@@ -33,6 +33,8 @@ public class MessageFormatter extends Module {
         .name("format-meteor-commands").description("Apply formatting to Meteor commands.").defaultValue(false).build());
     private final Setting<Boolean> appendReset           = sgGeneral.add(new BoolSetting.Builder()
         .name("append-reset").description("Append §r at the end of formatted messages.").defaultValue(true).build());
+    private final Setting<Boolean> sanitizeSectionCodes  = sgGeneral.add(new BoolSetting.Builder()
+        .name("sanitize-section-codes").description("Converts § formatting codes to & before the message leaves the client. Vanilla servers disconnect you with 'Illegal characters in chat' when a raw section sign is sent in chat or commands.").defaultValue(true).build());
     private final Setting<Boolean> randomMessage         = sgGeneral.add(new BoolSetting.Builder()
         .name("random-message").description("Append random characters to bypass spam filters.").defaultValue(false).build());
     private final Setting<Boolean> previewEnabled        = sgGeneral.add(new BoolSetting.Builder()
@@ -255,7 +257,7 @@ public class MessageFormatter extends Module {
         }
         for (PendingRepeat pr : ready) {
             if (mc.getConnection() == null) { continue; }
-            String toSend = truncateSafe(pr.message, 256);
+            String toSend = sanitizeOutgoing(truncateSafe(pr.message, 256));
             handler.sendChat(toSend);
 
             if (pr.remaining > 1) {
@@ -844,15 +846,21 @@ public class MessageFormatter extends Module {
 
         String first = msg;
         if (count > 1 && randomMessage.get()) first = msg + " [1]";
-        handler.sendChat(truncateSafe(first, 256));
+        handler.sendChat(sanitizeOutgoing(truncateSafe(first, 256)));
 
         if (count > 1) {
             for (int i = 1; i < count; i++) {
                 String toSend = msg;
                 if (randomMessage.get()) toSend = msg + " [" + (i + 1) + "]";
-                pendingRepeats.add(new PendingRepeat(truncateSafe(toSend, 256), 1, tickInterval, repeatTickClock + tickInterval * i));
+                pendingRepeats.add(new PendingRepeat(sanitizeOutgoing(truncateSafe(toSend, 256)), 1, tickInterval, repeatTickClock + tickInterval * i));
             }
         }
+    }
+
+    private String sanitizeOutgoing(String message) {
+        if (message == null || !sanitizeSectionCodes.get()) return message;
+        if (message.indexOf('\u00A7') < 0) return message;
+        return message.replace('\u00A7', '&');
     }
 
     private String truncateSafe(String msg, int max) {

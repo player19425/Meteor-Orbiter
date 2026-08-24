@@ -3,12 +3,15 @@ package orbiter.modules;
 import orbiter.Orbiter;
 import orbiter.util.CommandUtils;
 import orbiter.util.FillCommandIterator;
+import orbiter.util.FastSend;
+import orbiter.util.GlobalSendLimiter;
 import orbiter.util.SafeRegionMath;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -171,6 +174,12 @@ public class WorldEraser extends CreativeSafetyModule {
             .defaultValue(true)
             .build());
 
+    private final Setting<Boolean> onlyLoadedChunks = sgTiming.add(new BoolSetting.Builder()
+            .name("only-loaded-chunks")
+            .description("Skip fill commands that would land in unloaded chunks. The server answers those with 'No blocks were filled', so sending them wastes time and floods your chat.")
+            .defaultValue(true)
+            .build());
+
     private final Setting<Boolean> useWorldEdit = sgWorldEdit.add(new BoolSetting.Builder()
             .name("use-worldedit")
             .description("Use WorldEdit commands instead of /fill.")
@@ -242,6 +251,7 @@ public class WorldEraser extends CreativeSafetyModule {
         }
 
         armed = false;
+        safetyActivate();
         info("Executing WorldEraser...");
 
         try {
@@ -273,15 +283,20 @@ public class WorldEraser extends CreativeSafetyModule {
         if (lazyMode) {
             if (tickDelay > 0) { tickDelay--; return; }
 
+            long deadline = sliceDeadline();
             int sent = 0;
             while (sent < commandsPerTick.get() && lazyGeneratedCount < maxGeneratedCommands.get()) {
+                if ((sent & 7) == 7 && System.nanoTime() >= deadline) break;
+                if (!GlobalSendLimiter.tryAcquireOne()) break;
                 if (lazyIterator == null || !lazyIterator.hasNext()) {
                     lazyMode = false;
-                    info("WorldEraser complete! Generated and executed " + lazyGeneratedCount + " commands.");
+                    long skipped = lazyIterator instanceof FillCommandIterator f ? f.skippedUnloaded : 0;
+                    info("WorldEraser complete! Sent " + lazyGeneratedCount + " commands"
+                            + (skipped > 0 ? " (skipped " + skipped + " in unloaded chunks)" : "") + ".");
                     toggle();
                     return;
                 }
-                mc.player.connection.sendCommand(CommandUtils.vanilla(lazyIterator.next()));
+                FastSend.command(CommandUtils.vanilla(lazyIterator.next()));
                 lazyGeneratedCount++;
                 sent++;
             }
@@ -314,7 +329,7 @@ public class WorldEraser extends CreativeSafetyModule {
 
         int sent = 0;
         while (commandIndex < pendingCommands.size() && sent < commandsPerTick.get()) {
-            mc.player.connection.sendCommand(CommandUtils.vanilla(pendingCommands.get(commandIndex)));
+            FastSend.command(CommandUtils.vanilla(pendingCommands.get(commandIndex)));
             commandIndex++;
             sent++;
         }
@@ -329,6 +344,7 @@ public class WorldEraser extends CreativeSafetyModule {
 
     @Override
     public void onDeactivate() {
+        safetyDeactivate();
         pendingCommands = null;
         commandIndex = 0;
         lazyMode = false;
@@ -353,7 +369,10 @@ public class WorldEraser extends CreativeSafetyModule {
             lazyMaxZ = center.getZ() + r;
             lazyGeneratedCount = 0;
             lazyIterator = new FillCommandIterator(lazyMinX, lazyMinY, lazyMinZ,
-                lazyMaxX, lazyMaxY, lazyMaxZ, lazyBlock);
+                lazyMaxX, lazyMaxY, lazyMaxZ, lazyBlock,
+                onlyLoadedChunks.get() && mc.level.getChunkSource() != null
+                        ? this::chunkLoaded
+                        : null);
             lazyMode = true;
             if (tickDelay < 0) tickDelay = 0;
         } else {
@@ -558,6 +577,21 @@ public class WorldEraser extends CreativeSafetyModule {
         addPatternCommands(commands, x1, y1, z1, x2, y2, z2, block);
     }
 
+    private boolean chunkLoaded(int cx, int cz) {
+        return mc.level.getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, false) != null;
+    }
+
+    private boolean regionFullyLoaded(int minX, int maxX, int minZ, int maxZ) {
+        int minCx = minX >> 4, maxCx = maxX >> 4;
+        int minCz = minZ >> 4, maxCz = maxZ >> 4;
+        for (int cx = minCx; cx <= maxCx; cx++) {
+            for (int cz = minCz; cz <= maxCz; cz++) {
+                if (!chunkLoaded(cx, cz)) return false;
+            }
+        }
+        return true;
+    }
+
     private void addPatternCommands(List<String> commands, int x1, int y1, int z1, int x2, int y2, int z2,
             String block) {
         int minX = Math.min(x1, x2);
@@ -566,6 +600,12 @@ public class WorldEraser extends CreativeSafetyModule {
         int maxY = Math.max(y1, y2);
         int minZ = Math.min(z1, z2);
         int maxZ = Math.max(z1, z2);
+
+        boolean checkChunks = onlyLoadedChunks.get();
+        if (checkChunks && erasePattern.get() == ErasePattern.Checkerboard) {
+            checkChunks = false;
+        }
+        if (checkChunks && !regionFullyLoaded(minX, maxX, minZ, maxZ)) return;
 
         if (erasePattern.get() != ErasePattern.Checkerboard) {
             long volume = (long) (maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1);
@@ -612,9 +652,11 @@ public class WorldEraser extends CreativeSafetyModule {
             }
             case Checkerboard -> {
 
+                boolean perBlockCheck = onlyLoadedChunks.get();
                 for (int x = minX; x <= maxX; x++) {
-                    for (int y = minY; y <= maxY; y++) {
-                        for (int z = minZ; z <= maxZ; z++) {
+                    for (int z = minZ; z <= maxZ; z++) {
+                        if (perBlockCheck && !chunkLoaded(x >> 4, z >> 4)) continue;
+                        for (int y = minY; y <= maxY; y++) {
                             if ((x + y + z) % 2 == 0) {
                                 commands.add(String.format("setblock %d %d %d %s", x, y, z, block));
                             }

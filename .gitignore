@@ -31,3 +31,4 @@ Thumbs.db
 node_modules/
 .cache/
 *.hprof
+clientcommands-fabric/

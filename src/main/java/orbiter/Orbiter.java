@@ -1,6 +1,9 @@
 package orbiter;
 
 import orbiter.commands.AutoShopCommand;
+import orbiter.commands.EnchCrackCommand;
+import orbiter.commands.EnchCrackedAliasCommand;
+import orbiter.commands.EnccAliasCommand;
 import orbiter.commands.EscapeCommand;
 import orbiter.commands.ISellWandCommand;
 import orbiter.commands.ExportModuleListCommand;
@@ -55,6 +58,7 @@ import orbiter.modules.misc.ExploitPreventer;
 import orbiter.modules.misc.ServerProtect;
 import orbiter.modules.misc.PeakPluginScanner;
 import orbiter.modules.misc.SpamPlus;
+import orbiter.modules.misc.EnchCracker;
 import orbiter.modules.world.WorldDownloader;
 import orbiter.modules.world.ControlPlayer;
 import orbiter.util.ConfigModifier;
@@ -65,6 +69,7 @@ import orbiter.modules.misc.InfiniReach;
 import orbiter.modules.misc.ISellWand;
 import orbiter.modules.world.UUIDBan;
 import orbiter.modules.*;
+import orbiter.modules.world.DeathOverride;
 import meteordevelopment.meteorclient.addons.GithubRepo;
 import meteordevelopment.meteorclient.addons.MeteorAddon;
 import meteordevelopment.meteorclient.commands.Commands;
@@ -96,7 +101,7 @@ public class Orbiter extends MeteorAddon {
 
     @Override
     public void onInitialize() {
-        LOG.info("Initializing Orbiter V2.0.1");
+        LOG.info("Initializing Orbiter 1.0.2");
 
         ConfigModifier.get();
 
@@ -139,6 +144,7 @@ public class Orbiter extends MeteorAddon {
         modules.add(new Restock());
         modules.add(new LeaveMessage());
         modules.add(new SpamPlus());
+        modules.add(new EnchCracker());
         modules.add(new ItemStealer());
         modules.add(new ItemInfo());
         modules.add(new ServerProtect());
@@ -161,6 +167,7 @@ public class Orbiter extends MeteorAddon {
         modules.add(new BossbarFlash());
         modules.add(new EntitySpammer());
         modules.add(new TNTRain());
+        modules.add(new DeathOverride());
         modules.add(new FireworkShow());
         modules.add(new OperatorNuker());
         modules.add(new WorldDownloader());
@@ -169,6 +176,9 @@ public class Orbiter extends MeteorAddon {
         try {
             Commands.add(new ItemCrashCommand());
             Commands.add(new TNTRainCommand());
+            Commands.add(new EnchCrackCommand());
+            Commands.add(new EnchCrackedAliasCommand());
+            Commands.add(new EnccAliasCommand());
             Commands.add(new WorldEditCommand());
             Commands.add(new AutoShopCommand());
             Commands.add(new ISellWandCommand());

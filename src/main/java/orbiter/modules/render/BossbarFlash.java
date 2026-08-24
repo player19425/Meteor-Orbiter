@@ -10,6 +10,8 @@ import meteordevelopment.orbit.EventHandler;
 
 import java.util.Random;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 
 public class BossbarFlash extends CreativeSafetyModule {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -85,19 +87,6 @@ public class BossbarFlash extends CreativeSafetyModule {
             .defaultValue(false)
             .build());
 
-    private final Setting<Boolean> translateAmpersandCodes = sgGeneral.add(new BoolSetting.Builder()
-            .name("translate-ampersand")
-            .description("Translate '&' formatting codes in custom titles to section-sign codes.")
-            .defaultValue(true)
-            .visible(() -> !randomTitles.get())
-            .build());
-
-    private final Setting<Boolean> titleReset = sgGeneral.add(new BoolSetting.Builder()
-            .name("title-reset")
-            .description("Append reset code after each generated title.")
-            .defaultValue(true)
-            .build());
-
     private final Setting<Boolean> autoCleanup = sgGeneral.add(new BoolSetting.Builder()
             .name("auto-cleanup")
             .description("Remove all created boss bars when module is disabled.")
@@ -171,6 +160,7 @@ public class BossbarFlash extends CreativeSafetyModule {
         createdBars = new boolean[Math.max(1, maxBars.get())];
         states = new BossbarState[createdBars.length];
         commandBatcher.clear();
+        safetyActivate();
     }
 
     @EventHandler
@@ -205,7 +195,9 @@ public class BossbarFlash extends CreativeSafetyModule {
             if (state == null) states[barIndex] = state = new BossbarState();
 
             if (!createdBars[barIndex]) {
-                queue(barIndex, "add", CommandUtils.formatCommand("bossbar add %s %s", barId, titleJson));
+                if (!orbiter.util.GlobalSendLimiter.tryAcquireOne()) break;
+                mc.player.connection.sendCommand(CommandUtils.vanilla(
+                        CommandUtils.formatCommand("bossbar add %s %s", barId, titleJson)));
                 createdBars[barIndex] = true;
                 state.title = titleJson;
             } else if (!titleJson.equals(state.title)) {
@@ -225,6 +217,7 @@ public class BossbarFlash extends CreativeSafetyModule {
 
     @Override
     public void onDeactivate() {
+        safetyDeactivate();
         commandBatcher.clear();
         if (autoCleanup.get() && mc.player != null && mc.player.connection != null) {
             int removed = 0;
@@ -294,47 +287,110 @@ public class BossbarFlash extends CreativeSafetyModule {
     }
 
     private String buildTitleJson(String rawTitle) {
-        String title = rawTitle == null ? "" : rawTitle;
-        if (translateAmpersandCodes.get()) title = translateAmpersandCodes(title);
-        else title = CommandUtils.stripLegacyFormatting(title);
-        if (titleReset.get()) title = title + "\u00A7r";
+        String baseColor = titleColor.get() == TitleColor.None ? null : titleColor.get().jsonName;
 
-        StringBuilder json = new StringBuilder(96);
-        json.append('{');
-        json.append("\"text\":\"").append(CommandUtils.escapeJson(title)).append('"');
-        if (titleColor.get() != TitleColor.None) {
-            json.append(",\"color\":\"").append(titleColor.get().jsonName).append('"');
+        List<String[]> segments = parseLegacySegments(rawTitle == null ? "" : rawTitle);
+
+        StringBuilder json = new StringBuilder(128);
+        json.append("{\"text\":\"\"");
+        if (!segments.isEmpty()) {
+            json.append(",\"extra\":[");
+            for (int i = 0; i < segments.size(); i++) {
+                String[] seg = segments.get(i);
+                if (i > 0) json.append(',');
+                json.append("{\"text\":\"").append(CommandUtils.escapeJson(seg[0])).append('"');
+                String color = seg[1] != null ? seg[1] : baseColor;
+                if (color != null && !color.isEmpty()) json.append(",\"color\":\"").append(color).append('"');
+                if (titleBold.get() || seg[2].charAt(0) == '1') json.append(",\"bold\":true");
+                if (titleItalic.get() || seg[2].charAt(1) == '1') json.append(",\"italic\":true");
+                if (titleUnderline.get() || seg[2].charAt(2) == '1') json.append(",\"underlined\":true");
+                if (titleStrikethrough.get() || seg[2].charAt(3) == '1') json.append(",\"strikethrough\":true");
+                if (titleObfuscated.get() || seg[2].charAt(4) == '1') json.append(",\"obfuscated\":true");
+                json.append('}');
+            }
+            json.append(']');
         }
-        if (titleBold.get()) json.append(",\"bold\":true");
-        if (titleItalic.get()) json.append(",\"italic\":true");
-        if (titleUnderline.get()) json.append(",\"underlined\":true");
-        if (titleStrikethrough.get()) json.append(",\"strikethrough\":true");
-        if (titleObfuscated.get()) json.append(",\"obfuscated\":true");
         json.append('}');
         return json.toString();
     }
 
-    private static String translateAmpersandCodes(String value) {
-        StringBuilder sb = new StringBuilder(value.length());
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            if (c == '&' && i + 1 < value.length()) {
-                char next = value.charAt(i + 1);
-                if (next == '&') {
-                    sb.append('&');
+    private static List<String[]> parseLegacySegments(String title) {
+        List<String[]> segments = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        String[] color = {null};
+        int[] flags = {0, 0, 0, 0, 0};
+
+        Runnable flush = () -> {
+            if (current.length() > 0) {
+                StringBuilder fs = new StringBuilder(5);
+                for (int f : flags) fs.append(f != 0 ? '1' : '0');
+                segments.add(new String[]{current.toString(), color[0], fs.toString()});
+                current.setLength(0);
+            }
+        };
+
+        for (int i = 0; i < title.length(); i++) {
+            char c = title.charAt(i);
+            if ((c == '&' || c == '\u00A7') && i + 1 < title.length()) {
+                char next = Character.toLowerCase(title.charAt(i + 1));
+                String parsedColor = colorNameForCode(next);
+                if (parsedColor != null) {
+                    flush.run();
+                    color[0] = parsedColor;
                     i++;
                     continue;
                 }
-                char lower = Character.toLowerCase(next);
-                if ("0123456789abcdefklmnorx".indexOf(lower) >= 0) {
-                    sb.append('\u00A7').append(lower);
+                if (formatForCode(next)) {
+                    flush.run();
+                    flags[0] = next == 'l' ? 1 : 0;
+                    flags[1] = next == 'o' ? 1 : 0;
+                    flags[2] = next == 'n' ? 1 : 0;
+                    flags[3] = next == 'm' ? 1 : 0;
+                    flags[4] = next == 'k' ? 1 : 0;
+                    i++;
+                    continue;
+                }
+                if (next == 'r') {
+                    flush.run();
+                    color[0] = null;
+                    java.util.Arrays.fill(flags, 0);
                     i++;
                     continue;
                 }
             }
-            sb.append(c);
+            current.append(c);
         }
-        return sb.toString();
+        flush.run();
+        return segments;
+    }
+
+    private static String colorNameForCode(char code) {
+        return switch (code) {
+            case '0' -> "black";
+            case '1' -> "dark_blue";
+            case '2' -> "dark_green";
+            case '3' -> "dark_aqua";
+            case '4' -> "dark_red";
+            case '5' -> "dark_purple";
+            case '6' -> "gold";
+            case '7' -> "gray";
+            case '8' -> "dark_gray";
+            case '9' -> "blue";
+            case 'a' -> "green";
+            case 'b' -> "aqua";
+            case 'c' -> "red";
+            case 'd' -> "light_purple";
+            case 'e' -> "yellow";
+            case 'f' -> "white";
+            default -> null;
+        };
+    }
+
+    private static boolean formatForCode(char code) {
+        return switch (code) {
+            case 'k', 'l', 'm', 'n', 'o' -> true;
+            default -> false;
+        };
     }
 
     public enum TitleColor {

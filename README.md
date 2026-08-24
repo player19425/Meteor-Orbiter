@@ -4,7 +4,7 @@
   <p>An addon for <a href="https://meteorclient.com/">Meteor Client</a> that adds 60+ modules, custom commands, and HUD elements for anarchy, griefing, and quality of life.</p>
 
   
-  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.0-orange" alt="Version"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.2-orange" alt="Version"></a>
   <img src="https://img.shields.io/badge/Minecraft-26.2-blue" alt="Minecraft version">
   <img src="https://img.shields.io/badge/Java-25-green" alt="Java version">
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/github/downloads/player19425/Meteor-Orbiter/total" alt="Downloads"></a>
@@ -58,6 +58,8 @@ Everything is organized into four in-game categories:
 | **Spear Assist** | Melee assist for close combat. |
 | **Trident Assist** | Auto-aims and throws the trident. |
 
+All assists support selecting which entity types to target (players, armor stands, and more).
+
 ## Movement:
 
 | Module | Description |
@@ -83,6 +85,7 @@ Everything is organized into four in-game categories:
 | **Auto Farming** | Auto-farms crops and animals. |
 | **Command Block Placer** | Places command blocks. Creative + OP. |
 | **Control Player** | Rotates players around you. OP. |
+| **Death Override** | Hides the death screen and keeps you playing after fatal hits. |
 | **Entity Spammer** | Spawns and animates entities. OP required. |
 | **Item Creator** | Creates custom items. Creative only. |
 | **Item Generator** | Spawns items with random enchants. Creative. |
@@ -118,6 +121,7 @@ Everything is organized into four in-game categories:
 | **Auto Find** | Scans for stashes and bases. |
 | **Auto Shop** | Buys from server shops automatically. |
 | **Client Side Things** | Local visual spoofs. |
+| **Enchantment Cracker** | Cracks the hidden enchantment seed from table offers, then places items and clicks for you when your enchant shows up. `.encc get <enchant> [level]` |
 | **Exploit Preventer** | Blocks common server exploits. |
 | **I Sell Wand** | Auto-sells using a sell wand. |
 | **Infini Reach** | Infinite reach. |
@@ -136,6 +140,7 @@ Everything is organized into four in-game categories:
 |---|---|---|
 | `.autoshop` | Toggle and control the AutoShop module. | `autoshopdetect` |
 | `.escape` | Controls ForceInvisibility escape logic. | |
+| `.enchantmentcracker` | Full-auto enchantment farmer: cracks the seed, predicts every row exactly, places items and clicks when your enchant appears. | `enchantcracked`, `encc` |
 | `.exportmodulelist` | Exports all module names to clipboard. | |
 | `.fixdeath` | Stops fake death loops and force-resyncs client/server state. | |
 | `.givepresetitems` | 200+ OP and command-block-only presets. | `gpi` |
@@ -178,7 +183,7 @@ Everything is organized into four in-game categories:
 # Building from Source:
 
 ### Prerequisites:
-- [JDK](https://adoptium.net/temurin/releases) 21 or higher
+- [JDK](https://adoptium.net/temurin/releases) 25 or higher
 - Gradlew
 
 ### Steps:

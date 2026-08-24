@@ -1,6 +1,8 @@
 package orbiter.modules;
 
 import orbiter.util.CommandUtils;
+import orbiter.util.FastSend;
+import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.orbit.EventHandler;
@@ -114,7 +116,13 @@ public class RNGSpammer extends CreativeSafetyModule {
     public void onActivate() {
         tickCounter = 0;
         tableIndex = 0;
+        safetyActivate();
         info("RNG Spammer active! Spawning loot...");
+    }
+
+    @Override
+    public void onDeactivate() {
+        safetyDeactivate();
     }
 
     @EventHandler
@@ -127,13 +135,14 @@ public class RNGSpammer extends CreativeSafetyModule {
         if (target == null) return;
         int total = Math.min(commandsPerTick.get(), maxCommands.get());
         for (int i = 0; i < total; i++) {
+            if (!GlobalSendLimiter.tryAcquireOne()) break;
             String table = getNextLootTable();
             double x = (randomPosition.get() ? offset(random, spreadRadius.get()) : 0);
             double y = randomPosition.get() ? random.nextDouble() * 3 : 0;
             double z = (randomPosition.get() ? offset(random, spreadRadius.get()) : 0);
             String cmd = CommandUtils.formatCommand(
                 "execute at %s run loot spawn ~%.2f ~%.2f ~%.2f loot %s", target, x, y, z, table);
-            mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
+            FastSend.command(CommandUtils.vanilla(cmd));
         }
     }
 

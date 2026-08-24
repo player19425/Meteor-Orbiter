@@ -2,6 +2,8 @@ package orbiter.modules;
 
 import orbiter.Orbiter;
 import orbiter.util.CommandUtils;
+import orbiter.util.FastSend;
+import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
@@ -218,6 +220,8 @@ public class TNTRain extends CreativeSafetyModule {
             return;
         }
 
+        safetyActivate();
+
         info("TNT Rain started! " + (continuous.get()
                 ? "Continuous mode at " + tntPerSecond.get() + "/sec"
                 : "Burst mode: " + totalTNT.get() + " TNT"));
@@ -259,8 +263,12 @@ public class TNTRain extends CreativeSafetyModule {
             toSpawn = commandsPerTick.get();
         }
 
+        long deadline = sliceDeadline();
         for (int i = 0; i < toSpawn; i++) {
+            if ((i & 7) == 7 && System.nanoTime() >= deadline) break;
             if (!continuous.get() && spawnedCount >= totalTNT.get())
+                break;
+            if (!GlobalSendLimiter.tryAcquireOne())
                 break;
 
             double cx, cy, cz;
@@ -307,7 +315,7 @@ public class TNTRain extends CreativeSafetyModule {
             nbt.append('}');
 
             String cmd = CommandUtils.formatCommand("summon minecraft:tnt %.2f %.2f %.2f %s", x, y, z, nbt);
-            mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
+            FastSend.command(CommandUtils.vanilla(cmd));
             spawnedCount++;
         }
     }
@@ -347,6 +355,7 @@ public class TNTRain extends CreativeSafetyModule {
 
     @Override
     public void onDeactivate() {
+        safetyDeactivate();
         if (spawnedCount > 0) {
             info("TNT Rain stopped. Total spawned: " + spawnedCount);
         }
