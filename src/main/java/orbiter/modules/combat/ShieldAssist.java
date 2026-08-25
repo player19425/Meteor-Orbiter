@@ -195,6 +195,7 @@ public class ShieldAssist extends Module {
         if (isBlocking && mc.player != null && mc.player.isUsingItem()) {
             mc.player.stopUsingItem();
         }
+        mc.options.keyUse.setDown(false);
         isBlocking = false;
         trackedAxeUsers.clear();
     }
@@ -203,6 +204,7 @@ public class ShieldAssist extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null) return;
         tickCounter++;
+        if (releaseTimer > 0) releaseTimer--;
 
         if (shieldDisableTimer > 0) shieldDisableTimer--;
         if (shieldDisableTimer > 0 && shieldCooldownTracking.get()) {
@@ -232,8 +234,6 @@ public class ShieldAssist extends Module {
                 releaseTimer = releaseGap.get();
             }
         }
-
-        if (releaseTimer > 0) releaseTimer--;
     }
 
     private boolean checkHasShield() {
@@ -277,7 +277,7 @@ public class ShieldAssist extends Module {
             Vec3 projDir = projVel.normalize();
             double dot = toPlayer.dot(projDir);
 
-            if (dot > dotThreshold && dist < 20) {
+            if (dot > dotThreshold && dist <= detectionRange) {
                 return true;
             }
 

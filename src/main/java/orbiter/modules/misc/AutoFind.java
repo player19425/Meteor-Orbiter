@@ -10,6 +10,8 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
@@ -377,6 +379,7 @@ public class AutoFind extends Module {
     private final Map<BlockPos, Color> renderStorageColors = new HashMap<>();
     private int tickCounter = 0;
     private boolean paused = false;
+    private ClientLevel lastLevel = null;
 
     private double flightX, flightZ;
     private boolean sweepInitialized = false;
@@ -458,6 +461,15 @@ public class AutoFind extends Module {
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null) return;
+
+        if (mc.level != lastLevel) {
+            lastLevel = mc.level;
+            results.clear();
+            scannedChunks.clear();
+            renderStoragePositions.clear();
+            renderStorageColors.clear();
+        }
+
         if (paused) return;
 
         tickCounter++;
@@ -497,8 +509,13 @@ public class AutoFind extends Module {
                 budget--;
 
                 if (scannedChunks.size() > MAX_SCANNED_CHUNKS) {
-                    scannedChunks.clear();
-                    info("Scanned-chunks cache reset (>100K entries). Continuing scan.");
+                    int removeCount = scannedChunks.size() - MAX_SCANNED_CHUNKS / 2;
+                    Iterator<ChunkPos> iterator = scannedChunks.iterator();
+                    for (int i = 0; i < removeCount && iterator.hasNext(); i++) {
+                        iterator.next();
+                        iterator.remove();
+                    }
+                    info("Scanned-chunks cache trimmed, keeping the most recent entries (>100K). Continuing scan.");
                 }
             }
         }
@@ -694,15 +711,15 @@ public class AutoFind extends Module {
     }
 
     private int wrapChunkX(int cx) {
-        if (cx < MIN_CHUNK_X) return worldWrap.get() ? (MAX_CHUNK_X - (MIN_CHUNK_X - cx)) : MIN_CHUNK_X;
-        if (cx > MAX_CHUNK_X) return worldWrap.get() ? (MIN_CHUNK_X + (cx - MAX_CHUNK_X)) : MAX_CHUNK_X;
-        return cx;
+        if (!worldWrap.get()) return Math.max(MIN_CHUNK_X, Math.min(MAX_CHUNK_X, cx));
+        int range = MAX_CHUNK_X - MIN_CHUNK_X + 1;
+        return MIN_CHUNK_X + Math.floorMod(cx - MIN_CHUNK_X, range);
     }
 
     private int wrapChunkZ(int cz) {
-        if (cz < MIN_CHUNK_Z) return worldWrap.get() ? (MAX_CHUNK_Z - (MIN_CHUNK_Z - cz)) : MIN_CHUNK_Z;
-        if (cz > MAX_CHUNK_Z) return worldWrap.get() ? (MIN_CHUNK_Z + (cz - MAX_CHUNK_Z)) : MAX_CHUNK_Z;
-        return cz;
+        if (!worldWrap.get()) return Math.max(MIN_CHUNK_Z, Math.min(MAX_CHUNK_Z, cz));
+        int range = MAX_CHUNK_Z - MIN_CHUNK_Z + 1;
+        return MIN_CHUNK_Z + Math.floorMod(cz - MIN_CHUNK_Z, range);
     }
 
     private void scanChunk(LevelChunk chunk, ChunkPos cp) {
@@ -726,13 +743,13 @@ public class AutoFind extends Module {
 
             if (isExcluded(pos)) continue;
 
-            if (be instanceof ChestBlockEntity) {
-                if (stashChests.get() || (findStorage.get() && storageChests.get())) {
-                    storageCount++; storagePositions.add(pos.immutable()); storageTypes.add("Chest"); addRenderStorage(pos, STORAGE_CHEST_LINE);
-                }
-            } else if (be instanceof TrappedChestBlockEntity) {
+            if (be instanceof TrappedChestBlockEntity) {
                 if (stashTrappedChests.get() || (findStorage.get() && storageTrappedChests.get())) {
                     storageCount++; storagePositions.add(pos.immutable()); storageTypes.add("Trapped Chest"); addRenderStorage(pos, STORAGE_CHEST_LINE);
+                }
+            } else if (be instanceof ChestBlockEntity) {
+                if (stashChests.get() || (findStorage.get() && storageChests.get())) {
+                    storageCount++; storagePositions.add(pos.immutable()); storageTypes.add("Chest"); addRenderStorage(pos, STORAGE_CHEST_LINE);
                 }
             } else if (be instanceof BarrelBlockEntity) {
                 if (stashBarrels.get() || (findStorage.get() && storageBarrels.get())) {
@@ -765,7 +782,9 @@ public class AutoFind extends Module {
             }
         }
 
-        if (findBases.get()) {
+        boolean scanEnderChests = stashEnderChests.get() || (findStorage.get() && storageEnderChests.get());
+
+        if (findBases.get() || scanEnderChests) {
             int minY = mc.level.getMinY();
             int maxY = mc.level.getMaxY();
 
@@ -776,33 +795,33 @@ public class AutoFind extends Module {
                         BlockState state = chunk.getBlockState(mpos);
                         Block block = state.getBlock();
 
-                        if (basePistons.get() && (block == Blocks.PISTON || block == Blocks.STICKY_PISTON || block == Blocks.PISTON_HEAD || block == Blocks.MOVING_PISTON)) {
-                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Piston");
-                        } else if (baseRedstone.get() && block == Blocks.REDSTONE_WIRE) {
-                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Redstone Wire");
-                        } else if (baseRepeaters.get() && block == Blocks.REPEATER) {
-                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Repeater");
-                        } else if (baseComparators.get() && block == Blocks.COMPARATOR) {
-                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Comparator");
-                        } else if (baseObservers.get() && block == Blocks.OBSERVER) {
-                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Observer");
-                        } else if (baseCraftingTables.get() && block == Blocks.CRAFTING_TABLE) {
-                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Crafting Table");
-                        } else if (baseAnvils.get() && (block == Blocks.ANVIL || block == Blocks.CHIPPED_ANVIL || block == Blocks.DAMAGED_ANVIL)) {
-                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Anvil");
-                        } else if (baseBeds.get() && translationKeyContains(state.getBlock(), "bed")) {
-                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Bed");
-                        } else if (baseLogStripping.get() && translationKeyContains(block, "stripped")) {
-                            baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Stripped Log");
-                        }
-
-                        if (block == Blocks.ENDER_CHEST) {
-                            if (stashEnderChests.get() || (findStorage.get() && storageEnderChests.get())) {
-                                storageCount++; storagePositions.add(mpos.immutable()); storageTypes.add("Ender Chest"); addRenderStorage(mpos.immutable(), STORAGE_ENDER_LINE);
+                        if (findBases.get()) {
+                            if (basePistons.get() && (block == Blocks.PISTON || block == Blocks.STICKY_PISTON || block == Blocks.PISTON_HEAD || block == Blocks.MOVING_PISTON)) {
+                                baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Piston");
+                            } else if (baseRedstone.get() && block == Blocks.REDSTONE_WIRE) {
+                                baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Redstone Wire");
+                            } else if (baseRepeaters.get() && block == Blocks.REPEATER) {
+                                baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Repeater");
+                            } else if (baseComparators.get() && block == Blocks.COMPARATOR) {
+                                baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Comparator");
+                            } else if (baseObservers.get() && block == Blocks.OBSERVER) {
+                                baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Observer");
+                            } else if (baseCraftingTables.get() && block == Blocks.CRAFTING_TABLE) {
+                                baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Crafting Table");
+                            } else if (baseAnvils.get() && (block == Blocks.ANVIL || block == Blocks.CHIPPED_ANVIL || block == Blocks.DAMAGED_ANVIL)) {
+                                baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Anvil");
+                            } else if (baseBeds.get() && block instanceof BedBlock) {
+                                baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Bed");
+                            } else if (baseLogStripping.get() && translationKeyContains(block, "stripped")) {
+                                baseIndicatorCount++; basePositions.add(mpos.immutable()); baseTypes.add("Stripped Log");
                             }
                         }
 
-                        if (excludeStructures.get()) {
+                        if (scanEnderChests && block == Blocks.ENDER_CHEST) {
+                            storageCount++; storagePositions.add(mpos.immutable()); storageTypes.add("Ender Chest"); addRenderStorage(mpos.immutable(), STORAGE_ENDER_LINE);
+                        }
+
+                        if (findBases.get() && excludeStructures.get()) {
                             if (block == Blocks.COBBLESTONE_WALL || block == Blocks.MOSSY_COBBLESTONE
                                 || block == Blocks.COBBLESTONE_STAIRS || block == Blocks.STONE_BRICK_STAIRS
                                 || block == Blocks.NETHER_BRICKS || block == Blocks.NETHER_BRICK_STAIRS

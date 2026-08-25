@@ -105,6 +105,7 @@ public class UUIDBan extends Module {
 
             if (debug.get()) info("Resolving UUID for %s from Mojang...", name);
             MojangApiUtil.resolveAsync(name).thenAccept(uuidStr -> mc.execute(() -> {
+                if (!isActive() || mc.player == null || mc.player.connection == null) return;
                 UUID uuid = MojangApiUtil.parseUuid(uuidStr);
                 if (uuid == null) {
                     warning("Could not resolve UUID for " + name + ".");
@@ -116,7 +117,13 @@ public class UUIDBan extends Module {
                 if (kickFirst.get()) sendKick(resolvedName);
                 waitingForTick = true;
                 tickCount = 0;
-            }));
+            })).exceptionally(e -> {
+                mc.execute(() -> {
+                    warning("UUID lookup failed: " + e.getClass().getSimpleName());
+                    if (isActive()) toggle();
+                });
+                return null;
+            });
         }
     }
 

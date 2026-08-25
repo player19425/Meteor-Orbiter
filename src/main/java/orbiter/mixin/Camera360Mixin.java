@@ -59,8 +59,12 @@ public abstract class Camera360Mixin {
         float f = (float) cursorDeltaY * 0.15F;
         float g = (float) cursorDeltaX * 0.15F;
 
-        setXRot(getXRot() + f);
-        xRotO += f;
+        float before = getXRot();
+        setXRot(before + f);
+        float delta = getXRot() - before;
+        if (delta > 180f) delta -= 360f;
+        else if (delta < -180f) delta += 360f;
+        xRotO += delta;
 
         if (orbiter$shouldInvertMouse() && orbiter$isUpsideDown()) {
             setYRot(getYRot() - g);

@@ -78,7 +78,7 @@ public class CustomTextHud extends HudElement {
         String out = input;
         out = out.replace("{player}", p != null ? p.getName().getString() : "?");
         out = out.replace("{health}", p != null ? String.format("%.1f", p.getHealth()) : "?");
-        out = out.replace("{health%}", p != null ? String.format("%.1f", p.getMaxHealth()) : "?");
+        out = out.replace("{health%}", p != null ? String.format("%.0f", p.getMaxHealth() > 0 ? p.getHealth() / p.getMaxHealth() * 100.0 : 0.0) : "?");
         out = out.replace("{armor}", p != null ? String.format("%.0f", (float) p.getArmorValue()) : "?");
         out = out.replace("{x}", p != null ? String.format("%.1f", p.getX()) : "?");
         out = out.replace("{y}", p != null ? String.format("%.1f", p.getY()) : "?");

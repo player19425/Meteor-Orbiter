@@ -83,6 +83,27 @@ public abstract class BaseServerInfoHud extends HudElement {
             char c = value.charAt(i);
             if (c == '§' && i + 1 < value.length()) {
                 char code = Character.toLowerCase(value.charAt(i + 1));
+                if (code == 'x') {
+                    int j = i + 2;
+                    int digits = 0;
+                    while (digits < 6 && j < value.length()) {
+                        char d = value.charAt(j);
+                        if (d == '§') {
+                            j++;
+                            if (j >= value.length()) break;
+                            d = value.charAt(j);
+                        }
+                        if ("0123456789abcdefABCDEF".indexOf(d) < 0) break;
+                        j++;
+                        digits++;
+                    }
+                    if (digits == 6) {
+                        i = j - 1;
+                        continue;
+                    }
+                    i++;
+                    continue;
+                }
                 if ("0123456789abcdefklmnorx".indexOf(code) >= 0) {
                     i++;
                     continue;

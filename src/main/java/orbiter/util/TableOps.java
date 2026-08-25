@@ -37,6 +37,10 @@ public final class TableOps {
         click(menu, slot, ContainerInput.QUICK_MOVE, 0);
     }
 
+    public static void dropCarried(EnchantmentMenu menu) {
+        Minecraft.getInstance().gameMode.handleContainerInput(menu.containerId, -999, 0, ContainerInput.PICKUP, Minecraft.getInstance().player);
+    }
+
     private static void click(EnchantmentMenu menu, int slot, ContainerInput input, int button) {
         if (slot < 0 || slot >= menu.slots.size()) return;
         Minecraft.getInstance().gameMode.handleContainerInput(menu.containerId, slot, button, input, Minecraft.getInstance().player);

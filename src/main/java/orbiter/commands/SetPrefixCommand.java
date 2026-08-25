@@ -17,10 +17,11 @@ public class SetPrefixCommand extends Command {
         builder.then(argument("prefix", StringArgumentType.greedyString())
             .executes(ctx -> {
                 String newPrefix = StringArgumentType.getString(ctx, "prefix");
-                if (newPrefix == null || newPrefix.isEmpty()) {
+                if (newPrefix == null || newPrefix.trim().isEmpty()) {
                     error("Prefix cannot be empty.");
                     return SINGLE_SUCCESS;
                 }
+                newPrefix = newPrefix.trim();
 
                 Config.get().prefix.set(newPrefix);
                 Systems.save();

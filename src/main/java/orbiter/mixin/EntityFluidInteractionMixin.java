@@ -18,7 +18,8 @@ public abstract class EntityFluidInteractionMixin {
     private void orbiter$blockFluidCurrent(TagKey<Fluid> fluidTag, Entity entity, double strength, CallbackInfo ci) {
         if (entity != Minecraft.getInstance().player) return;
 
-        AntiPush module = Modules.get().get(AntiPush.class);
+        Modules modules = Modules.get();
+        AntiPush module = modules == null ? null : modules.get(AntiPush.class);
         if (module == null || !module.isActive()) return;
 
         if (module.shouldBlock(fluidTag)) ci.cancel();

@@ -115,7 +115,7 @@ public final class ControlPlayer extends CreativeSafetyModule {
         double radians = Math.toRadians(targetAngle);
         double dx = Math.cos(radians) * radius.get();
         double dz = Math.sin(radians) * radius.get();
-        double yaw = Math.toDegrees(Math.atan2(-dx, dz));
+        double yaw = Math.toDegrees(Math.atan2(dx, -dz));
         String command;
         if (faceCenter.get()) {
             command = CommandUtils.formatCommand(
@@ -149,8 +149,13 @@ public final class ControlPlayer extends CreativeSafetyModule {
         String lower = trimmed.toLowerCase(Locale.ROOT);
         if (!(lower.startsWith("@a") || lower.startsWith("@p") || lower.startsWith("@r"))) return null;
         if (excludeSelf.get() && lower.startsWith("@a")) {
-            if (trimmed.equalsIgnoreCase("@a")) return "@a[name=!" + mc.player.getGameProfile().name() + ",limit=" + maxPlayers.get() + "]";
-            if (!lower.contains("name=!")) return null;
+            String self = mc.player.getGameProfile().name();
+            if (trimmed.equalsIgnoreCase("@a")) return "@a[name=!" + self + ",limit=" + maxPlayers.get() + "]";
+            if (!lower.contains("name=")) {
+                int close = trimmed.lastIndexOf(']');
+                if (close < 0) return null;
+                trimmed = trimmed.substring(0, close) + ",name=!" + self + trimmed.substring(close);
+            }
         }
         return trimmed;
     }

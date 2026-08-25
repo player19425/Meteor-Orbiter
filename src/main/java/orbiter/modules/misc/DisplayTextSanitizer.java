@@ -49,7 +49,7 @@ public final class DisplayTextSanitizer {
             if (component.getStyle().isObfuscated()) {
                 cost.obfuscatedChars += Math.max(directChars, 8);
             }
-            if (!(component.getContents() instanceof ComponentContents)) {
+            if (!(component.getContents() instanceof net.minecraft.network.chat.contents.PlainTextContents)) {
                 cost.complexNodeCount++;
             }
             List<Component> siblings = component.getSiblings();

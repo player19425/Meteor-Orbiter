@@ -20,7 +20,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.network.protocol.game.ClientboundGameEventPacket;
 import net.minecraft.network.protocol.game.ClientboundSetExperiencePacket;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.network.chat.Component;
@@ -557,6 +556,7 @@ public class ClientSideThings extends Module {
     private volatile boolean xpSnapshotValid;
     private volatile boolean xpOverridden;
     private final Object xpLock = new Object();
+    private Player xpTrackedPlayer;
 
     private int chaosTimer;
     private float smoothT;
@@ -597,11 +597,6 @@ public class ClientSideThings extends Module {
         "latency", "ping", "field_3725"
     );
 
-    private static final Field absorptionField = resolveField(
-        net.minecraft.world.entity.player.Player.class,
-        "absorptionAmount", "field_13189"
-    );
-
     public ClientSideThings() {
         super(Orbiter.CATEGORY, "client-side-things",
             "Local visual spoofs.");
@@ -614,6 +609,7 @@ public class ClientSideThings extends Module {
         smoothT = 0.0f;
         xpSnapshotValid = false;
         xpOverridden = false;
+        xpTrackedPlayer = null;
         realGameMode = null;
         realLatency = -1;
         showingFakeDeath = false;
@@ -706,6 +702,18 @@ public class ClientSideThings extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null) return;
 
+        if (xpTrackedPlayer != mc.player) {
+            xpTrackedPlayer = mc.player;
+            synchronized (xpLock) {
+                latestRealXpLevel = mc.player.experienceLevel;
+                latestRealXpProgress = mc.player.experienceProgress;
+                backupXpLevel = latestRealXpLevel;
+                backupXpProgress = latestRealXpProgress;
+                xpSnapshotValid = true;
+                xpOverridden = false;
+            }
+        }
+
         if (chaosEnabled.get()) {
             updateChaos();
         }
@@ -733,12 +741,27 @@ public class ClientSideThings extends Module {
             }
         }
 
+        if (realGameMode == null && mc.gameMode != null && currentGameModeField != null) {
+            try {
+                realGameMode = (GameType) currentGameModeField.get(mc.gameMode);
+            } catch (IllegalAccessException ignored) {
+                realGameMode = mc.gameMode.getPlayerMode();
+            }
+        }
+
         if (mc.gameMode != null && fakeGamemode.get() != FakeGameMode.Server && currentGameModeField != null) {
             GameType target = fakeGamemode.get().mode;
             if (target != null) {
                 try {
                     currentGameModeField.set(mc.gameMode, target);
                 } catch (IllegalAccessException ignored) {}
+            }
+        }
+
+        if (realLatency < 0 && mc.player.connection != null) {
+            PlayerInfo entry = mc.player.connection.getPlayerInfo(mc.player.getUUID());
+            if (entry != null) {
+                realLatency = entry.getLatency();
             }
         }
 
@@ -770,18 +793,6 @@ public class ClientSideThings extends Module {
                     xpSnapshotValid = true;
                 }
             }
-            return;
-        }
-
-        if (weatherMode.get() == WeatherMode.Server) return;
-        if (!(event.packet instanceof ClientboundGameEventPacket packet)) return;
-
-        ClientboundGameEventPacket.Type reason = packet.getEvent();
-        if (reason == ClientboundGameEventPacket.START_RAINING
-            || reason == ClientboundGameEventPacket.STOP_RAINING
-            || reason == ClientboundGameEventPacket.RAIN_LEVEL_CHANGE
-            || reason == ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE) {
-            event.cancel();
         }
     }
 

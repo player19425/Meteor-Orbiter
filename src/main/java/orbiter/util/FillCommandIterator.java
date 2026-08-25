@@ -29,25 +29,44 @@ public final class FillCommandIterator implements Iterator<String>, Iterable<Str
         pending.add(new long[]{minX, minY, minZ, maxX, maxY, maxZ});
     }
 
-    @Override public boolean hasNext() { return !pending.isEmpty(); }
+    @Override public boolean hasNext() {
+        prepareNext();
+        return !pending.isEmpty();
+    }
 
     @Override public String next() {
         if (!hasNext()) throw new NoSuchElementException();
+        return format(pending.removeFirst());
+    }
+
+    private void prepareNext() {
         while (!pending.isEmpty()) {
-            long[] region = pending.removeFirst();
+            long[] region = pending.peekFirst();
             long volume = Math.multiplyExact(
                 Math.multiplyExact(region[3] - region[0] + 1, region[4] - region[1] + 1),
                 region[5] - region[2] + 1);
-            if (volume <= MAX_VOLUME) {
-                if (visibility != null && !fullyVisible(region)) {
-                    skippedUnloaded++;
-                    continue;
-                }
-                return format(region);
+
+            if (volume > MAX_VOLUME) {
+                pending.removeFirst();
+                splitLargestAxis(region);
+                continue;
             }
+
+            if (visibility == null || fullyVisible(region)) return;
+
+            if (isSingleChunkColumn(region)) {
+                pending.removeFirst();
+                skippedUnloaded++;
+                continue;
+            }
+
+            pending.removeFirst();
             splitLargestAxis(region);
         }
-        throw new NoSuchElementException();
+    }
+
+    private boolean isSingleChunkColumn(long[] r) {
+        return (r[0] >> 4) == (r[3] >> 4) && (r[2] >> 4) == (r[5] >> 4);
     }
 
     private boolean fullyVisible(long[] r) {

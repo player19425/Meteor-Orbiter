@@ -19,8 +19,9 @@ import net.minecraft.network.protocol.common.ServerboundPongPacket;
 import net.minecraft.network.protocol.common.ServerboundKeepAlivePacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
-import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
-import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
+import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 
 import java.io.File;
 import java.io.FileReader;
@@ -156,7 +157,6 @@ public class PingSpoof extends Module {
 
     private static final int ABSOLUTE_MAX_DELAY_MS = 90_000;
     private static final double MOVE_SPEED_THRESHOLD_SQ = 0.0009;
-    private static final int KEEPALIVE_TIMEOUT_MS = 25_000;
     private static final int KEEPALIVE_SAFETY_CAP_MS = 20_000;
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -212,7 +212,7 @@ public class PingSpoof extends Module {
         .visible(() -> delayPattern.get() == DelayPattern.Ramp).build());
 
     private final Setting<Integer> maxDelayCapMs = sgTiming.add(new IntSetting.Builder()
-        .name("max-delay-cap-ms").description("Hard delay cap for safety.").defaultValue(15_000).min(100).sliderRange(500, ABSOLUTE_MAX_DELAY_MS).build());
+        .name("max-delay-cap-ms").description("Hard delay cap for safety.").defaultValue(15_000).min(500).sliderRange(500, ABSOLUTE_MAX_DELAY_MS).build());
 
     private final Setting<Boolean> delayKeepAlive = sgGeneral.add(new BoolSetting.Builder()
         .name("delay-keepalive").description("Delay KeepAlive response packets.").defaultValue(true).visible(this::supportsPingDelay).build());
@@ -355,6 +355,8 @@ public class PingSpoof extends Module {
         return Long.compare(a.sequence, b.sequence);
     });
 
+    private final Object queueLock = new Object();
+
     private boolean sendingInternally = false;
     private boolean queueOverflowWarned = false;
     private int tickCounter = 0;
@@ -362,6 +364,7 @@ public class PingSpoof extends Module {
     private boolean rampIncreasing = true;
     private int movementPacketCounter = 0;
     private long enqueueSequence = 0;
+    private volatile long movementOrderBarrier = 0L;
     private boolean wasInventoryOpen = false;
 
     private double lastKnownTps = 20.0;
@@ -375,7 +378,8 @@ public class PingSpoof extends Module {
 
     @Override
     public void onActivate() {
-        delayedPackets.clear();
+        clearQueue();
+        movementOrderBarrier = 0L;
         sendingInternally = false;
         queueOverflowWarned = false;
         tickCounter = 0;
@@ -393,8 +397,11 @@ public class PingSpoof extends Module {
 
     @Override
     public void onDeactivate() {
-        if (disableAction.get() == DisableAction.FlushQueued) flushAllNow();
-        else delayedPackets.clear();
+        try {
+            if (disableAction.get() == DisableAction.FlushQueued) flushAllNow();
+        } finally {
+            clearQueue();
+        }
         queueOverflowWarned = false;
     }
 
@@ -436,7 +443,12 @@ public class PingSpoof extends Module {
             wasInventoryOpen = inventoryOpen;
         }
 
-        if (mc.getConnection() == null || delayedPackets.isEmpty()) return;
+        if (mc.getConnection() == null) {
+            clearQueue();
+            return;
+        }
+
+        if (queueIsEmpty()) return;
 
         long now = System.currentTimeMillis();
         int sent = 0;
@@ -448,48 +460,56 @@ public class PingSpoof extends Module {
         }
 
         while (sent < flushBudget) {
-            DelayedPacket next = delayedPackets.peek();
-            if (next == null || next.sendAt > now) break;
+            DelayedPacket next = pollIfDue(now);
+            if (next == null) break;
 
-            delayedPackets.poll();
             sendNow(next.packet);
             sent++;
         }
 
-        if (queueOverflowWarned && delayedPackets.size() < Math.max(8, maxQueuedPackets.get() / 2)) {
+        if (queueOverflowWarned && queueSize() < Math.max(8, maxQueuedPackets.get() / 2)) {
             queueOverflowWarned = false;
         }
     }
 
     private void queuePacket(Packet<?> packet, long delayMs) {
-        if (delayedPackets.size() >= maxQueuedPackets.get()) {
-            switch (queueOverflowMode.get()) {
-                case SendImmediately -> {
-                    warnQueueOverflowOnce("Queue full, sending packet immediately.");
-                    sendNow(packet);
-                    return;
-                }
-                case DropNewest -> {
-                    warnQueueOverflowOnce("Queue full, dropping newest delayed packet.");
-                    return;
-                }
-                case DropOldest -> {
-                    warnQueueOverflowOnce("Queue full, dropping oldest delayed packet.");
-                    delayedPackets.poll();
+        synchronized (queueLock) {
+            if (delayedPackets.size() >= maxQueuedPackets.get()) {
+                switch (queueOverflowMode.get()) {
+                    case SendImmediately -> {
+                        warnQueueOverflowOnce("Queue full, sending packet immediately.");
+                        sendNow(packet);
+                        return;
+                    }
+                    case DropNewest -> {
+                        warnQueueOverflowOnce("Queue full, dropping newest delayed packet.");
+                        return;
+                    }
+                    case DropOldest -> {
+                        warnQueueOverflowOnce("Queue full, dropping oldest delayed packet.");
+                        delayedPackets.poll();
+                    }
                 }
             }
-        }
 
-        long safeDelay = clampDelay(delayMs);
-        if (antiTimeout.get() && packet instanceof ServerboundKeepAlivePacket) {
-            safeDelay = Math.min(safeDelay, KEEPALIVE_SAFETY_CAP_MS);
-        }
+            long safeDelay = clampDelay(delayMs);
+            if (antiTimeout.get() && packet instanceof ServerboundKeepAlivePacket) {
+                safeDelay = Math.min(safeDelay, KEEPALIVE_SAFETY_CAP_MS);
+            }
 
-        delayedPackets.add(new DelayedPacket(packet, System.currentTimeMillis() + safeDelay, enqueueSequence++));
+            long sendAt = System.currentTimeMillis() + safeDelay;
+            if (isMovementPacket(packet)) {
+                movementOrderBarrier = Math.max(movementOrderBarrier, sendAt);
+            }
+
+            delayedPackets.add(new DelayedPacket(packet, sendAt, enqueueSequence++));
+        }
     }
 
     private boolean isCombatPacket(Packet<?> packet) {
-        return packet instanceof ClientboundEntityEventPacket || packet instanceof net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
+        return packet instanceof ServerboundInteractPacket
+            || packet instanceof ServerboundSwingPacket
+            || packet instanceof ServerboundUseItemPacket;
     }
 
     private long getPacketDelayMs(Packet<?> packet) {
@@ -498,7 +518,7 @@ public class PingSpoof extends Module {
         if (combatSpoof.get() && isCombatPacket(packet)) {
             inCombatState = true;
             lastCombatPacketTime = System.currentTimeMillis();
-            return clampDelay(combatDelayMs.get());
+            return alignToMovementBarrier(clampDelay(combatDelayMs.get()));
         }
 
         if (packet instanceof ServerboundKeepAlivePacket) {
@@ -537,7 +557,9 @@ public class PingSpoof extends Module {
             return result;
         }
 
-        if (!isMovementPacket(packet)) return -1L;
+        if (!isMovementPacket(packet)) {
+            return isCombatPacket(packet) ? alignToMovementBarrier(-1L) : -1L;
+        }
         if (!supportsMovementDelay() || !delayMovement.get()) return -1L;
         if (movementOnlyWhileMoving.get() && !isPlayerMoving()) return -1L;
 
@@ -749,12 +771,54 @@ public class PingSpoof extends Module {
     }
 
     private void flushAllNow() {
-        if (mc.getConnection() == null || delayedPackets.isEmpty()) return;
+        if (mc.getConnection() == null) return;
 
-        while (!delayedPackets.isEmpty()) {
-            DelayedPacket delayed = delayedPackets.poll();
-            if (delayed != null) sendNow(delayed.packet);
+        List<DelayedPacket> drained = new ArrayList<>();
+        synchronized (queueLock) {
+            DelayedPacket delayed;
+            while ((delayed = delayedPackets.poll()) != null) {
+                drained.add(delayed);
+            }
         }
+
+        for (DelayedPacket delayed : drained) {
+            sendNow(delayed.packet);
+        }
+    }
+
+    private void clearQueue() {
+        synchronized (queueLock) {
+            delayedPackets.clear();
+        }
+    }
+
+    private boolean queueIsEmpty() {
+        synchronized (queueLock) {
+            return delayedPackets.isEmpty();
+        }
+    }
+
+    private int queueSize() {
+        synchronized (queueLock) {
+            return delayedPackets.size();
+        }
+    }
+
+    private DelayedPacket pollIfDue(long now) {
+        synchronized (queueLock) {
+            DelayedPacket next = delayedPackets.peek();
+            if (next == null || next.sendAt > now) return null;
+            return delayedPackets.poll();
+        }
+    }
+
+    private long alignToMovementBarrier(long delay) {
+        long barrier = movementOrderBarrier;
+        long now = System.currentTimeMillis();
+        if (barrier <= now) return delay;
+
+        long needed = barrier - now;
+        return delay < 0 ? needed : Math.max(delay, needed);
     }
 
     private void sendNow(Packet<?> packet) {
@@ -870,7 +934,7 @@ public class PingSpoof extends Module {
     public String getInfoString() {
         if (mc.player == null || mc.getConnection() == null) return null;
 
-        int queued = delayedPackets.size();
+        int queued = queueSize();
         int effectivePing = estimateEffectivePing();
         String burstState = "";
 
@@ -889,7 +953,10 @@ public class PingSpoof extends Module {
     private int estimateEffectivePing() {
         if (mc.player == null || mc.getConnection() == null) return 0;
 
-        DelayedPacket front = delayedPackets.peek();
+        DelayedPacket front;
+        synchronized (queueLock) {
+            front = delayedPackets.peek();
+        }
         if (front == null) return 0;
 
         long remaining = Math.max(0, front.sendAt - System.currentTimeMillis());

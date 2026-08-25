@@ -13,6 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class HungerManagerSpoofMixin {
     @Inject(method = "getFoodLevel", at = @At("HEAD"), cancellable = true)
     private void orbiter$getFoodLevel(CallbackInfoReturnable<Integer> cir) {
+        if (!ClientSpoofState.isHudRenderScope()) return;
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldFakeHunger()) return;
 
@@ -25,6 +26,7 @@ public abstract class HungerManagerSpoofMixin {
 
     @Inject(method = "getSaturationLevel", at = @At("HEAD"), cancellable = true)
     private void orbiter$getSaturationLevel(CallbackInfoReturnable<Float> cir) {
+        if (!ClientSpoofState.isHudRenderScope()) return;
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldFakeHunger()) return;
 

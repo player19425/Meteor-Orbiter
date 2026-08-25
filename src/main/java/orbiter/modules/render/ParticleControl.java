@@ -1,8 +1,11 @@
 package orbiter.modules.render;
 
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import orbiter.modules.CreativeSafetyModule;
 import orbiter.util.CommandUtils;
@@ -116,6 +119,7 @@ public final class ParticleControl extends CreativeSafetyModule {
     private double phase;
     private double samplePhase;
     private Vec3 fixedCenter;
+    private ResourceKey<Level> fixedCenterDimension;
     private int tickCounter;
 
     public ParticleControl() {
@@ -128,11 +132,25 @@ public final class ParticleControl extends CreativeSafetyModule {
         samplePhase = 0;
         tickCounter = 0;
         fixedCenter = mc.player == null ? null : playerPosition();
+        fixedCenterDimension = mc.player == null || mc.level == null ? null : mc.level.dimension();
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        fixedCenter = null;
+        fixedCenterDimension = null;
     }
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null || mc.player.connection == null) return;
+        if (centerTargetMode.get() == CenterTargetMode.FixedPosition) {
+            ResourceKey<Level> dimension = mc.level.dimension();
+            if (!dimension.equals(fixedCenterDimension)) {
+                fixedCenterDimension = dimension;
+                fixedCenter = playerPosition();
+            }
+        }
         if (++tickCounter < delayTicks.get()) return;
         tickCounter = 0;
 

@@ -336,13 +336,16 @@ public class AimAssistPlus extends Module {
 
                 lockedTarget = null;
                 target = findTarget();
-                if (target != null)
+                if (target != null) {
                     lockedTarget = target;
+                    stickyTicks = 0;
+                }
             }
         } else {
             target = findTarget();
             if (targetLock.get() && target != null) {
                 lockedTarget = target;
+                stickyTicks = 0;
             }
         }
 
@@ -350,15 +353,12 @@ public class AimAssistPlus extends Module {
             target = null;
             lockedTarget = null;
         }
+
+        if (target != null) aim(target, 1.0);
     }
 
     @EventHandler
     private void onRender3D(Render3DEvent event) {
-        if (target == null)
-            return;
-
-        aim(target, event.tickDelta);
-
         if (renderTarget.get() && target instanceof LivingEntity) {
             AABB box = target.getBoundingBox();
             event.renderer.box(box, targetColor.get(), targetColor.get(), ShapeMode.Both, 0);
@@ -373,6 +373,10 @@ public class AimAssistPlus extends Module {
         if (entity == null || !entity.isAlive())
             return false;
         if (entity == mc.player)
+            return false;
+        if (entity.isSpectator())
+            return false;
+        if (entity instanceof Player player && player.getAbilities().instabuild)
             return false;
         if (!entities.get().contains(entity.getType()))
             return false;
@@ -472,7 +476,7 @@ public class AimAssistPlus extends Module {
         if (chargeCompensation.get() && mc.player != null) {
             ItemStack active = mc.player.getActiveItem();
             if (active != null && active.getItem() instanceof BowItem) {
-                int useTime = mc.player.getUseItemRemainingTicks();
+                int useTime = 72000 - mc.player.getUseItemRemainingTicks();
                 float charge = BowItem.getPowerForTime(useTime);
                 v *= Math.max(0.1, charge);
             }

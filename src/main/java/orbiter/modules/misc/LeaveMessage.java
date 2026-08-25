@@ -40,6 +40,7 @@ public class LeaveMessage extends Module {
         .build());
 
     private volatile boolean pendingLeave = false;
+    private static volatile boolean allowStop = false;
 
     public LeaveMessage() {
         super(Orbiter.CATEGORY, "leave-message", "Sends a chat message before leaving.");
@@ -66,6 +67,12 @@ public class LeaveMessage extends Module {
 
     public boolean isPendingLeave() {
         return pendingLeave;
+    }
+
+    public static boolean consumeAllowStop() {
+        if (!allowStop) return false;
+        allowStop = false;
+        return true;
     }
 
     private boolean handleLeaveSequence(String source) {
@@ -112,5 +119,7 @@ public class LeaveMessage extends Module {
         }
 
         pendingLeave = false;
+        allowStop = true;
+        mc.stop();
     }
 }

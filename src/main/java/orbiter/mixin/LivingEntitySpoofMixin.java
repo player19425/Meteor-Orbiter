@@ -15,13 +15,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class LivingEntitySpoofMixin {
     @Inject(method = "getHealth", at = @At("HEAD"), cancellable = true)
     private void orbiter$getHealth(CallbackInfoReturnable<Float> cir) {
+        if (!ClientSpoofState.isHudRenderScope()) return;
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldFakeHealth()) return;
 
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null) return;
         if ((Object) this == mc.player) {
-            cir.setReturnValue(module.getFakeHealth());
+            cir.setReturnValue(Math.max(module.getFakeHealth(), 0.01f));
         }
     }
 

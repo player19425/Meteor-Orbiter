@@ -146,6 +146,7 @@ public class EnchCracker extends Module {
     private int clock = 0;
     private int statusClock = 0;
     private boolean tidyPending = false;
+    private boolean placedByUs = false;
     private int rerollCount = 0;
 
     private final int[] obsCosts = {-1, -1, -1};
@@ -204,6 +205,7 @@ public class EnchCracker extends Module {
         pendingRow = -1;
         clickedWin = false;
         predictedWin = null;
+        placedByUs = false;
         resetSnapshot();
         info("Goal set: " + activeEnchant + (activeLevel > 0 ? " " + activeLevel : "")
                 + " on " + displayName(activeItemSpec) + ". Step 1: cracking the hidden seed from this table.");
@@ -212,7 +214,7 @@ public class EnchCracker extends Module {
     public void stopFarm(String reason) {
         if (farmActive && reason != null) error(reason);
         farmActive = false;
-        tidyPending = true;
+        tidyPending = placedByUs;
     }
 
     private void hardStop() {
@@ -221,6 +223,8 @@ public class EnchCracker extends Module {
         placeSrc = -1;
         pendingRow = -1;
         predictedWin = null;
+        tablePos = null;
+        placedByUs = false;
         tidyPending = false;
     }
 
@@ -300,7 +304,12 @@ public class EnchCracker extends Module {
     private void runTidy(EnchantmentMenu menu) {
         if (TableOps.carrying(menu)) {
             int spot = TableOps.parkTarget(menu);
-            if (spot != -1) TableOps.pickupAll(menu, spot);
+            if (spot == -1) {
+                TableOps.dropCarried(menu);
+                waitForResources("Inventory is full: dropped the held stack on the ground.");
+                return;
+            }
+            TableOps.pickupAll(menu, spot);
             return;
         }
         if (!TableOps.slot0(menu).isEmpty()) {
@@ -308,6 +317,7 @@ public class EnchCracker extends Module {
             return;
         }
         tidyPending = false;
+        placedByUs = false;
     }
 
     private void watcherTick(boolean atTable) {
@@ -411,7 +421,7 @@ public class EnchCracker extends Module {
 
         if (scanPhase == ScanPhase.IDLE) {
             if (menu.costs[0] <= 0 && menu.costs[1] <= 0 && menu.costs[2] <= 0) return;
-            if (!isEnchantableSpec(activeItemSpec)) {
+            if (!activeItemSpec.isEmpty() && !isEnchantableSpec(activeItemSpec)) {
                 blockFarm("target item " + displayName(activeItemSpec)
                         + " cant be enchanted. hold your real item and run .encc get again");
                 return;
@@ -692,6 +702,7 @@ public class EnchCracker extends Module {
         stableTicks = 0;
         lastScanSize = -1;
         stallTicks = 0;
+        tablePos = null;
     }
 
     private void scanForTable() {
@@ -752,13 +763,13 @@ public class EnchCracker extends Module {
             case EVALUATE -> doEvaluate(menu);
             case LAPIS_TAKE -> { TableOps.pickupAll(menu, placeSrc); go(Step.LAPIS_PUT); }
             case LAPIS_PUT -> { TableOps.pickupAll(menu, 1); go(Step.EVALUATE); }
-            case CLEAR_SLOT0 -> { TableOps.shiftMove(menu, 0); go(queuedAfter); }
+            case CLEAR_SLOT0 -> { TableOps.shiftMove(menu, 0); placedByUs = false; go(queuedAfter); }
             case TAKE_SRC -> {
                 if (placeSrc == -1 || menu.getSlot(placeSrc).getItem().isEmpty()) { go(Step.EVALUATE); return; }
                 TableOps.pickupAll(menu, placeSrc);
                 go(Step.PUT_ONE);
             }
-            case PUT_ONE -> { TableOps.depositOne(menu, 0); go(Step.RETURN_SRC); }
+            case PUT_ONE -> { TableOps.depositOne(menu, 0); placedByUs = true; go(Step.RETURN_SRC); }
             case RETURN_SRC -> {
                 if (TableOps.carrying(menu) && placeSrc >= 0) TableOps.pickupAll(menu, placeSrc);
                 go(queuedAfter);
@@ -933,6 +944,7 @@ public class EnchCracker extends Module {
         if (predictedWin != null && sameEnchantments(predictedWin, result)) {
             List<EnchantmentInstance> won = predictedWin;
             TableOps.shiftMove(menu, 0);
+            placedByUs = false;
             farmActive = false;
             autoFarmBlocked = true;
             step = Step.IDLE;
@@ -943,6 +955,7 @@ public class EnchCracker extends Module {
             warning("MISMATCH: I predicted [" + (predictedWin == null ? "?" : describeList(predictedWin))
                     + "] but the server gave [" + actualList(result)
                     + "]. Something is off - throwing away my model and re-cracking from zero.");
+            resetCrack();
             go(Step.EVALUATE);
         }
     }

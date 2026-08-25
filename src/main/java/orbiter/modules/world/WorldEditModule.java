@@ -170,6 +170,10 @@ public class WorldEditModule extends CreativeSafetyModule {
 
     private boolean awaitingConfirmation = false;
     private OperationRequest pendingConfirmRequest = null;
+    private Object activeLevel = null;
+    private Runnable operationCompleteCallback = null;
+    private List<HistoryEntry> runningHistoryBatch = null;
+    private boolean runningBatchToRedo = false;
 
     private BlockPos clipboardMin = null;
     private BlockPos clipboardMax = null;
@@ -198,6 +202,7 @@ public class WorldEditModule extends CreativeSafetyModule {
         clearExecutionState();
         awaitingConfirmation = false;
         pendingConfirmRequest = null;
+        activeLevel = mc.level;
 
         loadClipboard();
         resolveSelectionToolItem(true);
@@ -224,6 +229,19 @@ public class WorldEditModule extends CreativeSafetyModule {
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.player.connection == null) return;
+
+        if (mc.level != activeLevel) {
+            activeLevel = mc.level;
+            if (pendingCommands != null || awaitingConfirmation || pos1 != null || pos2 != null) {
+                clearExecutionState();
+                awaitingConfirmation = false;
+                pendingConfirmRequest = null;
+                pos1 = null;
+                pos2 = null;
+                if (activeLevel != null) info("Dimension changed. Cleared selection and queued operations.");
+            }
+        }
+
         List<ExecutionStep> commands = pendingCommands;
         if (commands == null) return;
 
@@ -238,7 +256,18 @@ public class WorldEditModule extends CreativeSafetyModule {
                 info(String.format("Operation complete (%s): %d commands in %.1fs", currentOperationName == null ? "unnamed" : currentOperationName, commands.size(), elapsed / 1000.0));
             }
 
-            if (pendingHistoryEntry != null) {
+            Runnable callback = operationCompleteCallback;
+            operationCompleteCallback = null;
+            if (callback != null) callback.run();
+
+            if (runningHistoryBatch != null) {
+                if (runningBatchToRedo) {
+                    for (HistoryEntry entry : runningHistoryBatch) redoStack.push(entry);
+                } else {
+                    for (HistoryEntry entry : runningHistoryBatch) pushUndoEntry(entry);
+                }
+                runningHistoryBatch = null;
+            } else if (pendingHistoryEntry != null) {
                 pushUndoEntry(pendingHistoryEntry);
                 redoStack.clear();
                 pendingHistoryEntry = null;
@@ -636,12 +665,23 @@ public class WorldEditModule extends CreativeSafetyModule {
                     BlockPos min = getMin();
                     BlockPos max = getMax();
                     OperationBounds b = computeMoveBounds(min, max, dist, dir);
-                    maybeExecute(new OperationRequest("move " + dist + " " + dir, buildMoveCommands(min, max, dist, dir), b == null ? -1 : b.volume(), b, b == null ? mc.player.blockPosition() : b.center(), true));
+                    int[] off = moveOffset(dist, dir);
+                    Runnable relocate = () -> {
+                        pos1 = min.offset(off[0], off[1], off[2]);
+                        pos2 = max.offset(off[0], off[1], off[2]);
+                    };
+                    maybeExecute(new OperationRequest("move " + dist + " " + dir, buildMoveCommands(min, max, dist, dir), b == null ? -1 : b.volume(), b, b == null ? mc.player.blockPosition() : b.center(), true, relocate));
                 }
                 case "drain" -> {
                     int r = parts.length >= 2 ? parseInt(parts[1], 10) : 10;
                     BlockPos c = mc.player.blockPosition();
-                    OperationBounds b = new OperationBounds(c.offset(-r, -r, -r), c.offset(r, r, r));
+                    int rawMinY = c.getY() - r;
+                    int rawMaxY = c.getY() + r;
+                    if (mc.level != null) {
+                        rawMinY = Math.max(rawMinY, mc.level.getMinY());
+                        rawMaxY = Math.min(rawMaxY, worldTopY());
+                    }
+                    OperationBounds b = new OperationBounds(new BlockPos(c.getX() - r, rawMinY, c.getZ() - r), new BlockPos(c.getX() + r, rawMaxY, c.getZ() + r));
                     List<String> cmds = new ArrayList<>();
                     cmds.addAll(buildReplaceCommands(b.min, b.max, "minecraft:water", "minecraft:air"));
                     cmds.addAll(buildReplaceCommands(b.min, b.max, "minecraft:lava", "minecraft:air"));
@@ -699,7 +739,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                     int sx = max.getX() - min.getX() + 1;
                     int sy = max.getY() - min.getY() + 1;
                     int sz = max.getZ() - min.getZ() + 1;
-                    info(String.format("Selection: %dx%dx%d = %d blocks", sx, sy, sz, sx * sy * sz));
+                    info(String.format("Selection: %dx%dx%d = %d blocks", sx, sy, sz, (long) sx * sy * sz));
                     info(String.format("Min: %s  Max: %s", formatPos(min), formatPos(max)));
                 }
                 case "count" -> {
@@ -822,13 +862,23 @@ public class WorldEditModule extends CreativeSafetyModule {
 
         int count = Math.min(requestedCount, undoStack.size());
         List<String> cmds = new ArrayList<>();
+        List<HistoryEntry> batch = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            HistoryEntry entry = undoStack.pop();
+            HistoryEntry entry = undoStack.peek();
+            if (cmds.size() + entry.undoCommands.size() > maxGeneratedCommands.get()) break;
+            undoStack.pop();
+            batch.add(entry);
             cmds.addAll(entry.undoCommands);
-            redoStack.push(entry);
         }
-        startExecution(cmds, "undo x" + count, null);
-        info("Undo queued: " + count + " operation(s).");
+
+        if (batch.isEmpty()) {
+            warning(String.format("Undo rejected: %d commands exceeds the %d command budget.",
+                undoStack.peek().undoCommands.size(), maxGeneratedCommands.get()));
+            return;
+        }
+
+        startExecution(cmds, "undo x" + batch.size(), null, batch, true);
+        info("Undo queued: " + batch.size() + " operation(s).");
     }
 
     private void performRedo(int requestedCount) {
@@ -843,13 +893,23 @@ public class WorldEditModule extends CreativeSafetyModule {
 
         int count = Math.min(requestedCount, redoStack.size());
         List<String> cmds = new ArrayList<>();
+        List<HistoryEntry> batch = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            HistoryEntry entry = redoStack.pop();
+            HistoryEntry entry = redoStack.peek();
+            if (cmds.size() + entry.redoCommands.size() > maxGeneratedCommands.get()) break;
+            redoStack.pop();
+            batch.add(entry);
             cmds.addAll(entry.redoCommands);
-            pushUndoEntry(entry);
         }
-        startExecution(cmds, "redo x" + count, null);
-        info("Redo queued: " + count + " operation(s).");
+
+        if (batch.isEmpty()) {
+            warning(String.format("Redo rejected: %d commands exceeds the %d command budget.",
+                redoStack.peek().redoCommands.size(), maxGeneratedCommands.get()));
+            return;
+        }
+
+        startExecution(cmds, "redo x" + batch.size(), null, batch, false);
+        info("Redo queued: " + batch.size() + " operation(s).");
     }
 
     private void maybeExecute(OperationRequest request) {
@@ -886,28 +946,39 @@ public class WorldEditModule extends CreativeSafetyModule {
 
         HistoryEntry historyEntry = null;
         if (request.recordHistory && request.bounds != null) {
+            int snapshotCap = Math.min(maxGeneratedCommands.get(), largeOpThreshold.get());
             List<String> undoCommands = createUndoSnapshotCommands(request.bounds);
-            if (!undoCommands.isEmpty()) historyEntry = new HistoryEntry(request.name, undoCommands, new ArrayList<>(request.commands));
+            if (undoCommands.size() >= snapshotCap) warning(String.format("Undo snapshot skipped: exceeds the %d command budget.", snapshotCap));
+            else if (!undoCommands.isEmpty()) historyEntry = new HistoryEntry(request.name, undoCommands, new ArrayList<>(request.commands));
             else warning("Undo snapshot could not be captured for this operation.");
         }
 
         List<ExecutionStep> wrapped = wrapCommandsForZoneSafety(request.commands, request.targetCenter, request.bounds);
-        startTypedExecution(wrapped, request.name, historyEntry);
+        startTypedExecution(wrapped, request.name, historyEntry, request.onExecuted, null, false);
     }
 
     private void startExecution(List<String> commands, String name, HistoryEntry historyEntry) {
+        startExecution(commands, name, historyEntry, null, false);
+    }
+
+    private void startExecution(List<String> commands, String name, HistoryEntry historyEntry, List<HistoryEntry> historyBatch, boolean batchToRedo) {
         if (commands == null) {
-            startTypedExecution(List.of(), name, historyEntry);
+            startTypedExecution(List.of(), name, historyEntry, null, historyBatch, batchToRedo);
             return;
         }
         List<ExecutionStep> steps = new ArrayList<>(commands.size());
         for (String command : commands) steps.add(new CommandStep(command));
-        startTypedExecution(steps, name, historyEntry);
+        startTypedExecution(steps, name, historyEntry, null, historyBatch, batchToRedo);
     }
 
     private void startTypedExecution(List<ExecutionStep> commands, String name, HistoryEntry historyEntry) {
+        startTypedExecution(commands, name, historyEntry, null, null, false);
+    }
+
+    private void startTypedExecution(List<ExecutionStep> commands, String name, HistoryEntry historyEntry, Runnable onComplete, List<HistoryEntry> historyBatch, boolean batchToRedo) {
         if (commands == null || commands.isEmpty()) {
             warning("No commands to execute.");
+            clearExecutionState();
             return;
         }
 
@@ -918,6 +989,9 @@ public class WorldEditModule extends CreativeSafetyModule {
         operationStartTime = System.currentTimeMillis();
         currentOperationName = name;
         pendingHistoryEntry = historyEntry;
+        operationCompleteCallback = onComplete;
+        runningHistoryBatch = historyBatch;
+        runningBatchToRedo = batchToRedo;
 
         if (showProgress.get()) info(String.format("Executing operation: %s (%d commands)", name, commands.size()));
     }
@@ -928,12 +1002,22 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private void clearExecutionState() {
+        restoreHistoryBatch();
         pendingCommands = null;
         cmdIndex = 0;
         delayCounter = 0;
         scriptWaitTicks = 0;
         currentOperationName = null;
         pendingHistoryEntry = null;
+        operationCompleteCallback = null;
+        runningHistoryBatch = null;
+    }
+
+    private void restoreHistoryBatch() {
+        if (runningHistoryBatch == null) return;
+        Deque<HistoryEntry> target = runningBatchToRedo ? undoStack : redoStack;
+        for (int i = runningHistoryBatch.size() - 1; i >= 0; i--) target.push(runningHistoryBatch.get(i));
+        runningHistoryBatch = null;
     }
     private boolean verifyTeleport(BlockPos target) {
         double distSq = mc.player.distanceToSqr(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
@@ -1033,6 +1117,8 @@ public class WorldEditModule extends CreativeSafetyModule {
             return cmds;
         }
 
+        int cap = Math.min(maxGeneratedCommands.get(), largeOpThreshold.get());
+
         BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
         for (int y = bounds.min.getY(); y <= bounds.max.getY(); y++) {
             for (int z = bounds.min.getZ(); z <= bounds.max.getZ(); z++) {
@@ -1053,6 +1139,8 @@ public class WorldEditModule extends CreativeSafetyModule {
                     int endX = x - 1;
                     if (endX > startX) cmds.add(String.format("fill %d %d %d %d %d %d %s", startX, y, z, endX, y, z, state));
                     else cmds.add(String.format("setblock %d %d %d %s", startX, y, z, state));
+
+                    if (cmds.size() >= cap) return cmds;
                 }
             }
         }
@@ -1484,6 +1572,8 @@ public class WorldEditModule extends CreativeSafetyModule {
 
         for (int y = -radius; y <= radius; y++) {
             int y2 = y * y;
+            int by = center.getY() + y;
+            if (mc.level != null && (by < mc.level.getMinY() || by > worldTopY())) continue;
             for (int z = -radius; z <= radius; z++) {
                 int z2 = z * z;
                 int remaining = r2 - y2 - z2;
@@ -1492,7 +1582,6 @@ public class WorldEditModule extends CreativeSafetyModule {
                 int xSpan = (int) Math.floor(Math.sqrt(remaining));
                 int x1 = center.getX() - xSpan;
                 int x2 = center.getX() + xSpan;
-                int by = center.getY() + y;
                 int bz = center.getZ() + z;
 
                 if (single) cmds.add(String.format("fill %d %d %d %d %d %d %s", x1, by, bz, x2, by, bz, singleBlock));
@@ -1519,7 +1608,9 @@ public class WorldEditModule extends CreativeSafetyModule {
             int x = base.getX();
             int z = base.getZ();
             for (int y = 0; y < height; y++) {
-                cmds.add(String.format("setblock %d %d %d %s", x, base.getY() + y, z, pattern.randomBlock()));
+                int by = base.getY() + y;
+                if (mc.level != null && (by < mc.level.getMinY() || by > worldTopY())) continue;
+                cmds.add(String.format("setblock %d %d %d %s", x, by, z, pattern.randomBlock()));
             }
             return cmds;
         }
@@ -1530,6 +1621,7 @@ public class WorldEditModule extends CreativeSafetyModule {
 
         for (int y = 0; y < height; y++) {
             int by = base.getY() + y;
+            if (mc.level != null && (by < mc.level.getMinY() || by > worldTopY())) continue;
             for (int z = -radius; z <= radius; z++) {
                 int z2 = z * z;
                 int remaining = r2 - z2;
@@ -1627,6 +1719,11 @@ public class WorldEditModule extends CreativeSafetyModule {
             return cmds;
         }
 
+        if (bounds.volume() > maxGeneratedCommands.get()) {
+            warning(String.format("Flip rejected: %d blocks exceeds the %d command budget.", bounds.volume(), maxGeneratedCommands.get()));
+            return cmds;
+        }
+
         BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
         for (int x = min.getX(); x <= max.getX(); x++) {
             for (int y = min.getY(); y <= max.getY(); y++) {
@@ -1651,25 +1748,32 @@ public class WorldEditModule extends CreativeSafetyModule {
 
     private List<String> buildMoveCommands(BlockPos min, BlockPos max, int dist, String dir) {
         List<String> cmds = new ArrayList<>();
-        int ox = 0;
-        int oy = 0;
-        int oz = 0;
+        int[] off = moveOffset(dist, dir);
+        int ox = off[0];
+        int oy = off[1];
+        int oz = off[2];
 
-        switch (dir) {
-            case "north", "n" -> oz = -dist;
-            case "south", "s" -> oz = dist;
-            case "east", "e" -> ox = dist;
-            case "west", "w" -> ox = -dist;
-            case "up", "u" -> oy = dist;
-            case "down", "d" -> oy = -dist;
-            default -> {
+        int cs = fillChunkSize.get();
+        int nx = (max.getX() - min.getX()) / cs + 1;
+        int ny = (max.getY() - min.getY()) / cs + 1;
+        int nz = (max.getZ() - min.getZ()) / cs + 1;
+
+        for (int ix = 0; ix < nx; ix++) {
+            int tx = ox < 0 ? nx - 1 - ix : ix;
+            int x = min.getX() + tx * cs;
+            int x2 = Math.min(x + cs - 1, max.getX());
+            for (int iy = 0; iy < ny; iy++) {
+                int ty = oy < 0 ? ny - 1 - iy : iy;
+                int y = min.getY() + ty * cs;
+                int y2 = Math.min(y + cs - 1, max.getY());
+                for (int iz = 0; iz < nz; iz++) {
+                    int tz = oz < 0 ? nz - 1 - iz : iz;
+                    int z = min.getZ() + tz * cs;
+                    int z2 = Math.min(z + cs - 1, max.getZ());
+                    cmds.add(String.format("clone %d %d %d %d %d %d %d %d %d replace move", x, y, z, x2, y2, z2, x + ox, y + oy, z + oz));
+                }
             }
         }
-
-        cmds.add(String.format("clone %d %d %d %d %d %d %d %d %d replace move", min.getX(), min.getY(), min.getZ(), max.getX(), max.getY(), max.getZ(), min.getX() + ox, min.getY() + oy, min.getZ() + oz));
-
-        pos1 = min.offset(ox, oy, oz);
-        pos2 = max.offset(ox, oy, oz);
 
         return cmds;
     }
@@ -1678,6 +1782,8 @@ public class WorldEditModule extends CreativeSafetyModule {
         List<String> cmds = new ArrayList<>();
         for (int layer = 0; layer < size; layer++) {
             int r = size - layer;
+            int layerY = base.getY() + layer;
+            if (mc.level != null && (layerY < mc.level.getMinY() || layerY > worldTopY())) continue;
             BlockPos layerMin = base.offset(-r, layer, -r);
             BlockPos layerMax = base.offset(r, layer, r);
 
@@ -1762,24 +1868,23 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private OperationBounds computeMoveBounds(BlockPos min, BlockPos max, int dist, String dir) {
-        int ox = 0;
-        int oy = 0;
-        int oz = 0;
-
-        switch (dir) {
-            case "north", "n" -> oz = -dist;
-            case "south", "s" -> oz = dist;
-            case "east", "e" -> ox = dist;
-            case "west", "w" -> ox = -dist;
-            case "up", "u" -> oy = dist;
-            case "down", "d" -> oy = -dist;
-            default -> {
-            }
-        }
+        int[] off = moveOffset(dist, dir);
 
         OperationBounds original = new OperationBounds(min, max);
-        OperationBounds moved = new OperationBounds(min.offset(ox, oy, oz), max.offset(ox, oy, oz));
+        OperationBounds moved = new OperationBounds(min.offset(off[0], off[1], off[2]), max.offset(off[0], off[1], off[2]));
         return original.union(moved);
+    }
+
+    private int[] moveOffset(int dist, String dir) {
+        return switch (dir) {
+            case "north", "n" -> new int[]{0, 0, -dist};
+            case "south", "s" -> new int[]{0, 0, dist};
+            case "east", "e" -> new int[]{dist, 0, 0};
+            case "west", "w" -> new int[]{-dist, 0, 0};
+            case "up", "u" -> new int[]{0, dist, 0};
+            case "down", "d" -> new int[]{0, -dist, 0};
+            default -> new int[]{0, 0, 0};
+        };
     }
 
     private void queueSingleCommand(String command) {
@@ -1809,10 +1914,10 @@ public class WorldEditModule extends CreativeSafetyModule {
         return new BlockPos(Math.max(pos1.getX(), pos2.getX()), Math.max(pos1.getY(), pos2.getY()), Math.max(pos1.getZ(), pos2.getZ()));
     }
 
-    private int getVolume() {
+    private long getVolume() {
         BlockPos min = getMin();
         BlockPos max = getMax();
-        return (max.getX() - min.getX() + 1) * (max.getY() - min.getY() + 1) * (max.getZ() - min.getZ() + 1);
+        return (long) (max.getX() - min.getX() + 1) * (max.getY() - min.getY() + 1) * (max.getZ() - min.getZ() + 1);
     }
 
     private int worldTopY() {
@@ -2180,7 +2285,7 @@ public class WorldEditModule extends CreativeSafetyModule {
             clipboardMax = new BlockPos(Integer.parseInt(p[3]), Integer.parseInt(p[4]), Integer.parseInt(p[5]));
             clipboardOrigin = new BlockPos(Integer.parseInt(p[6]), Integer.parseInt(p[7]), Integer.parseInt(p[8]));
 
-            int volume = (clipboardMax.getX() - clipboardMin.getX() + 1) * (clipboardMax.getY() - clipboardMin.getY() + 1) * (clipboardMax.getZ() - clipboardMin.getZ() + 1);
+            long volume = (long) (clipboardMax.getX() - clipboardMin.getX() + 1) * (clipboardMax.getY() - clipboardMin.getY() + 1) * (clipboardMax.getZ() - clipboardMin.getZ() + 1);
             info("Loaded clipboard from file (" + volume + " blocks).");
         } catch (IOException | NumberFormatException ignored) {
 
@@ -2198,18 +2303,24 @@ public class WorldEditModule extends CreativeSafetyModule {
     private static final class OperationRequest {
         final String name;
         final List<String> commands;
-        final int blockCount;
+        final long blockCount;
         final OperationBounds bounds;
         final BlockPos targetCenter;
         final boolean recordHistory;
+        final Runnable onExecuted;
 
-        private OperationRequest(String name, List<String> commands, int blockCount, OperationBounds bounds, BlockPos targetCenter, boolean recordHistory) {
+        private OperationRequest(String name, List<String> commands, long blockCount, OperationBounds bounds, BlockPos targetCenter, boolean recordHistory) {
+            this(name, commands, blockCount, bounds, targetCenter, recordHistory, null);
+        }
+
+        private OperationRequest(String name, List<String> commands, long blockCount, OperationBounds bounds, BlockPos targetCenter, boolean recordHistory, Runnable onExecuted) {
             this.name = name;
             this.commands = commands;
             this.blockCount = blockCount;
             this.bounds = bounds;
             this.targetCenter = targetCenter;
             this.recordHistory = recordHistory;
+            this.onExecuted = onExecuted;
         }
     }
 
@@ -2234,8 +2345,8 @@ public class WorldEditModule extends CreativeSafetyModule {
             this.max = new BlockPos(Math.max(a.getX(), b.getX()), Math.max(a.getY(), b.getY()), Math.max(a.getZ(), b.getZ()));
         }
 
-        int volume() {
-            return (max.getX() - min.getX() + 1) * (max.getY() - min.getY() + 1) * (max.getZ() - min.getZ() + 1);
+        long volume() {
+            return (long) (max.getX() - min.getX() + 1) * (max.getY() - min.getY() + 1) * (max.getZ() - min.getZ() + 1);
         }
 
         BlockPos center() {

@@ -452,6 +452,8 @@ public class AntiStaff extends Module {
         }
     }
 
+    private Set<String> vanishCandidatesPrev = new HashSet<>();
+
     private void scanVanished() {
         if (mc.level == null || mc.player == null) return;
         ClientPacketListener handler = mc.getConnection();
@@ -464,21 +466,31 @@ public class AntiStaff extends Module {
             }
         }
 
+        Set<String> current = new HashSet<>();
         for (Player player : mc.level.players()) {
             if (player == mc.player) continue;
             String name = player.getGameProfile().name();
             if (name == null || isIgnoredName(name)) continue;
 
-            if (!tabListNames.contains(name.toLowerCase(Locale.ROOT))) {
-                String key = "vanish:" + name;
-                if (!alertedPlayers.contains(key)) {
-                    alertedPlayers.add(key);
-                    double dist = Math.sqrt(mc.player.distanceToSqr(player));
-                    emitAlert("§c§l[AntiStaff] §d⚠ VANISHED PLAYER: §f" + name + " §7(" + (int) dist + " blocks)", name, true);
-                    scheduleAction(onDetect.get(), name);
-                }
+            if (player.hasCustomName()) continue;
+            if (player.getUUID().version() != 4) continue;
+
+            String lower = name.toLowerCase(Locale.ROOT);
+            if (tabListNames.contains(lower)) continue;
+
+            current.add(lower);
+
+            if (!vanishCandidatesPrev.contains(lower)) continue;
+            String key = "vanish:" + lower;
+            if (!alertedPlayers.contains(key)) {
+                alertedPlayers.add(key);
+                double dist = Math.sqrt(mc.player.distanceToSqr(player));
+                emitAlert("§c§l[AntiStaff] §d⚠ VANISHED PLAYER: §f" + name + " §7(" + (int) dist + " blocks)", name, true);
+                scheduleAction(onDetect.get(), name);
             }
         }
+
+        vanishCandidatesPrev = current;
     }
 
     private void processPlayerDetected(String name, String display, UUID uuid, String source) {
@@ -596,7 +608,8 @@ public class AntiStaff extends Module {
         if (detectRankSymbols.get() && (clean.contains("[+]") || clean.contains("[-]") || clean.contains("[*]"))) return true;
 
         for (String p : split(watchedPrefixes.get())) {
-            if (!p.isBlank() && clean.contains(normalize(stripFormatting(p)))) return true;
+            String pat = normalize(stripFormatting(p));
+            if (!p.isBlank() && matchesToken(clean, pat)) return true;
         }
         for (String w : split(watchedUsernames.get())) {
             if (!w.isBlank() && clean.contains(normalize(w))) return true;
@@ -664,9 +677,15 @@ public class AntiStaff extends Module {
         if (cleanDisplay == null || cleanDisplay.isBlank()) return false;
         String clean = normalize(cleanDisplay);
         for (String p : split(operatorPatterns.get())) {
-            if (!p.isBlank() && clean.contains(normalize(stripFormatting(p)))) return true;
+            String pat = normalize(stripFormatting(p));
+            if (!pat.isBlank() && matchesToken(clean, pat)) return true;
         }
         return false;
+    }
+
+    private boolean matchesToken(String text, String token) {
+        int flags = caseSensitive.get() ? 0 : Pattern.CASE_INSENSITIVE;
+        return Pattern.compile("(?<![\\w])" + Pattern.quote(token) + "(?![\\w])", flags).matcher(text).find();
     }
 
     private String bestLabel(String name, String display) {

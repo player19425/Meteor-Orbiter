@@ -180,6 +180,8 @@ public class AutoCraftPlus extends Module {
     private CraftState craftState = CraftState.OPEN_SCREEN;
     private int tickWaiter = 0;
     private int totalCrafted = 0;
+    private String lastGridSignature = "";
+    private int sameGridStreak = 0;
 
     public AutoCraftPlus() {
         super(Orbiter.CATEGORY, "auto-craft-plus",
@@ -294,6 +296,24 @@ public class AutoCraftPlus extends Module {
                     if (!mc.player.containerMenu.getCarried().isEmpty()) {
                         mc.gameMode.handleContainerInput(syncId, srcSlot, 0, ContainerInput.PICKUP, mc.player);
                     }
+                }
+
+                StringBuilder gridSig = new StringBuilder();
+                for (int i = 0; i < gridSize; i++) {
+                    Slot gs = screen.getMenu().slots.get(gridStart + i);
+                    gridSig.append(gs.getItem().isEmpty() ? "-" : gs.getItem().getItem().toString()).append(';');
+                }
+                String signature = gridSig.toString();
+                if (signature.equals(lastGridSignature)) {
+                    sameGridStreak++;
+                } else {
+                    sameGridStreak = 0;
+                    lastGridSignature = signature;
+                }
+                if (sameGridStreak >= 2) {
+                    info("Crafting grid is not accepting ingredients. Stopping.");
+                    toggle();
+                    return false;
                 }
 
                 craftState = CraftState.TAKE_RESULT;

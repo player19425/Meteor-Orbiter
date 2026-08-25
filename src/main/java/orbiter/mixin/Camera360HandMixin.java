@@ -23,7 +23,8 @@ public abstract class Camera360HandMixin {
     private float orbiter$wrapHandTiltPitch(LocalPlayer player, float tickProgress, Operation<Float> original) {
         float pitch = original.call(player, tickProgress);
         if (!orbiter$is360Active()) return pitch;
-        float h = player.getXRot(tickProgress);
-        return h + Mth.wrapDegrees(pitch - h);
+        float prev = Mth.wrapDegrees(player.xRotO);
+        float cur = player.getXRot();
+        return Mth.lerp(tickProgress, prev, prev + Mth.wrapDegrees(cur - prev));
     }
 }

@@ -92,14 +92,16 @@ public class InfiniReach extends Module {
 
         if (selected == lastMethod && currentReach == lastReach) return;
 
-        switch (selected) {
+        boolean applied = switch (selected) {
             case OpAttributes -> applyOpAttributes();
             case CreativeReachItem -> applyCreativeItem();
             default -> {
                 if (debug.get()) info("Auto: no method available.");
-                return;
+                yield false;
             }
-        }
+        };
+
+        if (!applied) return;
 
         lastMethod = selected;
         lastReach = currentReach;
@@ -112,11 +114,11 @@ public class InfiniReach extends Module {
         return caps.has("attribute") ? Method.OpAttributes : Method.CreativeReachItem;
     }
 
-    private void applyOpAttributes() {
+    private boolean applyOpAttributes() {
         ServerCapabilities caps = ServerCapabilities.capture(mc.player.connection);
         if (!caps.has("attribute")) {
             if (debug.get()) info("/attribute not available on this server.");
-            return;
+            return false;
         }
         String root = caps.preferredVanilla("attribute");
 
@@ -130,13 +132,14 @@ public class InfiniReach extends Module {
 
         if (pendingReads > 0 && readWaitTicks < 40) {
             readWaitTicks++;
-            return;
+            return false;
         }
 
         mc.player.connection.sendCommand(root + " @s minecraft:block_interaction_range base set " + fmt(reach.get()));
         mc.player.connection.sendCommand(root + " @s minecraft:entity_interaction_range base set " + fmt(reach.get()));
         attributeApplied = true;
         if (debug.get()) info("Sent /attribute commands. Range: " + fmt(reach.get()));
+        return true;
     }
 
     private void restoreAttributes() {
@@ -177,16 +180,18 @@ public class InfiniReach extends Module {
         Matcher m = VALUE_PATTERN.matcher(text);
         if (!m.find()) return null;
         try {
-            return Double.parseDouble(m.group(1));
+            double v = Double.parseDouble(m.group(1));
+            if (v <= 0 || v > 1024) return null;
+            return v;
         } catch (NumberFormatException e) {
             return null;
         }
     }
 
-    private void applyCreativeItem() {
+    private boolean applyCreativeItem() {
         if (!mc.player.isCreative()) {
             if (debug.get()) info("CreativeReachItem requires creative mode.");
-            return;
+            return false;
         }
 
         if (!hasSaved) {
@@ -207,6 +212,7 @@ public class InfiniReach extends Module {
         mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(45, stack));
 
         if (debug.get()) info("Installed invisible reach barrier in offhand. Range: " + fmt(reach.get()));
+        return true;
     }
 
     private void restoreOffhand() {

@@ -258,10 +258,11 @@ public class MessageFormatter extends Module {
         for (PendingRepeat pr : ready) {
             if (mc.getConnection() == null) { continue; }
             String toSend = sanitizeOutgoing(truncateSafe(pr.message, 256));
-            handler.sendChat(toSend);
-
-            if (pr.remaining > 1) {
-                pendingRepeats.add(new PendingRepeat(pr.message, pr.remaining - 1, pr.tickInterval, repeatTickClock + pr.tickInterval));
+            isFormatting = true;
+            try {
+                handler.sendChat(toSend);
+            } finally {
+                isFormatting = false;
             }
         }
     }
@@ -687,25 +688,45 @@ public class MessageFormatter extends Module {
 
     private String applyZalgo(String input) {
         StringBuilder sb = new StringBuilder();
-        for (char c : input.toCharArray()) {
-            sb.append(c);
+        boolean inCode = false;
+        int i = 0;
+        while (i < input.length()) {
+            char c = input.charAt(i);
 
-            if (c == ' ' || c == '§' || c == '&') continue;
+            if (Character.isHighSurrogate(c) && i + 1 < input.length() && Character.isLowSurrogate(input.charAt(i + 1))) {
+                sb.append(c).append(input.charAt(i + 1));
+                i += 2;
+            } else {
+                sb.append(c);
+                i++;
+            }
+
+            if (inCode) {
+                inCode = false;
+                continue;
+            }
+
+            if (c == '§' || c == '&') {
+                inCode = true;
+                continue;
+            }
+
+            if (c == ' ') continue;
 
             int intensity = zalgoIntensity.get();
 
             if (zalgoAbove.get()) {
-                for (int i = 0; i < intensity; i++) {
+                for (int m = 0; m < intensity; m++) {
                     sb.append(ZALGO_ABOVE[random.nextInt(ZALGO_ABOVE.length)]);
                 }
             }
             if (zalgoMiddle.get()) {
-                for (int i = 0; i < intensity; i++) {
+                for (int m = 0; m < intensity; m++) {
                     sb.append(ZALGO_MIDDLE[random.nextInt(ZALGO_MIDDLE.length)]);
                 }
             }
             if (zalgoBelow.get()) {
-                for (int i = 0; i < intensity; i++) {
+                for (int m = 0; m < intensity; m++) {
                     sb.append(ZALGO_BELOW[random.nextInt(ZALGO_BELOW.length)]);
                 }
             }
@@ -715,9 +736,12 @@ public class MessageFormatter extends Module {
 
     private String applyAntiCensor(String input) {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < input.length(); i++) {
-            sb.append(input.charAt(i));
-            if (i < input.length() - 1) {
+        int i = 0;
+        while (i < input.length()) {
+            int cp = input.codePointAt(i);
+            sb.appendCodePoint(cp);
+            i += Character.charCount(cp);
+            if (i < input.length()) {
                 sb.append('\u200B');
             }
         }
@@ -884,6 +908,9 @@ public class MessageFormatter extends Module {
                 }
             }
         }
+        if (sb.length() > 0 && Character.isHighSurrogate(sb.charAt(sb.length() - 1))) {
+            sb.setLength(sb.length() - 1);
+        }
         return sb.toString();
     }
 
@@ -995,7 +1022,7 @@ public class MessageFormatter extends Module {
                 String text = parts.length >= 3 ? parts[2] : "Hello Level";
                 String[] stepResults = getStepByStepPreview(text);
                 for (int i = 0; i < PIPELINE_ORDER.length; i++) {
-                    info("  %d. %s: %s", i + 1, PIPELINE_ORDER[i], stepResults[i]);
+                    info("  %d. %s: %s", i + 1, PIPELINE_ORDER[i], stepResults[i + 1]);
                 }
                 return true;
             }

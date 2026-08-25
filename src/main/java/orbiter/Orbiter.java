@@ -62,6 +62,7 @@ import orbiter.modules.misc.EnchCracker;
 import orbiter.modules.world.WorldDownloader;
 import orbiter.modules.world.ControlPlayer;
 import orbiter.util.ConfigModifier;
+import orbiter.util.UpdateChecker;
 import com.mojang.logging.LogUtils;
 import orbiter.modules.movement.SlimeJump;
 import orbiter.modules.movement.JumpA;
@@ -94,9 +95,10 @@ public class Orbiter extends MeteorAddon {
 
     @Override
     public void onInitialize() {
-        LOG.info("Initializing Orbiter 1.0.2");
+        LOG.info("Initializing Orbiter 1.0.5");
 
         ConfigModifier.get();
+        UpdateChecker.init();
 
         Modules modules = Modules.get();
         if (modules == null) {

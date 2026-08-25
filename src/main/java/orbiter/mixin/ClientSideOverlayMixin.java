@@ -23,7 +23,7 @@ public abstract class ClientSideOverlayMixin {
 
         if (module != null && module.shouldForceOffFireOverlay()) return;
 
-        if (module != null && module.shouldForceFireOverlay() && module.shouldSpoofBurning()) {
+        if (module != null && module.shouldForceFireOverlay()) {
             float height = (float) module.getFireOverlayHeight();
             if (height <= 0.0f) return;
             matrices.pushPose();

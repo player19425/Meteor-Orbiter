@@ -34,6 +34,26 @@ public class CrashFixerSoundSystemMixin {
     private void orbiter$resetSoundCounters(CallbackInfo ci) {
         this.soundsThisTick = 0;
         this.blockSoundsThisTick = 0;
+        orbiter$evictStaleQueues(System.nanoTime());
+    }
+
+    @Unique
+    private static void orbiter$evictStaleQueues(long now) {
+        if (recentById.isEmpty()) return;
+        ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);
+        if (mod == null) return;
+        long windowNanos = Math.max(1L, mod.getSoundWindowMs()) * 1000000L;
+        for (Map.Entry<Identifier, Deque<Long>> entry : recentById.entrySet()) {
+            Deque<Long> queue = entry.getValue();
+            synchronized (queue) {
+                while (!queue.isEmpty() && now - queue.peekFirst() > windowNanos) {
+                    queue.removeFirst();
+                }
+                if (queue.isEmpty()) {
+                    recentById.remove(entry.getKey(), queue);
+                }
+            }
+        }
     }
 
     @Inject(method = "play(Lnet/minecraft/client/resources/sounds/SoundInstance;)Lnet/minecraft/client/sounds/SoundEngine$PlayResult;",
@@ -45,14 +65,14 @@ public class CrashFixerSoundSystemMixin {
 
         if (sound.getSource() == SoundSource.BLOCKS) {
             if (this.blockSoundsThisTick >= mod.getMaxBlockSoundsPerTick()) {
-                cir.cancel();
+                cir.setReturnValue(SoundEngine.PlayResult.NOT_STARTED);
                 return;
             }
             this.blockSoundsThisTick++;
         }
 
         if (this.soundsThisTick >= mod.getMaxSoundsPerTick()) {
-            cir.cancel();
+            cir.setReturnValue(SoundEngine.PlayResult.NOT_STARTED);
             return;
         }
         this.soundsThisTick++;
@@ -64,7 +84,7 @@ public class CrashFixerSoundSystemMixin {
                 recentGlobalPlays.removeFirst();
             }
             if (recentGlobalPlays.size() >= mod.getMaxPlaysPerWindow()) {
-                cir.cancel();
+                cir.setReturnValue(SoundEngine.PlayResult.NOT_STARTED);
                 return;
             }
             recentGlobalPlays.addLast(now);
@@ -77,14 +97,8 @@ public class CrashFixerSoundSystemMixin {
             while (!queue.isEmpty() && now - queue.peekFirst() > windowNanos) {
                 queue.removeFirst();
             }
-            if (recentById.size() > mod.getSoundCleanupThreshold() && queue.isEmpty()) {
-                recentById.remove(id, queue);
-            }
-            while (queue.size() > mod.getMaxSameSoundPerWindow()) {
-                queue.pollFirst();
-            }
             if (queue.size() >= mod.getMaxSameSoundPerWindow()) {
-                cir.cancel();
+                cir.setReturnValue(SoundEngine.PlayResult.NOT_STARTED);
                 return;
             }
             queue.addLast(now);

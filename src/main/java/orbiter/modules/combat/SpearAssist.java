@@ -238,23 +238,28 @@ public class SpearAssist extends Module {
     public void onDeactivate() {
         currentTarget = null;
         isCharging = false;
+        mc.options.keyUse.setDown(false);
         ComboTracker.clearAll();
     }
 
     @EventHandler(priority = EventPriority.HIGH)
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.level == null) return;
+        if (mc.player == null || mc.level == null) {
+            stopCharging();
+            return;
+        }
         tickCounter++;
         if (jabCooldown > 0) jabCooldown--;
 
         if (onlyWhenHoldingSpear.get() && !isHoldingMeleeWeapon()) {
             currentTarget = null;
+            stopCharging();
             return;
         }
 
         currentTarget = findBestTarget();
         if (currentTarget == null) {
-            isCharging = false;
+            stopCharging();
             return;
         }
 
@@ -263,10 +268,11 @@ public class SpearAssist extends Module {
         double dist = eyes.distanceTo(targetCenter);
 
         if (dist < minAttackRange.get()) {
-
+            stopCharging();
             return;
         }
         if (dist > range.get()) {
+            stopCharging();
             return;
         }
 
@@ -276,7 +282,10 @@ public class SpearAssist extends Module {
             (aimPos.x - eyes.x) * (aimPos.x - eyes.x) + (aimPos.z - eyes.z) * (aimPos.z - eyes.z))));
 
         float angleDiff = Math.abs(Mth.wrapDegrees(targetYaw - mc.player.getYRot()));
-        if (angleDiff > maxAimAngle.get().floatValue()) return;
+        if (angleDiff > maxAimAngle.get().floatValue()) {
+            stopCharging();
+            return;
+        }
 
         double speed = aimSpeed.get();
         float newYaw = (float) (mc.player.getYRot() + Mth.wrapDegrees(targetYaw - mc.player.getYRot()) * speed);
@@ -287,7 +296,10 @@ public class SpearAssist extends Module {
             mc.player.setXRot(newPitch);
         }
 
-        if (!autoAttack.get()) return;
+        if (!autoAttack.get()) {
+            stopCharging();
+            return;
+        }
 
         AttackMode effectiveMode = attackMode.get();
         if (effectiveMode == AttackMode.Auto) {
@@ -301,48 +313,50 @@ public class SpearAssist extends Module {
         }
 
         switch (effectiveMode) {
-            case JabOnly -> tryJabAttack(currentTarget, dist, angleDiff);
+            case JabOnly -> {
+                stopCharging();
+                tryJabAttack(currentTarget, dist, angleDiff);
+            }
             case ChargeOnly -> tryChargeAttack(currentTarget, dist);
             case JabCharge -> {
-
                 if (lastJabWasJab) {
-                    tryChargeAttack(currentTarget, dist);
-                    lastJabWasJab = false;
+                    lastJabWasJab = !tryChargeAttack(currentTarget, dist);
                 } else {
-                    tryJabAttack(currentTarget, dist, angleDiff);
-                    lastJabWasJab = true;
+                    lastJabWasJab = tryJabAttack(currentTarget, dist, angleDiff);
                 }
             }
             case Auto -> {
-
+                stopCharging();
                 tryJabAttack(currentTarget, dist, angleDiff);
             }
         }
     }
 
-    private void tryJabAttack(LivingEntity target, double dist, float angleDiff) {
-        if (jabCooldown > 0) return;
+    private boolean tryJabAttack(LivingEntity target, double dist, float angleDiff) {
+        if (jabCooldown > 0) return false;
 
-        if (!ignoreJabCooldown.get() && mc.player.getAttackStrengthScale(0.5f) < 1.0f) return;
+        if (!ignoreJabCooldown.get() && mc.player.getAttackStrengthScale(0.5f) < 1.0f) return false;
 
         if (critOnly.get()) {
             boolean canCrit = !mc.player.onGround() && mc.player.getDeltaMovement().y < -0.08;
-            if (!canCrit) return;
+            if (!canCrit) return false;
         }
 
-        if (dist > range.get()) return;
-        if (angleDiff > 15.0f) return;
+        if (dist > range.get()) return false;
+        if (angleDiff > 15.0f) return false;
 
         if (mc.gameMode != null) {
             mc.gameMode.attack(mc.player, target);
             mc.player.swing(InteractionHand.MAIN_HAND);
             if (trackCombo.get()) ComboTracker.registerHit(target.getUUID());
             jabCooldown = jabCooldownTicks.get();
+            return true;
         }
+        return false;
     }
 
-    private void tryChargeAttack(LivingEntity target, double dist) {
-        if (!enableChargeAttack.get()) return;
+    private boolean tryChargeAttack(LivingEntity target, double dist) {
+        if (!enableChargeAttack.get()) return false;
 
         double playerSpeed = new Vec3(mc.player.getDeltaMovement().x, 0, mc.player.getDeltaMovement().z).length() * 20;
         double targetSpeed = new Vec3(target.getDeltaMovement().x, 0, target.getDeltaMovement().z).length() * 20;
@@ -359,16 +373,22 @@ public class SpearAssist extends Module {
                     isCharging = true;
                 }
             }
-            return;
+            return isCharging;
         }
 
         if (isCharging) {
 
             if (target == null || !target.isAlive() || dist > range.get() + 2) {
-                mc.options.keyUse.setDown(false);
-                isCharging = false;
+                stopCharging();
             }
         }
+        return isCharging;
+    }
+
+    private void stopCharging() {
+        if (!isCharging) return;
+        mc.options.keyUse.setDown(false);
+        isCharging = false;
     }
 
     private boolean isHoldingMeleeWeapon() {

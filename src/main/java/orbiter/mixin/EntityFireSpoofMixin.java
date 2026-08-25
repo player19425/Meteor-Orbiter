@@ -15,7 +15,7 @@ public abstract class EntityFireSpoofMixin {
     private void orbiter$isOnFire(CallbackInfoReturnable<Boolean> cir) {
         ClientSideThings module = ClientSpoofState.module();
         Minecraft client = Minecraft.getInstance();
-        if (module != null && client.player != null && (Object) this == client.player && module.shouldSpoofBurning()) {
+        if (module != null && client.player != null && (Object) this == client.player && (module.shouldSpoofBurning() || module.shouldForceFireOverlay())) {
             cir.setReturnValue(true);
         }
     }

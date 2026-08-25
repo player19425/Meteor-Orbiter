@@ -12,6 +12,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -53,15 +54,17 @@ public final class MojangApiUtil {
         } catch (Throwable ignored) {}
 
         if (handler != null) {
-            for (PlayerInfo entry : handler.getOnlinePlayers()) {
-                GameProfile profile = entry.getProfile();
-                if (profile == null || profile.name() == null) continue;
-                if (profile.name().equalsIgnoreCase(username) && profile.id() != null) {
-                    String uuid = profile.id().toString();
-                    cache(username, uuid);
-                    return uuid;
+            try {
+                for (PlayerInfo entry : new ArrayList<>(handler.getOnlinePlayers())) {
+                    GameProfile profile = entry.getProfile();
+                    if (profile == null || profile.name() == null) continue;
+                    if (profile.name().equalsIgnoreCase(username) && profile.id() != null) {
+                        String uuid = profile.id().toString();
+                        cache(username, uuid);
+                        return uuid;
+                    }
                 }
-            }
+            } catch (Throwable ignored) {}
         }
         return null;
     }

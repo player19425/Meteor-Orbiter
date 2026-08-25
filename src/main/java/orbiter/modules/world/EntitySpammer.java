@@ -593,9 +593,11 @@ public class EntitySpammer extends CreativeSafetyModule {
             facing = " facing entity @s feet";
         }
 
+        String selector = getResolvedSelector();
+        if (selector == null) return false;
         if (!GlobalSendLimiter.tryAcquireOne()) return false;
         String cmd = CommandUtils.formatCommand("tp %s %.2f %.2f %.2f%s",
-            getResolvedSelector(), tx, ty, tz, facing);
+            selector, tx, ty, tz, facing);
         FastSend.command(CommandUtils.vanilla(cmd));
         return true;
     }
@@ -614,6 +616,10 @@ public class EntitySpammer extends CreativeSafetyModule {
     }
 
     private String buildDominateCommand(BlockPos pos) {
+        String target = resolveSpawnTarget();
+        if (target == null) return null;
+        String entity = getNextEntityId("minecraft:zombie");
+
         List<String> tags = new ArrayList<>();
 
         if (noAI.get()) tags.add("NoAI:1b");
@@ -625,25 +631,24 @@ public class EntitySpammer extends CreativeSafetyModule {
         if (domOnFire.get()) tags.add("HasVisualFire:1b");
 
         if (!domCustomName.get().isEmpty()) {
-            String escaped = domCustomName.get().replace("\"", "\\\"");
+            String escaped = domCustomName.get().replace("\\", "\\\\").replace("\"", "\\\"");
             tags.add("CustomName:'\"" + escaped + "\"'");
             tags.add("CustomNameVisible:" + (domNameVisible.get() ? "1b" : "0b"));
         }
 
         if (domHealth.get() > 0) {
             tags.add("Health:" + domHealth.get() + "f");
-            tags.add("Attributes:[{id:\"minecraft:max_health\",base:" + domHealth.get() + "d}]");
+            tags.add("attributes:[{id:\"minecraft:max_health\",base:" + domHealth.get() + "d}]");
         }
         if (domCharged.get()) tags.add("powered:1b");
-        if (domExplosionPower.get() > 0) tags.add("ExplosionRadius:" + domExplosionPower.get() + "b");
+        if (domExplosionPower.get() > 0) {
+            if ("minecraft:fireball".equals(entity)) tags.add("ExplosionPower:" + domExplosionPower.get() + "b");
+            else tags.add("ExplosionRadius:" + domExplosionPower.get() + "b");
+        }
         if (domSlimeSize.get() > 0) tags.add("Size:" + domSlimeSize.get());
 
         String extra = customNBT.get().trim();
         if (!extra.isEmpty()) tags.add(extra);
-
-        String target = resolveSpawnTarget();
-        if (target == null) return null;
-        String entity = getNextEntityId("minecraft:zombie");
 
         if (tags.isEmpty()) {
             return CommandUtils.formatCommand("execute at %s run summon %s ~%d ~%d ~%d",

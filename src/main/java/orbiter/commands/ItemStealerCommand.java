@@ -1,6 +1,7 @@
 package orbiter.commands;
 
 import orbiter.modules.misc.ItemStealer;
+import orbiter.mixin.HandledScreenAccessor;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -101,12 +102,8 @@ public class ItemStealerCommand extends Command {
             if (!mc.player.getMainHandItem().isEmpty()) toSave = mc.player.getMainHandItem().copy();
 
             if (toSave == null && mc.gui.screen() instanceof AbstractContainerScreen<?> handled) {
-                try {
-                    var field = AbstractContainerScreen.class.getDeclaredField("hoveredSlot");
-                    field.setAccessible(true);
-                    Slot slot = (Slot) field.get(handled);
-                    if (slot != null && !slot.getItem().isEmpty()) toSave = slot.getItem().copy();
-                } catch (Throwable ignored) {}
+                Slot slot = ((HandledScreenAccessor) handled).getHoveredSlot();
+                if (slot != null && !slot.getItem().isEmpty()) toSave = slot.getItem().copy();
             }
 
             if (toSave == null) {
@@ -167,7 +164,7 @@ public class ItemStealerCommand extends Command {
         } else {
             ChatUtils.info("Saved items (" + ids.size() + "):");
             for (String id : ids) {
-                ItemStack stack = mod.loadItem(id);
+                ItemStack stack = mod.peekItem(id);
                 String name = (stack != null && !stack.isEmpty()) ? stack.getItemName().getString() : "(unreadable)";
                 ChatUtils.info("  - " + id + ": " + name);
             }
@@ -243,7 +240,7 @@ public class ItemStealerCommand extends Command {
         } else {
             ChatUtils.info("Saved items (" + items.size() + "):");
             for (String id : items) {
-                ItemStack stack = mod.loadItem(id);
+                ItemStack stack = mod.peekItem(id);
                 String name = (stack != null && !stack.isEmpty()) ? stack.getItemName().getString() : "(unreadable)";
                 ChatUtils.info("  - " + id + ": " + name);
             }

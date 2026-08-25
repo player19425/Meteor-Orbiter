@@ -44,7 +44,12 @@ public class EnchCrackCommand extends Command {
             }
 
             info("Seed " + menu.getEnchantmentSeed() + " | lapis: " + menu.getGoldCount());
-            for (EnchCracker.Offer offer : module.offersFor(menu, item)) info(EnchCracker.describe(offer));
+            EnchCracker.Offer[] offers = module.offersFor(menu, item);
+            if (offers == null) {
+                error("Seed not cracked yet. Keep the item in the table a few seconds until the crack locks, then run this again.");
+                return SINGLE_SUCCESS;
+            }
+            for (EnchCracker.Offer offer : offers) info(EnchCracker.describe(offer));
             return SINGLE_SUCCESS;
         });
 
@@ -91,7 +96,12 @@ public class EnchCrackCommand extends Command {
             }
 
             info("Simulated offers for " + BuiltInRegistries.ITEM.getKey(held.getItem()).toString().replace("minecraft:", "") + ":");
-            for (EnchCracker.Offer offer : module.offersFor(menu, held)) info(EnchCracker.describe(offer));
+            EnchCracker.Offer[] handOffers = module.offersFor(menu, held);
+            if (handOffers == null) {
+                error("Seed not cracked yet. Open the table and let the crack finish, then try again.");
+                return SINGLE_SUCCESS;
+            }
+            for (EnchCracker.Offer offer : handOffers) info(EnchCracker.describe(offer));
             return SINGLE_SUCCESS;
         }));
 

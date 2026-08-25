@@ -5,6 +5,7 @@ import meteordevelopment.meteorclient.systems.modules.Modules;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -22,7 +23,7 @@ public class RawPacketCapture {
 
     private static final ConcurrentLinkedQueue<byte[]> PENDING_BYTES = new ConcurrentLinkedQueue<>();
 
-    private static volatile int pendingByteCount = 0;
+    private static final AtomicInteger pendingByteCount = new AtomicInteger();
 
     private static int totalBytesQueued;
     private static int totalChannelsFound;
@@ -46,18 +47,18 @@ public class RawPacketCapture {
 
         int incoming = raw.length;
 
-        if (pendingByteCount + incoming > MAX_PENDING_BYTES) {
+        if (pendingByteCount.get() + incoming > MAX_PENDING_BYTES) {
             byte[] eldest;
-            while (pendingByteCount + incoming > MAX_PENDING_BYTES
+            while (pendingByteCount.get() + incoming > MAX_PENDING_BYTES
                    && (eldest = PENDING_BYTES.poll()) != null) {
-                pendingByteCount -= eldest.length;
+                pendingByteCount.addAndGet(-eldest.length);
             }
 
             if (incoming > MAX_PENDING_BYTES) return;
         }
 
         PENDING_BYTES.offer(raw);
-        pendingByteCount += incoming;
+        pendingByteCount.addAndGet(incoming);
         totalBytesQueued += incoming;
     }
 
@@ -67,8 +68,7 @@ public class RawPacketCapture {
         int processed = 0;
 
         while ((raw = PENDING_BYTES.poll()) != null && processed < 50) {
-            pendingByteCount -= raw.length;
-            if (pendingByteCount < 0) pendingByteCount = 0;
+            pendingByteCount.addAndGet(-raw.length);
             processed++;
 
             List<String> registered = extractRegisteredChannels(raw);
@@ -94,7 +94,7 @@ public class RawPacketCapture {
 
     public static void clearPending() {
         PENDING_BYTES.clear();
-        pendingByteCount = 0;
+        pendingByteCount.set(0);
     }
 
     private static boolean isFilteredChannel(String channel) {
@@ -186,6 +186,6 @@ public class RawPacketCapture {
         totalRegistrationChannels = 0;
         totalEmbeddedChannels = 0;
         PENDING_BYTES.clear();
-        pendingByteCount = 0;
+        pendingByteCount.set(0);
     }
 }

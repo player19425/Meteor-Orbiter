@@ -342,7 +342,7 @@ public class BowAssist extends Module {
         if (currentCharge < minChargePercent.get().floatValue()) {
 
             if (isDrawing) {
-                currentTarget = findBestTarget();
+                currentTarget = findOrMaintainTarget();
             }
             return;
         }
@@ -531,6 +531,7 @@ public class BowAssist extends Module {
         double horizontalDist = Math.sqrt(dx * dx + dz * dz);
 
         float yaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0f);
+        lastCalculatedYaw = yaw;
 
         AimStrategy strategy = aimStrategy.get();
         if (strategy == AimStrategy.Auto) {
@@ -562,7 +563,7 @@ public class BowAssist extends Module {
         double v2 = speed * speed;
         double disc = v2 * v2 - g * (g * horizontalDist * horizontalDist + 2 * dy * v2);
 
-        if (disc >= 0 && speed > 0.1) {
+        if (disc >= 0 && speed > 0.1 && g > 1.0E-4 && horizontalDist > 1.0E-4) {
 
             double tanTheta = (v2 - Math.sqrt(disc)) / (g * horizontalDist);
             float analyticPitch = (float) -Math.toDegrees(Math.atan(tanTheta));

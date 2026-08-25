@@ -116,6 +116,20 @@ public class MaceAssist extends Module {
         .build()
     );
 
+    private final Setting<Boolean> ignoreInvisibles = sgTargeting.add(new BoolSetting.Builder()
+        .name("ignore-invisibles")
+        .description("Don't target invisible entities.")
+        .defaultValue(true)
+        .build()
+    );
+
+    private final Setting<Boolean> ignoreCreative = sgTargeting.add(new BoolSetting.Builder()
+        .name("ignore-creative")
+        .description("Don't target players in creative mode.")
+        .defaultValue(true)
+        .build()
+    );
+
     private final Setting<Boolean> elytraSwap = sgElytra.add(new BoolSetting.Builder()
         .name("elytra-swap")
         .description("Automatically swap Elytra and chestplate for critical hits on landing.")
@@ -150,6 +164,7 @@ public class MaceAssist extends Module {
         wasAutoSwapped = false;
         elytraSlot = -1;
         chestplateSlot = -1;
+        weToggledNoFall = false;
         if (enableNoFall.get()) toggleNoFall(true);
     }
 
@@ -179,6 +194,16 @@ public class MaceAssist extends Module {
         if (mc.player == null || mc.level == null) return;
 
         if (!isHoldingMace()) {
+            if (autoEquip.get()) {
+                target = findTarget();
+                if (target != null) {
+                    int maceSlot = findMaceSlot();
+                    if (maceSlot != -1) {
+                        InvUtils.swap(maceSlot, false);
+                        return;
+                    }
+                }
+            }
             target = null;
             restoreElytra();
             return;
@@ -201,17 +226,9 @@ public class MaceAssist extends Module {
         boolean canSmash = canSmashAttack();
         if (smashOnly.get() && !canSmash) return;
 
-        if (autoEquip.get() && !isHoldingMace()) {
-            int maceSlot = findMaceSlot();
-            if (maceSlot != -1) {
-                InvUtils.swap(maceSlot, false);
-                return;
-            }
-        }
-
         if (onlyCrits.get() && !canCrit) return;
         if (!ignoreCooldown.get() && mc.player.getAttackStrengthScale(0.5f) < 1) return;
-        if (mc.player.distanceToSqr(target) > range.get() * range.get()) return;
+        if (mc.player.getEyePosition().distanceToSqr(target.getX(), target.getY(), target.getZ()) > range.get() * range.get()) return;
 
         mc.gameMode.attack(mc.player, target);
         mc.player.swing(InteractionHand.MAIN_HAND);
@@ -250,15 +267,18 @@ public class MaceAssist extends Module {
     }
 
     private boolean isValidTarget(LivingEntity entity) {
-        if (entity == null || !entity.isAlive()) return false;
+        if (entity == null || !entity.isAlive() || entity.isSpectator()) return false;
         if (entity == mc.player) return false;
         if (!entity.isAttackable()) return false;
 
-        if (ignoreFriends.get() && entity instanceof Player player) {
-            if (!Friends.get().shouldAttack(player)) return false;
+        if (entity instanceof Player player) {
+            if (ignoreFriends.get() && !Friends.get().shouldAttack(player)) return false;
+            if (ignoreCreative.get() && player.getAbilities().instabuild) return false;
         }
 
         if (!entities.get().isEmpty() && !entities.get().contains(entity.getType())) return false;
+
+        if (ignoreInvisibles.get() && entity.isInvisible()) return false;
 
         if (!ignoreWalls.get()) {
             if (mc.level != null && mc.player != null) {

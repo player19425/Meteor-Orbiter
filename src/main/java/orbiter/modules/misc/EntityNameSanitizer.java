@@ -2,10 +2,8 @@ package orbiter.modules.misc;
 
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.network.chat.ComponentContents;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.ComponentContents;
 import net.minecraft.resources.Identifier;
 
 import java.util.ArrayDeque;
@@ -13,12 +11,15 @@ import java.util.List;
 
 public final class EntityNameSanitizer {
 
+    private static final int MAX_ANALYZED_NODES = 64;
+
     private EntityNameSanitizer() {}
 
     public static boolean shouldSimplify(Component component, int maxChars, int maxNodes, int maxDepth,
                                          int maxStyleScore, int maxObfuscatedChars, int maxComplexNodes) {
         NameCost cost = analyze(component, Math.max(1, maxDepth));
-        return cost.tooDeep
+        return cost.truncated
+            || cost.tooDeep
             || cost.nodeCount > Math.max(1, maxNodes)
             || cost.totalChars > Math.max(1, maxChars)
             || cost.styleScore > Math.max(1, maxStyleScore)
@@ -42,8 +43,12 @@ public final class EntityNameSanitizer {
                 cost.tooDeep = true;
                 return cost;
             }
-            Component component = node.component;
             cost.nodeCount++;
+            if (cost.nodeCount > MAX_ANALYZED_NODES) {
+                cost.truncated = true;
+                return cost;
+            }
+            Component component = node.component;
             int directChars = estimateDirectChars(component);
             cost.totalChars += directChars;
             cost.styleScore += estimateStyleScore(component.getStyle(), directChars);
@@ -62,8 +67,6 @@ public final class EntityNameSanitizer {
     }
 
     private static int estimateDirectChars(Component component) {
-        String collapsed = component.getString();
-        if (!collapsed.isEmpty()) return collapsed.length();
         if (component.getContents() instanceof net.minecraft.network.chat.contents.PlainTextContents plain) return plain.text().length();
         return 8;
     }
@@ -86,7 +89,7 @@ public final class EntityNameSanitizer {
 
     private static final class NameCost {
         int totalChars, nodeCount, styleScore, obfuscatedChars, complexNodeCount;
-        boolean tooDeep;
+        boolean tooDeep, truncated;
     }
 
     private record VisitNode(Component component, int depth) {}

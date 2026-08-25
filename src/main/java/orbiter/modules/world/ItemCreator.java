@@ -551,6 +551,11 @@ public class ItemCreator extends CreativeSafetyModule {
                 }
                 ItemStack stack = new ItemStack(item, stackSize);
 
+                int defaultMax = Math.max(1, item.getDefaultMaxStackSize());
+                if (stackSize > defaultMax) {
+                        stack.set(DataComponents.MAX_STACK_SIZE, stackSize);
+                }
+
                 applyCustomName(stack);
 
                 applyLore(stack);
@@ -710,9 +715,9 @@ public class ItemCreator extends CreativeSafetyModule {
                 String cleanId = enchantId.toLowerCase().replace(" ", "_");
                 if (!cleanId.contains(":"))
                         cleanId = "minecraft:" + cleanId;
-                String[] parts = cleanId.split(":");
-                if (parts.length < 2) return;
-                Identifier id = Identifier.fromNamespaceAndPath(parts[0], parts[1]);
+                int sep = cleanId.lastIndexOf(':');
+                if (sep <= 0 || sep >= cleanId.length() - 1) return;
+                Identifier id = Identifier.fromNamespaceAndPath(cleanId.substring(0, sep), cleanId.substring(sep + 1));
 
                 var key = net.minecraft.resources.ResourceKey.create(Registries.ENCHANTMENT, id);
                 var registry = mc.level.registryAccess().getOrThrow(Registries.ENCHANTMENT);

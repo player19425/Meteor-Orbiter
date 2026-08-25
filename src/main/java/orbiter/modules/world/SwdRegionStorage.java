@@ -22,6 +22,7 @@ public class SwdRegionStorage implements AutoCloseable {
     private final Path directory;
     private final RegionStorageInfo storageKey;
     private final Map<Long, RegionFile> regionCache = new HashMap<>();
+    private boolean closed;
 
     public SwdRegionStorage(Path directory, ResourceKey<Level> dimension) {
         this.directory = directory;
@@ -32,21 +33,26 @@ public class SwdRegionStorage implements AutoCloseable {
     }
 
     public void write(ChunkPos pos, CompoundTag nbt) throws IOException {
-        RegionFile rf = getOrOpenRegion(pos);
-        try (DataOutputStream out = rf.getChunkDataOutputStream(pos)) {
-            NbtIo.write(nbt, (DataOutput) out);
+        synchronized (this) {
+            RegionFile rf = getOrOpenRegion(pos);
+            try (DataOutputStream out = rf.getChunkDataOutputStream(pos)) {
+                NbtIo.write(nbt, (DataOutput) out);
+            }
         }
     }
 
     public CompoundTag read(ChunkPos pos) throws IOException {
-        RegionFile rf = getOrOpenRegion(pos);
-        try (DataInputStream in = rf.getChunkDataInputStream(pos)) {
-            if (in == null) return null;
-            return NbtIo.read((DataInput) in);
+        synchronized (this) {
+            RegionFile rf = getOrOpenRegion(pos);
+            try (DataInputStream in = rf.getChunkDataInputStream(pos)) {
+                if (in == null) return null;
+                return NbtIo.read((DataInput) in);
+            }
         }
     }
 
     private RegionFile getOrOpenRegion(ChunkPos pos) throws IOException {
+        if (closed) throw new IOException("Region storage is closed");
         long regionKey = packRegion(pos.getRegionX(), pos.getRegionZ());
         RegionFile rf = regionCache.get(regionKey);
         if (rf == null) {
@@ -60,14 +66,18 @@ public class SwdRegionStorage implements AutoCloseable {
     @Override
     public void close() throws IOException {
         IOException first = null;
-        for (RegionFile rf : regionCache.values()) {
-            try {
-                rf.close();
-            } catch (IOException e) {
-                if (first == null) first = e;
+        synchronized (this) {
+            if (closed) return;
+            closed = true;
+            for (RegionFile rf : regionCache.values()) {
+                try {
+                    rf.close();
+                } catch (IOException e) {
+                    if (first == null) first = e;
+                }
             }
+            regionCache.clear();
         }
-        regionCache.clear();
         if (first != null) throw first;
     }
 

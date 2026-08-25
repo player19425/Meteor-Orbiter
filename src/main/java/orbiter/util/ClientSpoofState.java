@@ -5,7 +5,6 @@ import meteordevelopment.meteorclient.systems.modules.Modules;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.network.chat.Component;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -17,17 +16,37 @@ public final class ClientSpoofState {
     private static final Map<ItemStack, Component> fakeNames = Collections.synchronizedMap(new IdentityHashMap<>());
     private static final Map<ItemStack, List<Component>> fakeLore = Collections.synchronizedMap(new IdentityHashMap<>());
 
+    private static ClientSideThings cachedModule;
+    private static final ThreadLocal<Integer> hudRenderDepth = ThreadLocal.withInitial(() -> 0);
+
     private ClientSpoofState() {
     }
 
     public static ClientSideThings module() {
-        Modules modules = Modules.get();
-        if (modules == null) return null;
+        ClientSideThings mod = cachedModule;
+        if (mod == null) {
+            Modules modules = Modules.get();
+            if (modules == null) return null;
 
-        ClientSideThings mod = modules.get(ClientSideThings.class);
-        if (mod == null || !mod.isActive()) return null;
+            mod = modules.get(ClientSideThings.class);
+            if (mod == null) return null;
 
-        return mod;
+            cachedModule = mod;
+        }
+
+        return mod.isActive() ? mod : null;
+    }
+
+    public static void pushHudRenderScope() {
+        hudRenderDepth.set(hudRenderDepth.get() + 1);
+    }
+
+    public static void popHudRenderScope() {
+        hudRenderDepth.set(Math.max(0, hudRenderDepth.get() - 1));
+    }
+
+    public static boolean isHudRenderScope() {
+        return hudRenderDepth.get() > 0;
     }
 
     public static void clearAll() {
@@ -36,39 +55,9 @@ public final class ClientSpoofState {
         fakeLore.clear();
     }
 
-    public static void setFakeCount(ItemStack stack, int count) {
-        if (stack == null || stack.isEmpty()) return;
-
-        if (count <= 0) fakeCounts.remove(stack);
-        else fakeCounts.put(stack, count);
-    }
-
-    public static int getFakeCount(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) return -1;
-        return fakeCounts.getOrDefault(stack, -1);
-    }
-
-    public static void setFakeName(ItemStack stack, Component name) {
-        if (stack == null || stack.isEmpty()) return;
-
-        if (name == null) fakeNames.remove(stack);
-        else fakeNames.put(stack, name);
-    }
-
     public static Component getFakeName(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return null;
         return fakeNames.get(stack);
-    }
-
-    public static void setFakeLore(ItemStack stack, List<Component> lore) {
-        if (stack == null || stack.isEmpty()) return;
-
-        if (lore == null || lore.isEmpty()) {
-            fakeLore.remove(stack);
-            return;
-        }
-
-        fakeLore.put(stack, new ArrayList<>(lore));
     }
 
     public static List<Component> getFakeLore(ItemStack stack) {

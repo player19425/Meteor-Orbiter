@@ -8,7 +8,9 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -190,8 +192,8 @@ public class TridentAssist extends Module {
 
     private final Setting<Double> tridentSpeed = sgPhysics.add(new DoubleSetting.Builder()
         .name("trident-speed")
-        .description("Initial trident speed. Vanilla: 2.0 * charge * 1.0 = 2.0 at full charge")
-        .defaultValue(2.0)
+        .description("Initial trident speed. Vanilla: 2.5 * charge = 2.5 at full charge")
+        .defaultValue(2.5)
         .min(0.5)
         .sliderRange(0.5, 5.0)
         .build()
@@ -293,6 +295,7 @@ public class TridentAssist extends Module {
         currentTarget = null;
         lastTargetSwitchTime = 0;
         trajectoryPoints.clear();
+        ComboTracker.clearAll();
         tickCounter = 0;
         attackCooldown = 0;
         currentCharge = 0;
@@ -358,7 +361,9 @@ public class TridentAssist extends Module {
 
         if (!canThrow) {
 
-            handleMeleeAttack(currentTarget);
+            if (meleeWhenClose.get() && distToTarget <= meleeRange.get()) {
+                handleMeleeAttack(currentTarget);
+            }
             return;
         }
 
@@ -393,7 +398,7 @@ public class TridentAssist extends Module {
 
         if (isDrawing && currentCharge >= minChargePercent.get().floatValue()) {
             switch (throwMode.get()) {
-                case Auto -> {
+                case Auto, AutoMelee -> {
                     if (currentCharge >= 0.95f) {
                         float yawDiff = Math.abs(Mth.wrapDegrees(solution.yaw - mc.player.getYRot()));
                         float pitchDiff = Math.abs(solution.pitch - mc.player.getXRot());
@@ -402,9 +407,6 @@ public class TridentAssist extends Module {
                             ComboTracker.registerHit(currentTarget.getUUID());
                         }
                     }
-                }
-                case AutoMelee -> {
-
                 }
                 case Manual -> {
 
@@ -559,21 +561,27 @@ public class TridentAssist extends Module {
         double horizontalDist = Math.sqrt(dx * dx + dz * dz);
 
         float yaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0f);
+        lastCalculatedYaw = yaw;
 
         double speed = tridentSpeed.get() * currentCharge;
         double g = tridentGravity.get();
         double v2 = speed * speed;
 
         float pitch;
-        double disc = v2 * v2 - g * (g * horizontalDist * horizontalDist + 2 * dy * v2);
+        if (g <= 1.0E-4 || horizontalDist <= 1.0E-4 || speed < 0.1) {
 
-        if (disc < 0 || speed < 0.1) {
             pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontalDist));
         } else {
-            double tanTheta = (v2 - Math.sqrt(disc)) / (g * horizontalDist);
-            pitch = (float) -Math.toDegrees(Math.atan(tanTheta));
+            double disc = v2 * v2 - g * (g * horizontalDist * horizontalDist + 2 * dy * v2);
+            if (disc < 0) {
 
-            pitch = refinePitchWithSimulation(origin, target, pitch, speed, g);
+                pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontalDist));
+            } else {
+                double tanTheta = (v2 - Math.sqrt(disc)) / (g * horizontalDist);
+                pitch = (float) -Math.toDegrees(Math.atan(tanTheta));
+
+                pitch = refinePitchWithSimulation(origin, target, pitch, speed, g);
+            }
         }
 
         return new AimSolution(yaw, pitch);
@@ -605,7 +613,7 @@ public class TridentAssist extends Module {
             double d = next.distanceToSqr(target);
             if (d < bestDist) bestDist = d;
             pos = next;
-            vel = vel.scale(tridentDrag.get());
+            vel = vel.scale(getDragAt(pos));
             vel = vel.add(0, -g, 0);
             if (pos.y < mc.level.getMinY() - 4) break;
         }
@@ -636,10 +644,17 @@ public class TridentAssist extends Module {
 
             out.add(next);
             pos = next;
-            vel = vel.scale(tridentDrag.get());
+            vel = vel.scale(getDragAt(pos));
             vel = vel.add(0, -g, 0);
             if (pos.y < mc.level.getMinY() - 4) break;
         }
+    }
+
+    private double getDragAt(Vec3 pos) {
+        if (waterNoDrag.get() && mc.level.getFluidState(BlockPos.containing(pos.x, pos.y, pos.z)).is(FluidTags.WATER)) {
+            return 1.0;
+        }
+        return tridentDrag.get();
     }
 
     private void applyAim(float targetYaw, float targetPitch) {

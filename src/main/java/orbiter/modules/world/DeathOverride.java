@@ -2,6 +2,8 @@ package orbiter.modules.world;
 
 import orbiter.Orbiter;
 import orbiter.modules.CreativeSafetyModule;
+import meteordevelopment.meteorclient.events.game.GameJoinedEvent;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.events.game.OpenScreenEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
@@ -126,6 +128,24 @@ public class DeathOverride extends CreativeSafetyModule {
     @EventHandler
     private void onOpenScreen(OpenScreenEvent event) {
         if (engaged && event.screen instanceof DeathScreen) event.cancel();
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        resetEngageState();
+    }
+
+    @EventHandler
+    private void onGameJoined(GameJoinedEvent event) {
+        resetEngageState();
+    }
+
+    private void resetEngageState() {
+        engaged = false;
+        freecamStartedByUs = false;
+        savedShowDeathScreen = null;
+        wasDead = false;
+        spamCounter = 0;
     }
 
     @EventHandler

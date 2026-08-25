@@ -136,10 +136,10 @@ public class NoFriendHit extends Module {
         Field typeField = getPacketTypeField();
         if (typeField != null) {
             try {
-                Object type = typeField.get(packet);
-                if (type != null) {
-                    String name = type.getClass().getSimpleName().toLowerCase();
-                    if (name.contains("attack")) return true;
+                Object action = typeField.get(packet);
+                if (action != null) {
+                    if (isAttackAction(action)) return true;
+                    String name = action.getClass().getSimpleName().toLowerCase();
                     if (name.contains("interact")) return false;
                 }
             } catch (Throwable ignored) {
@@ -149,9 +149,25 @@ public class NoFriendHit extends Module {
         return mc.options != null && mc.options.keyAttack != null && mc.options.keyAttack.isDown();
     }
 
+    private boolean isAttackAction(Object action) {
+        try {
+            Class<?> attackClass = Class.forName(ServerboundInteractPacket.class.getName() + "$AttackAction");
+            if (attackClass.isInstance(action)) return true;
+        } catch (Throwable ignored) {
+        }
+        return action.getClass().getSimpleName().toLowerCase().contains("attack");
+    }
+
     private Field getPacketTypeField() {
         if (packetTypeLookupFailed) return null;
         if (packetTypeField != null) return packetTypeField;
+
+        try {
+            packetTypeField = ServerboundInteractPacket.class.getDeclaredField("action");
+            packetTypeField.setAccessible(true);
+            return packetTypeField;
+        } catch (Throwable ignored) {
+        }
 
         try {
             packetTypeField = ServerboundInteractPacket.class.getDeclaredField("type");

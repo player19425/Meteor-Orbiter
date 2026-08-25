@@ -27,7 +27,8 @@ public abstract class InGameHudHotbarMixin {
                 ItemStack out = spoof.copy();
                 int fallback = stack.isEmpty() ? out.getCount() : stack.getCount();
                 int fake = module.getHotbarSpoofCount(slot, fallback);
-                out.setCount(Math.min(module.getMaxFakeHotbarCount(), Math.max(1, fake)));
+                int allowed = out.getMaxStackSize() <= 1 ? 1 : module.getMaxFakeHotbarCount();
+                out.setCount(Math.min(allowed, Math.max(1, fake)));
                 render = out;
             }
         }

@@ -9,6 +9,7 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.core.BlockPos;
@@ -126,6 +127,7 @@ public class ViewBlocks extends Module {
         }
     }
 
+    private static final int POOL_MAX = 8192;
     private final LinkedBlockingQueue<FoundBlock> pool = new LinkedBlockingQueue<>();
     private final List<FoundBlock> activeBlocks = new ArrayList<>();
     private final Map<Long, FoundBlock> posMap = new HashMap<>();
@@ -135,6 +137,7 @@ public class ViewBlocks extends Module {
     private int scanChunkX = 0, scanChunkZ = 0;
     private int scanMaxChunkX = 0, scanMaxChunkZ = 0;
     private boolean scanActive = false;
+    private ClientLevel lastLevel = null;
 
     private int lastScanChunks = 0;
     private int lastScanMatched = 0;
@@ -190,6 +193,11 @@ public class ViewBlocks extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null) return;
 
+        if (mc.level != lastLevel) {
+            lastLevel = mc.level;
+            reset();
+        }
+
         scanTickCounter++;
         if (scanTickCounter < scanInterval.get()) return;
         scanTickCounter = 0;
@@ -217,7 +225,7 @@ public class ViewBlocks extends Module {
             if (dx * dx + dy * dy + dz * dz > rSq) {
                 posMap.remove(packPos(fb.pos));
                 it.remove();
-                pool.offer(fb);
+                if (pool.size() < POOL_MAX) pool.offer(fb);
             }
         }
 
@@ -232,8 +240,6 @@ public class ViewBlocks extends Module {
 
                     if (globalScanTick % 20 != 0) continue;
                 }
-                scannedChunks.add(chunkLong);
-                chunkCount++;
 
                 ChunkAccess chunk = mc.level.getChunk(chunkX, chunkZ);
                 LevelChunkSection[] sections = chunk.getSections();
@@ -284,6 +290,10 @@ public class ViewBlocks extends Module {
                         if (scanned >= budget) break;
                     }
                     if (scanned >= budget) break;
+                }
+                if (scanned < budget) {
+                    scannedChunks.add(chunkLong);
+                    chunkCount++;
                 }
                 if (scanned >= budget) break;
             }

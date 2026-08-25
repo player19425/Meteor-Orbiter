@@ -176,9 +176,16 @@ public class BossbarFlash extends CreativeSafetyModule {
             return;
         tickCounter = 0;
 
-        if (createdBars.length != Math.max(1, maxBars.get())) {
-            createdBars = new boolean[Math.max(1, maxBars.get())];
-            states = new BossbarState[createdBars.length];
+        int slotCount = Math.max(1, maxBars.get());
+        if (createdBars.length != slotCount) {
+            if (createdBars.length > slotCount) {
+                for (int i = slotCount; i < createdBars.length; i++) {
+                    if (!createdBars[i]) continue;
+                    mc.player.connection.sendCommand(CommandUtils.vanilla("bossbar remove orbiter:bar_" + i));
+                }
+            }
+            createdBars = new boolean[slotCount];
+            states = new BossbarState[slotCount];
         }
 
         for (int i = 0; i < barsPerTick.get(); i++) {

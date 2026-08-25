@@ -86,7 +86,7 @@ public abstract class CreativeSafetyModule extends Module {
     private void releaseFeedback(boolean restore) {
         if (!feedbackSuppressedByMe) return;
         feedbackSuppressedByMe = false;
-        if (restore && FEEDBACK_USERS.decrementAndGet() == 0) sendFeedbackGamerule(true);
+        if (FEEDBACK_USERS.decrementAndGet() <= 0 && restore) sendFeedbackGamerule(true);
     }
 
     private boolean hasGameruleCommand() {

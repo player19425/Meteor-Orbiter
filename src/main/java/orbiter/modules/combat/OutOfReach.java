@@ -369,7 +369,7 @@ public class OutOfReach extends Module {
     private ThreatData buildThreatData(Player player) {
         if (mc.player == null || mc.level == null || !isValidCandidate(player)) return null;
 
-        double distance = mc.player.distanceTo(player);
+        double distance = mc.player.getEyePosition().distanceTo(player.getBoundingBox().getCenter());
         double baseReach = getReachFor(player);
         if (baseReach <= 0.0) return null;
 
@@ -500,10 +500,11 @@ public class OutOfReach extends Module {
         if (mc.getConnection() != null) {
             int packets = Math.max(1, burstPackets.get());
             for (int i = 1; i <= packets; i++) {
+                double t = (double) i / packets;
                 mc.getConnection().send(new ServerboundMovePlayerPacket.Pos(
-                    dstX,
-                    dstY,
-                    dstZ,
+                    mc.player.getX() + (dstX - mc.player.getX()) * t,
+                    mc.player.getY() + (dstY - mc.player.getY()) * t,
+                    mc.player.getZ() + (dstZ - mc.player.getZ()) * t,
                     mc.player.onGround(),
                     mc.player.horizontalCollision
                 ));

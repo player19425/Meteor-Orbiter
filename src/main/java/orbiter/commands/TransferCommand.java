@@ -30,14 +30,30 @@ public class TransferCommand extends Command {
 
                 String host = ip;
                 int port = 25565;
-                int colonIdx = ip.lastIndexOf(':');
-                if (colonIdx != -1) {
-                    try {
-                        port = Integer.parseInt(ip.substring(colonIdx + 1).trim());
+
+                if (ip.startsWith("[")) {
+                    int closeIdx = ip.indexOf(']');
+                    if (closeIdx == -1) {
+                        error("Invalid server IP.");
+                        return SINGLE_SUCCESS;
+                    }
+                    host = ip.substring(1, closeIdx);
+                    String rest = ip.substring(closeIdx + 1);
+                    if (rest.startsWith(":")) {
+                        Integer parsed = parsePort(rest.substring(1).trim());
+                        if (parsed == null) return SINGLE_SUCCESS;
+                        port = parsed;
+                    }
+                } else {
+                    int colonIdx = ip.lastIndexOf(':');
+                    if (colonIdx != -1 && colonIdx == ip.indexOf(':')) {
                         host = ip.substring(0, colonIdx).trim();
-                    } catch (NumberFormatException ignored) {
+                        Integer parsed = parsePort(ip.substring(colonIdx + 1).trim());
+                        if (parsed == null) return SINGLE_SUCCESS;
+                        port = parsed;
                     }
                 }
+
                 if (host.isEmpty()) {
                     error("Invalid server IP.");
                     return SINGLE_SUCCESS;
@@ -54,5 +70,20 @@ public class TransferCommand extends Command {
             info("Example: .transfer localhost:25566");
             return SINGLE_SUCCESS;
         });
+    }
+
+    private Integer parsePort(String value) {
+        int parsed;
+        try {
+            parsed = Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            error("Invalid port '" + value + "'.");
+            return null;
+        }
+        if (parsed < 0 || parsed > 65535) {
+            error("Port must be between 0 and 65535.");
+            return null;
+        }
+        return parsed;
     }
 }

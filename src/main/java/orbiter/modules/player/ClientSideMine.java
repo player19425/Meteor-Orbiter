@@ -92,11 +92,16 @@ public class ClientSideMine extends Module {
 
         BlockState state = mc.level.getBlockState(event.blockPos);
         if (state.isAir()) return;
-        originalStates.put(event.blockPos.immutable(), state);
+
+        boolean anyMitigation = antiRubberBand.get() || blockServerUpdates.get();
+
+        if (anyMitigation && originalStates.size() < 8192) {
+            originalStates.put(event.blockPos.immutable(), state);
+        }
 
         mc.level.setBlock(event.blockPos, Blocks.AIR.defaultBlockState(), 3);
 
-        if (antiRubberBand.get() || blockServerUpdates.get()) {
+        if (anyMitigation) {
             BlockPos immutable = event.blockPos.immutable();
             clientMinedBlocks.add(immutable);
 

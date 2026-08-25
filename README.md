@@ -4,7 +4,7 @@
   <p>An addon for <a href="https://meteorclient.com/">Meteor Client</a> that adds 60+ modules, custom commands, and HUD elements for anarchy, griefing, and quality of life.</p>
 
   
-  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.2-orange" alt="Version"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.5-orange" alt="Version"></a>
   <img src="https://img.shields.io/badge/Minecraft-26.2-blue" alt="Minecraft version">
   <img src="https://img.shields.io/badge/Java-25-green" alt="Java version">
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/github/downloads/player19425/Meteor-Orbiter/total" alt="Downloads"></a>
@@ -21,14 +21,12 @@
 
 Orbiter is a collection of modules and tools for [Meteor Client](https://meteorclient.com/), originally built for survival, anarchy, and creative/OP.
 
-Everything is organized into four in-game categories:
+Everything is organized into five in-game categories:
 
 - **Orbiter Survival** • general purpose and anti-abuse modules
 - **Orbiter Vanilla** • modules that only use vanilla mechanics
 - **Orbiter Creative/OP** • modules that require Creative mode or operator permissions
-- **Orbiter Stupid** • joke / experimental modules
-- **Orbiter W.I.P** • work-in-progress modules (enable them in Meteor Config → Orbiter)
-
+- **Orbiter Stupid** • joke / experimental modules (Enable in Meteor Client settings)
 # Requirements
 
 - [Java](https://adoptium.net/temurin/releases) 25 or higher
@@ -41,6 +39,8 @@ Everything is organized into four in-game categories:
 2. Put the `.jar` in your `.minecraft/mods` folder. (varies depending on launcher)
 3. Launch the game with Fabric and Meteor Client installed.
 4. It should be properly installed by now.
+
+Orbiter can also keep itself up to date: when you join a server or world it checks for a new release and shows you an in-game popup with update / ignore / changelog options, and it can even download and install the new jar for you if you turn that on. Everything lives in Meteor Config → Orbiter, and both toggles are yours to flip (the popup is on by default).
 
 # Modules:
 
@@ -150,9 +150,9 @@ All assists support selecting which entity types to target (players, armor stand
 | `.setprefix` | Sets Meteor's chat command prefix. | |
 | `.tntrain` | Triggers TNT rain with specified parameters. | |
 | `.transfer` | Transfer to another server without disconnecting. | |
-| `.uuidban` | Ban a player by summoning a UUID entity. | |
-| `.verify-protect` | Tests ServerProtect crash-item detection against known payloads. | |
-| `.we` | Expanded WorldEdit commands with dynamic autocomplete. | `worldedit` |
+| `.uuidban` | Ban a player by summoning a UUID entity. (W.I.P) | |
+| `.verify-protect` | Tests ServerProtect crash item detection against known payloads. | |
+| `.we` | A worldedit clone but it uses /fill. | `worldedit` |
 
 # HUD:
 

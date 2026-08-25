@@ -71,7 +71,10 @@ public class Restock extends Module {
         .defaultValue(true)
         .build());
 
+    private static final int MAX_MOVE_ATTEMPTS = 5;
+
     private int timer = 0;
+    private int failedMoveAttempts = 0;
 
     public Restock() {
         super(Orbiter.CATEGORY, "restock", "Auto-restocks your hotbar.");
@@ -80,6 +83,7 @@ public class Restock extends Module {
     @Override
     public void onActivate() {
         timer = 0;
+        failedMoveAttempts = 0;
     }
 
     @EventHandler
@@ -100,6 +104,13 @@ public class Restock extends Module {
             return;
         }
 
+        if (failedMoveAttempts >= MAX_MOVE_ATTEMPTS) {
+            warning("Restock: giving up after " + MAX_MOVE_ATTEMPTS + " failed move attempts.");
+            failedMoveAttempts = 0;
+            timer = Math.max(tickDelay.get(), 40);
+            return;
+        }
+
         for (int hotbarIndex = 0; hotbarIndex < 9; hotbarIndex++) {
             ItemStack hotbarStack = playerInv.getItem(hotbarIndex);
             boolean needsRestock = hotbarStack.isEmpty()
@@ -114,9 +125,13 @@ public class Restock extends Module {
 
             if (inventoryFirst.get() && wanted != null) {
                 int playerSlotId = findMatchingPlayerInventorySlot(handler, playerInv, wanted);
-                if (playerSlotId != -1 && moveStackByPickup(handler.containerId, playerSlotId, hotbarSlotId)) {
-                    timer = tickDelay.get();
-                    return;
+                if (playerSlotId != -1) {
+                    if (moveStackByPickup(handler.containerId, playerSlotId, hotbarSlotId)) {
+                        failedMoveAttempts = 0;
+                        timer = tickDelay.get();
+                        return;
+                    }
+                    failedMoveAttempts++;
                 }
             }
 
@@ -130,32 +145,38 @@ public class Restock extends Module {
             }
 
             if (moveStackByPickup(handler.containerId, containerSlotId, hotbarSlotId)) {
+                failedMoveAttempts = 0;
                 timer = tickDelay.get();
                 return;
             }
+            failedMoveAttempts++;
         }
     }
 
     private int findHandlerSlotForHotbar(AbstractContainerMenu handler, int hotbarIndex, Inventory playerInv) {
-        for (Slot slot : handler.slots) {
-            if (slot.container == playerInv && slot.index == hotbarIndex) return slot.index;
+        for (int i = 0; i < handler.slots.size(); i++) {
+            Slot slot = handler.slots.get(i);
+            if (slot.container == playerInv && slot.getContainerSlot() == hotbarIndex) return i;
         }
         return -1;
     }
 
     private int findMatchingPlayerInventorySlot(AbstractContainerMenu handler, Inventory playerInv, Item wanted) {
-        for (Slot slot : handler.slots) {
+        for (int i = 0; i < handler.slots.size(); i++) {
+            Slot slot = handler.slots.get(i);
             if (slot.container != playerInv) continue;
-            if (slot.index < 9 || slot.index >= 36) continue;
+            int containerSlot = slot.getContainerSlot();
+            if (containerSlot < 9 || containerSlot >= 36) continue;
             if (!slot.hasItem()) continue;
             if (!slot.getItem().is(wanted)) continue;
-            return slot.index;
+            return i;
         }
         return -1;
     }
 
     private int findMatchingContainerSlot(AbstractContainerMenu handler, Inventory playerInv, Item wanted) {
-        for (Slot slot : handler.slots) {
+        for (int i = 0; i < handler.slots.size(); i++) {
+            Slot slot = handler.slots.get(i);
             if (slot.container == playerInv) continue;
             if (!slot.hasItem()) continue;
 
@@ -164,7 +185,7 @@ public class Restock extends Module {
             if (!passesFilter(stack.getItem())) continue;
             if (wanted != null && stack.getItem() != wanted) continue;
 
-            return slot.index;
+            return i;
         }
         return -1;
     }
@@ -183,6 +204,9 @@ public class Restock extends Module {
     private boolean moveStackByPickup(int syncId, int fromSlot, int toSlot) {
         if (mc.player == null || mc.gameMode == null) return false;
 
+        ItemStack before = mc.player.containerMenu.getSlot(toSlot).getItem().copy();
+        int beforeCount = before.getCount();
+
         mc.gameMode.handleContainerInput(syncId, fromSlot, 0, ContainerInput.PICKUP, mc.player);
         mc.gameMode.handleContainerInput(syncId, toSlot, 0, ContainerInput.PICKUP, mc.player);
 
@@ -190,6 +214,7 @@ public class Restock extends Module {
             mc.gameMode.handleContainerInput(syncId, fromSlot, 0, ContainerInput.PICKUP, mc.player);
         }
 
-        return true;
+        ItemStack after = mc.player.containerMenu.getSlot(toSlot).getItem();
+        return after.getCount() > beforeCount || (before.isEmpty() && !after.isEmpty());
     }
 }

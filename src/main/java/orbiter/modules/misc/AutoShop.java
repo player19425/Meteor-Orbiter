@@ -42,6 +42,8 @@ public class AutoShop extends Module {
     private static final int DEPOSIT = 102;
     private static final int WAIT_GROUND_PICKUP = 103;
 
+    private static final int GROUND_PICKUP_TIMEOUT_TICKS = 1200;
+
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgShop = settings.createGroup("Shop Navigation");
     private final SettingGroup sgSafety = settings.createGroup("Safety");
@@ -378,6 +380,7 @@ public class AutoShop extends Module {
         }
 
         if (--timeout <= 0) {
+            if (mc.gui.screen() instanceof AbstractContainerScreen<?>) mc.player.closeContainer();
 
             if (getTargetItemCount() > 0) {
                 state = FIND_CHEST;
@@ -385,7 +388,6 @@ public class AutoShop extends Module {
                 state = WAIT_GROUND_PICKUP;
             } else {
                 warning("Purchase was not confirmed by the server; retrying.");
-                if (mc.gui.screen() instanceof AbstractContainerScreen<?>) mc.player.closeContainer();
                 state = START;
             }
             tickWaiter = normalDelay.get();
@@ -593,6 +595,12 @@ public class AutoShop extends Module {
 
         if (++groundWaitTicks % 240 == 0) {
             warning("Waiting to pick up dropped items; move closer if they are out of reach.");
+        }
+
+        if (groundWaitTicks >= GROUND_PICKUP_TIMEOUT_TICKS) {
+            warning("Timed out waiting for dropped items to be picked up. Stopping.");
+            toggle();
+            return;
         }
         tickWaiter = 2;
     }

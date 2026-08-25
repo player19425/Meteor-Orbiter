@@ -24,6 +24,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.network.protocol.game.ClientboundUpdateAdvancementsPacket;
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
@@ -53,6 +54,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class WorldDownloader extends Module {
 
@@ -197,6 +199,15 @@ public class WorldDownloader extends Module {
     private int entityScanCounter = 0;
     private int fullSweepCounter = 0;
     private int lastContainerOpenTick = 0;
+    private final ConcurrentLinkedQueue<Long> queuedChunkSaves = new ConcurrentLinkedQueue<>();
+    private long detectScanCursor = 0;
+    private BlockPos pendingDetectPos = null;
+    private int detectPendingTicks = 0;
+    private boolean suppressAutoMark = false;
+
+    private static final int MAX_QUEUED_CHUNK_SAVES = 512;
+    private static final int DETECT_SCAN_BUDGET = 512;
+    private static final int DETECT_OPEN_TIMEOUT_TICKS = 10;
 
     private final Set<Long> dirtyChunks = ConcurrentHashMap.newKeySet();
 
@@ -220,6 +231,11 @@ public class WorldDownloader extends Module {
         interactedEntities.clear();
         openedContainers.clear();
         dirtyChunks.clear();
+        queuedChunkSaves.clear();
+        pendingDetectPos = null;
+        detectPendingTicks = 0;
+        detectScanCursor = 0;
+        suppressAutoMark = false;
         saveTickCounter = 0;
         detectTickCounter = 0;
         entityScanCounter = 0;
@@ -232,6 +248,7 @@ public class WorldDownloader extends Module {
     public void onDeactivate() {
         if (saveManager != null) {
             if (mc.player != null) saveManager.savePlayerInventory(mc.player.getUUID(), mc.player.getInventory());
+            saveManager.drainWriteErrors();
             saveManager.close();
             saveManager = null;
         }
@@ -239,6 +256,10 @@ public class WorldDownloader extends Module {
         interactedEntities.clear();
         openedContainers.clear();
         dirtyChunks.clear();
+        queuedChunkSaves.clear();
+        pendingDetectPos = null;
+        detectPendingTicks = 0;
+        suppressAutoMark = false;
     }
 
     @EventHandler
@@ -271,17 +292,36 @@ public class WorldDownloader extends Module {
     private void onTick(TickEvent.Post event) {
         if (saveManager == null || !saveManager.isSaving || mc.player == null || mc.level == null) return;
 
+        drainQueuedChunkSaves();
+
         saveTickCounter++;
         if (saveTickCounter >= saveIntervalTicks.get()) {
             saveTickCounter = 0;
+            saveManager.drainWriteErrors();
             saveChunksAround();
         }
 
         if (detectMode.get() == DetectMode.DetectAll) {
-            detectTickCounter++;
-            if (detectTickCounter >= detectIntervalTicks.get()) {
-                detectTickCounter = 0;
-                scanAndOpenNearbyContainers();
+            if (pendingDetectPos != null) {
+                if (mc.gui.screen() instanceof AbstractContainerScreen<?>) {
+                    openedContainers.add(pendingDetectPos);
+                    pendingDetectPos = null;
+                    detectPendingTicks = 0;
+                    if (mc.player != null) mc.player.closeContainer();
+                } else if (++detectPendingTicks >= DETECT_OPEN_TIMEOUT_TICKS) {
+                    if (lastClicked == pendingDetectPos) {
+                        lastClicked = null;
+                        saveManager.lastClicked = null;
+                    }
+                    pendingDetectPos = null;
+                    detectPendingTicks = 0;
+                }
+            } else {
+                detectTickCounter++;
+                if (detectTickCounter >= detectIntervalTicks.get()) {
+                    detectTickCounter = 0;
+                    scanAndOpenNearbyContainers();
+                }
             }
         }
 
@@ -297,38 +337,46 @@ public class WorldDownloader extends Module {
     private void scanAndOpenNearbyContainers() {
         if (mc.player == null || mc.level == null || mc.gameMode == null) return;
         if (mc.gui.screen() != null) return;
-
         if (lastContainerOpenTick > 0 && mc.player.tickCount - lastContainerOpenTick < 20) return;
 
         BlockPos center = mc.player.blockPosition();
         int r = detectRadius.get();
+        int size = 2 * r + 1;
+        long total = (long) size * size * size;
+        int examined = 0;
 
-        int blockBudget = 512;
+        for (; examined < DETECT_SCAN_BUDGET && examined < total; examined++) {
+            long idx = (detectScanCursor + examined) % total;
+            int dx = (int) (idx % size) - r;
+            int dy = (int) ((idx / size) % size) - r;
+            int dz = (int) (idx / ((long) size * size)) - r;
 
-        for (int x = -r; x <= r; x++) {
-            for (int y = -r; y <= r; y++) {
-                for (int z = -r; z <= r; z++) {
-                    if (--blockBudget < 0) return;
-                    BlockPos pos = center.offset(x, y, z);
-                    if (openedContainers.contains(pos)) continue;
+            BlockPos pos = center.offset(dx, dy, dz);
+            if (openedContainers.contains(pos)) continue;
 
-                    BlockState state = mc.level.getBlockState(pos);
-                    if (!isContainerBlock(state)) continue;
+            BlockState state = mc.level.getBlockState(pos);
+            if (!isContainerBlock(state)) continue;
 
-                    BlockEntity be = mc.level.getBlockEntity(pos);
-                    if (!(be instanceof Container)) continue;
+            BlockEntity be = mc.level.getBlockEntity(pos);
+            if (!(be instanceof Container)) continue;
 
-                    openedContainers.add(pos);
-                    lastClicked = pos;
-                    saveManager.lastClicked = pos;
-                    lastContainerOpenTick = mc.player.tickCount;
-                    BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false);
-                    mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
-                    if (mc.player != null) mc.player.closeContainer();
-                    return;
-                }
+            pendingDetectPos = pos;
+            detectPendingTicks = 0;
+            lastClicked = pos;
+            saveManager.lastClicked = pos;
+            lastContainerOpenTick = mc.player.tickCount;
+            BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false);
+            suppressAutoMark = true;
+            try {
+                mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
+            } finally {
+                suppressAutoMark = false;
             }
+            examined++;
+            break;
         }
+
+        detectScanCursor = (detectScanCursor + Math.max(examined, 1)) % total;
     }
 
     private boolean isContainerBlock(BlockState state) {
@@ -425,16 +473,33 @@ public class WorldDownloader extends Module {
         }
     }
 
+    private void enqueueChunkSave(int x, int z) {
+        long key = ChunkPos.pack(x, z);
+        while (queuedChunkSaves.size() >= MAX_QUEUED_CHUNK_SAVES) queuedChunkSaves.poll();
+        queuedChunkSaves.offer(key);
+    }
+
+    private void drainQueuedChunkSaves() {
+        if (mc.level == null || saveManager == null) {
+            queuedChunkSaves.clear();
+            return;
+        }
+        Long key;
+        while ((key = queuedChunkSaves.poll()) != null) {
+            LevelChunk chunk = mc.level.getChunkSource().getChunk(ChunkPos.getX(key), ChunkPos.getZ(key), false);
+            if (chunk != null) {
+                saveManager.saveChunk(chunk);
+                dirtyChunks.add(chunk.getPos().pack());
+            }
+        }
+    }
+
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
         if (saveManager == null || !saveManager.isSaving) return;
         if (event.packet instanceof ClientboundLevelChunkWithLightPacket packet) {
 
-            LevelChunk chunk = mc.level != null ? mc.level.getChunk(packet.getX(), packet.getZ()) : null;
-            if (chunk != null) {
-                saveManager.saveChunk(chunk);
-                dirtyChunks.add(chunk.getPos().pack());
-            }
+            enqueueChunkSave(packet.getX(), packet.getZ());
         } else if (event.packet instanceof ClientboundBlockUpdatePacket packet) {
 
             if (mc.level != null && saveOnlyChanged.get()) {
@@ -469,7 +534,7 @@ public class WorldDownloader extends Module {
             BlockPos pos = blockPacket.getHitResult().getBlockPos();
             lastClicked = pos;
             saveManager.lastClicked = pos;
-            openedContainers.add(pos);
+            if (!suppressAutoMark) openedContainers.add(pos);
         }
     }
 
@@ -499,7 +564,8 @@ public class WorldDownloader extends Module {
                 CompoundTag overlay = new CompoundTag();
                 MerchantOffers offers = capturedMerchant.getOffers();
                 if (!offers.isEmpty()) {
-                    MerchantOffers.CODEC.encodeStart(NbtOps.INSTANCE, offers)
+                    RegistryOps<net.minecraft.nbt.Tag> ops = RegistryOps.create(NbtOps.INSTANCE, mc.level.registryAccess());
+                    MerchantOffers.CODEC.encodeStart(ops, offers)
                         .result().ifPresent(t -> overlay.put("Offers", t));
                 }
                 overlay.putInt("Xp", capturedMerchant.getTraderXp());

@@ -30,6 +30,7 @@
     "ClientTickRateMixin",
     "BossBarSpoofMixin",
     "ClientUseCooldownMixin",
+    "BossHealthOverlayMixin",
     "CameraPositionSpoofMixin",
     "EntityRenderPositionSpoofMixin",
     "WorldSkySpoofMixin",

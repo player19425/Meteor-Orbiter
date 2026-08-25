@@ -6,9 +6,9 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.events.game.GameLeftEvent;
+import meteordevelopment.meteorclient.events.game.OpenScreenEvent;
 import meteordevelopment.meteorclient.events.entity.player.BreakBlockEvent;
 import meteordevelopment.meteorclient.events.entity.player.PickItemsEvent;
-import meteordevelopment.meteorclient.events.entity.player.InteractBlockEvent;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -69,6 +69,7 @@ import java.util.concurrent.*;
 import java.util.regex.Pattern;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class Actions extends Module {
 
@@ -390,6 +391,18 @@ public class Actions extends Module {
     private final Queue<DelayedAction> delayedActions = new ConcurrentLinkedQueue<>();
     private final Queue<ScheduledAction> scheduledActions = new ConcurrentLinkedQueue<>();
     private boolean pendingRespawn = false;
+    private boolean playerRangeLatched = false;
+    private boolean entityNearLatched = false;
+    private boolean heldItemLatched = false;
+    private boolean lowMaterialLatched = false;
+    private boolean lagLatched = false;
+    private boolean durabilityLatched = false;
+    private boolean timeInWorldFiredOnce = false;
+    private boolean velocityLatched = false;
+    private boolean nearbyItemLatched = false;
+    private boolean pendingWorldInit = false;
+    private long lastBlockPlaceTick = -1;
+    private static final int REPEAT_COUNT_CAP = 1000;
 
     private static class DelayedAction {
         final String action;
@@ -427,6 +440,17 @@ public class Actions extends Module {
         lastFireTime = 0;
         lastTargetUuid = null;
         lastCombo = 0;
+        playerRangeLatched = false;
+        entityNearLatched = false;
+        heldItemLatched = false;
+        lowMaterialLatched = false;
+        lagLatched = false;
+        durabilityLatched = false;
+        timeInWorldFiredOnce = false;
+        velocityLatched = false;
+        nearbyItemLatched = false;
+        pendingWorldInit = false;
+        lastBlockPlaceTick = -1;
 
         armorSlotFilled.clear();
         if (mc.player != null) {
@@ -460,6 +484,25 @@ public class Actions extends Module {
         if (mc.player == null || mc.level == null) return;
         currentTick++;
 
+        if (pendingWorldInit) {
+            pendingWorldInit = false;
+            lastHealth = mc.player.getHealth();
+            lastXPLevel = mc.player.experienceLevel;
+            wasRaining = mc.level.isRaining();
+            lastDimension = mc.level.dimension();
+            lastPosition = mc.player.getEyePosition();
+
+            armorSlotFilled.clear();
+            for (EquipmentSlot slot : EquipmentSlot.values()) {
+                armorSlotFilled.put(slot, !mc.player.getItemBySlot(slot).isEmpty());
+            }
+
+            activeEffects.clear();
+            for (MobEffectInstance effect : mc.player.getActiveEffects()) {
+                activeEffects.add(effect.getEffect());
+            }
+        }
+
         long now = System.currentTimeMillis();
         while (!delayedActions.isEmpty()) {
             DelayedAction da = delayedActions.peek();
@@ -489,9 +532,13 @@ public class Actions extends Module {
 
         checkEntityNearTrigger();
 
+        checkNearbyPlayerItem();
+
         checkHeldItemTrigger();
 
         checkLowMaterialTrigger();
+
+        trackVelocity();
 
         checkLagTrigger();
 
@@ -604,10 +651,6 @@ public class Actions extends Module {
         }
 
         if (event.packet instanceof ClientboundRespawnPacket) {
-
-            if (onDimensionChangeEnabled.get() && lastDimension != null) {
-                fire(onDimensionChangeAction.get());
-            }
             if (wasDead && onRespawnEnabled.get()) {
                 pendingRespawn = true;
             }
@@ -641,7 +684,8 @@ public class Actions extends Module {
         if (mc.player == null) return;
 
         if (event.packet instanceof ServerboundUseItemOnPacket) {
-            if (onBlockPlaceEnabled.get()) {
+            if (onBlockPlaceEnabled.get() && currentTick != lastBlockPlaceTick) {
+                lastBlockPlaceTick = currentTick;
                 fire(onBlockPlaceAction.get());
             }
         }
@@ -672,9 +716,13 @@ public class Actions extends Module {
     }
 
     @EventHandler
-    private void onInteractBlock(InteractBlockEvent event) {
-        if (onBlockPlaceEnabled.get()) {
-            fire(onBlockPlaceAction.get());
+    private void onOpenScreen(OpenScreenEvent event) {
+        if (!onScreenOpenEnabled.get()) return;
+        Screen screen = event.screen;
+        String name = screen != null ? screen.getClass().getSimpleName() : "";
+        String filter = onScreenOpenFilter.get();
+        if (filter == null || filter.isEmpty() || name.toLowerCase().contains(filter.toLowerCase())) {
+            fire(onScreenOpenAction.get());
         }
     }
 
@@ -685,9 +733,8 @@ public class Actions extends Module {
             if (filter == null || filter.isEmpty()) {
                 fire(pickupAction.get());
             } else {
-
-                ItemStack mainHand = mc.player.getMainHandItem();
-                if (mainHand != null && !mainHand.isEmpty() && mainHand.getItemName().getString().toLowerCase().contains(filter.toLowerCase())) {
+                ItemStack picked = event.itemStack;
+                if (picked != null && !picked.isEmpty() && picked.getItemName().getString().toLowerCase().contains(filter.toLowerCase())) {
                     fire(pickupAction.get());
                 }
             }
@@ -696,9 +743,39 @@ public class Actions extends Module {
 
     @EventHandler
     private void onGameLeft(GameLeftEvent event) {
-
         delayedActions.clear();
         scheduledActions.clear();
+
+        currentTick = 0;
+        joinTick = 0;
+        lastFireTime = 0;
+        lastHealth = 20.0f;
+        lastXPLevel = 0;
+        wasDead = false;
+        pendingRespawn = false;
+        wasRaining = false;
+        lastDimension = null;
+        lastPosition = Vec3.ZERO;
+        accumulatedDistance = 0.0;
+        lastTargetUuid = null;
+        lastCombo = 0;
+
+        armorSlotFilled.clear();
+        activeEffects.clear();
+        thrownPearls.clear();
+        tickTimestamps.clear();
+
+        playerRangeLatched = false;
+        entityNearLatched = false;
+        heldItemLatched = false;
+        lowMaterialLatched = false;
+        lagLatched = false;
+        durabilityLatched = false;
+        timeInWorldFiredOnce = false;
+        velocityLatched = false;
+        nearbyItemLatched = false;
+        pendingWorldInit = true;
+        lastBlockPlaceTick = -1;
     }
 
     private void checkHealthTrigger() {
@@ -714,88 +791,110 @@ public class Actions extends Module {
     }
 
     private void checkDurabilityTrigger() {
-        if (!durabilityEnabled.get() || durabilityAction.get().isEmpty()) return;
-        for (EquipmentSlot slot : new EquipmentSlot[]{EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD}) {
-            ItemStack stack = mc.player.getItemBySlot(slot);
+        if (!durabilityEnabled.get() || durabilityAction.get().isEmpty()) {
+            durabilityLatched = false;
+            return;
+        }
+        boolean low = false;
+        for (ItemStack stack : new ItemStack[]{
+            mc.player.getItemBySlot(EquipmentSlot.FEET),
+            mc.player.getItemBySlot(EquipmentSlot.LEGS),
+            mc.player.getItemBySlot(EquipmentSlot.CHEST),
+            mc.player.getItemBySlot(EquipmentSlot.HEAD),
+            mc.player.getMainHandItem(),
+            mc.player.getOffhandItem()
+        }) {
             if (stack != null && !stack.isEmpty() && stack.isDamageableItem()) {
                 int max = stack.getMaxDamage();
                 int current = stack.getDamageValue();
                 int remaining = max - current;
                 int percent = (int) ((remaining / (double) max) * 100);
                 if (percent <= durabilityThreshold.get()) {
-                    fire(durabilityAction.get());
-                    return;
+                    low = true;
+                    break;
                 }
             }
         }
-        ItemStack mainHand = mc.player.getMainHandItem();
-        ItemStack offHand = mc.player.getOffhandItem();
-        for (ItemStack stack : new ItemStack[]{mainHand, offHand}) {
-            if (stack != null && stack.isDamageableItem()) {
-                int max = stack.getMaxDamage();
-                int current = stack.getDamageValue();
-                int remaining = max - current;
-                int percent = (int) ((remaining / (double) max) * 100);
-                if (percent <= durabilityThreshold.get()) {
-                    fire(durabilityAction.get());
-                    return;
-                }
-            }
+        if (low && !durabilityLatched) {
+            durabilityLatched = true;
+            fire(durabilityAction.get());
+        } else if (!low) {
+            durabilityLatched = false;
         }
     }
 
     private void checkPlayerRangeTrigger() {
         if (!playerRangeEnabled.get() || playerRangeAction.get().isEmpty()) return;
+        boolean anyInRange = false;
         for (Player player : mc.level.players()) {
             if (player == mc.player) continue;
-            double dist = mc.player.distanceTo(player);
-            boolean inRange = dist <= playerRangeDistance.get();
-
-            if (playerRangeInside.get() && inRange) {
-                fire(playerRangeAction.get());
-                return;
+            if (mc.player.distanceTo(player) <= playerRangeDistance.get()) {
+                anyInRange = true;
+                break;
             }
-            if (!playerRangeInside.get() && !inRange) {
-                fire(playerRangeAction.get());
-                return;
-            }
+        }
+        boolean condition = playerRangeInside.get() ? anyInRange : !anyInRange;
+        if (condition && !playerRangeLatched) {
+            playerRangeLatched = true;
+            fire(playerRangeAction.get());
+        } else if (!condition) {
+            playerRangeLatched = false;
         }
     }
 
     private void checkEntityNearTrigger() {
-        if (!entityNearEnabled.get() || entityNearAction.get().isEmpty()) return;
+        if (!entityNearEnabled.get() || entityNearAction.get().isEmpty()) {
+            entityNearLatched = false;
+            return;
+        }
+        String filter = entityNearFilter.get();
+        boolean matched = false;
         for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (entity == mc.player) continue;
-            double dist = mc.player.distanceTo(entity);
-            if (dist <= entityNearDistance.get()) {
-                String filter = entityNearFilter.get();
-                if (filter == null || filter.isEmpty()) {
-                    fire(entityNearAction.get());
-                    return;
-                }
-                String typeName = entity.getType().getDescription().getString().toLowerCase();
-                if (typeName.contains(filter.toLowerCase())) {
-                    fire(entityNearAction.get());
-                    return;
-                }
+            if (mc.player.distanceTo(entity) > entityNearDistance.get()) continue;
+            if (filter == null || filter.isEmpty()) {
+                matched = true;
+                break;
             }
+            String typeName = entity.getType().getDescription().getString().toLowerCase();
+            if (typeName.contains(filter.toLowerCase())) {
+                matched = true;
+                break;
+            }
+        }
+        if (matched && !entityNearLatched) {
+            entityNearLatched = true;
+            fire(entityNearAction.get());
+        } else if (!matched) {
+            entityNearLatched = false;
         }
     }
 
     private void checkHeldItemTrigger() {
-        if (!heldItemEnabled.get() || heldItemAction.get().isEmpty()) return;
+        if (!heldItemEnabled.get() || heldItemAction.get().isEmpty()) {
+            heldItemLatched = false;
+            return;
+        }
         ItemStack held = mc.player.getMainHandItem();
         String filter = heldItemFilter.get();
-        if (held != null && !held.isEmpty()) {
+        boolean matched = held != null && !held.isEmpty();
+        if (matched) {
             String name = held.getItemName().getString().toLowerCase();
-            if (filter == null || filter.isEmpty() || name.contains(filter.toLowerCase())) {
-                fire(heldItemAction.get());
-            }
+            matched = filter == null || filter.isEmpty() || name.contains(filter.toLowerCase());
+        }
+        if (matched && !heldItemLatched) {
+            heldItemLatched = true;
+            fire(heldItemAction.get());
+        } else if (!matched) {
+            heldItemLatched = false;
         }
     }
 
     private void checkLowMaterialTrigger() {
-        if (!lowMaterialEnabled.get() || lowMaterialAction.get().isEmpty()) return;
+        if (!lowMaterialEnabled.get() || lowMaterialAction.get().isEmpty()) {
+            lowMaterialLatched = false;
+            return;
+        }
         String itemName = lowMaterialItem.get().toLowerCase();
         int count = 0;
         for (int i = 0; i < mc.player.getInventory().getContainerSize(); i++) {
@@ -807,19 +906,28 @@ public class Actions extends Module {
                 }
             }
         }
-        if (count <= lowMaterialThreshold.get()) {
+        boolean low = count <= lowMaterialThreshold.get();
+        if (low && !lowMaterialLatched) {
+            lowMaterialLatched = true;
             fire(lowMaterialAction.get());
+        } else if (!low) {
+            lowMaterialLatched = false;
         }
     }
 
     private void checkLagTrigger() {
-        if (!lagEnabled.get() || lagAction.get().isEmpty()) return;
+        if (!lagEnabled.get() || lagAction.get().isEmpty()) {
+            lagLatched = false;
+            return;
+        }
 
         float tps = estimateTPS();
-        if (lagBelow.get() && tps < lagTpsThreshold.get()) {
+        boolean condition = lagBelow.get() ? tps < lagTpsThreshold.get() : tps >= lagTpsThreshold.get();
+        if (condition && !lagLatched) {
+            lagLatched = true;
             fire(lagAction.get());
-        } else if (!lagBelow.get() && tps >= lagTpsThreshold.get()) {
-            fire(lagAction.get());
+        } else if (!condition) {
+            lagLatched = false;
         }
     }
 
@@ -840,12 +948,14 @@ public class Actions extends Module {
 
     private void checkOnRespawnTrigger() {
         if (!onRespawnEnabled.get()) return;
-        if (wasDead && mc.player.getHealth() > 0) {
-            wasDead = false;
-            fire(onRespawnAction.get());
-        }
+        boolean respawned = false;
         if (pendingRespawn) {
             pendingRespawn = false;
+            respawned = true;
+        } else if (wasDead && mc.player.getHealth() > 0) {
+            respawned = true;
+        }
+        if (respawned) {
             wasDead = false;
             fire(onRespawnAction.get());
         }
@@ -912,12 +1022,14 @@ public class Actions extends Module {
     private void checkTimeInWorldTrigger() {
         if (!onTimeInWorldEnabled.get()) return;
         long ticksSinceJoin = currentTick - joinTick;
-        if (ticksSinceJoin >= onTimeInWorldTicks.get()) {
-            fire(onTimeInWorldAction.get());
-            if (onTimeInWorldRepeat.get()) {
-                joinTick = currentTick;
-            }
+        if (ticksSinceJoin < onTimeInWorldTicks.get()) return;
+        if (!onTimeInWorldRepeat.get()) {
+            if (timeInWorldFiredOnce) return;
+            timeInWorldFiredOnce = true;
+        } else {
+            joinTick = currentTick;
         }
+        fire(onTimeInWorldAction.get());
     }
 
     private void checkPotionEffectTrigger() {
@@ -991,21 +1103,28 @@ public class Actions extends Module {
     }
 
     private void checkNearbyPlayerItem() {
-        if (!nearbyPlayerItemEnabled.get()) return;
+        if (!nearbyPlayerItemEnabled.get()) {
+            nearbyItemLatched = false;
+            return;
+        }
+        String filter = nearbyPlayerItemFilter.get();
+        boolean matched = false;
         for (Player player : mc.level.players()) {
             if (player == mc.player) continue;
-            double dist = mc.player.distanceTo(player);
-            if (dist <= nearbyPlayerItemRange.get()) {
-                ItemStack mainHand = player.getMainHandItem();
-                String filter = nearbyPlayerItemFilter.get();
-                if (mainHand != null && !mainHand.isEmpty()) {
-                    String name = mainHand.getItemName().getString().toLowerCase();
-                    if (filter == null || filter.isEmpty() || name.contains(filter.toLowerCase())) {
-                        fire(nearbyPlayerItemAction.get());
-                        return;
-                    }
-                }
+            if (mc.player.distanceTo(player) > nearbyPlayerItemRange.get()) continue;
+            ItemStack mainHand = player.getMainHandItem();
+            if (mainHand == null || mainHand.isEmpty()) continue;
+            String name = mainHand.getItemName().getString().toLowerCase();
+            if (filter == null || filter.isEmpty() || name.contains(filter.toLowerCase())) {
+                matched = true;
+                break;
             }
+        }
+        if (matched && !nearbyItemLatched) {
+            nearbyItemLatched = true;
+            fire(nearbyPlayerItemAction.get());
+        } else if (!matched) {
+            nearbyItemLatched = false;
         }
     }
 
@@ -1063,6 +1182,10 @@ public class Actions extends Module {
                     String[] parts = countAndInterval.split(":");
                     int count = Integer.parseInt(parts[0]);
                     long intervalMs = parts.length > 1 ? Long.parseLong(parts[1]) : 100;
+                    if (count > REPEAT_COUNT_CAP) {
+                        warning("Repeat count %d exceeds limit %d, action rejected.", count, REPEAT_COUNT_CAP);
+                        return;
+                    }
                     for (int i = 0; i < count; i++) {
                         final long delay = i * intervalMs;
                         delayedActions.add(new DelayedAction(subAction, delay));
@@ -1237,11 +1360,29 @@ public class Actions extends Module {
                 String rest = action.substring(6).trim();
                 String[] parts = rest.split("\\s+");
                 if (parts.length >= 4) {
-                    String blockName = parts[0];
+                    String blockName = parts[0].toLowerCase();
                     int x = Integer.parseInt(parts[1]);
                     int y = Integer.parseInt(parts[2]);
                     int z = Integer.parseInt(parts[3]);
                     BlockPos pos = new BlockPos(x, y, z);
+
+                    int hotbarSlot = -1;
+                    for (int slot = 0; slot <= 8; slot++) {
+                        ItemStack stack = mc.player.getInventory().getItem(slot);
+                        if (!stack.isEmpty() && stack.getItemName().getString().toLowerCase().contains(blockName)) {
+                            hotbarSlot = slot;
+                            break;
+                        }
+                    }
+                    if (hotbarSlot >= 0) {
+                        mc.player.getInventory().setSelectedSlot(hotbarSlot);
+                        ClientPacketListener selector = mc.getConnection();
+                        if (selector != null) {
+                            selector.send(new ServerboundSetCarriedItemPacket(hotbarSlot));
+                        }
+                    } else {
+                        warning("place: '%s' not found in hotbar.", parts[0]);
+                    }
 
                     ClientPacketListener handler = mc.getConnection();
                     if (handler != null) {
@@ -1557,11 +1698,12 @@ public class Actions extends Module {
         try {
             Path macroDir = Paths.get("orbiter-macros");
             if (Files.exists(macroDir)) {
-                Files.list(macroDir)
-                    .filter(p -> p.toString().endsWith(".macro"))
-                    .map(p -> p.getFileName().toString().replace(".macro", ""))
-                    .filter(name -> !names.contains(name))
-                    .forEach(names::add);
+                try (Stream<Path> stream = Files.list(macroDir)) {
+                    stream.filter(p -> p.toString().endsWith(".macro"))
+                        .map(p -> p.getFileName().toString().replace(".macro", ""))
+                        .filter(name -> !names.contains(name))
+                        .forEach(names::add);
+                }
             }
         } catch (IOException ignored) {}
 
@@ -1585,14 +1727,19 @@ public class Actions extends Module {
         try {
             Path macroDir = Paths.get("orbiter-macros");
             if (Files.exists(macroDir)) {
-                Files.list(macroDir)
-                    .filter(p -> p.toString().endsWith(".macro"))
-                    .forEach(p -> {
-                        String name = p.getFileName().toString().replace(".macro", "");
-                        loadMacro(name);
-                    });
+                try (Stream<Path> stream = Files.list(macroDir)) {
+                    stream.filter(p -> p.toString().endsWith(".macro"))
+                        .forEach(p -> {
+                            String name = p.getFileName().toString().replace(".macro", "");
+                            loadMacro(name);
+                        });
+                }
             }
         } catch (IOException ignored) {}
+    }
+
+    private static String sanitizeFileName(String name) {
+        return name.replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 
     public void saveTriggers() {
@@ -1603,7 +1750,7 @@ public class Actions extends Module {
             }
 
             for (Trigger trigger : triggers) {
-                Path triggerFile = triggerDir.resolve(trigger.id + ".trigger");
+                Path triggerFile = triggerDir.resolve(sanitizeFileName(trigger.id) + ".trigger");
                 StringBuilder sb = new StringBuilder();
                 sb.append("__type=").append(trigger.type).append("\n");
                 sb.append("__id=").append(trigger.id).append("\n");
@@ -1633,9 +1780,9 @@ public class Actions extends Module {
             Path triggerDir = Paths.get("orbiter-triggers");
             if (!Files.exists(triggerDir)) return;
 
-            Files.list(triggerDir)
-                .filter(p -> p.toString().endsWith(".trigger"))
-                .forEach(p -> {
+            try (Stream<Path> stream = Files.list(triggerDir)) {
+                stream.filter(p -> p.toString().endsWith(".trigger"))
+                    .forEach(p -> {
                     try {
                         List<String> lines = Files.readAllLines(p, java.nio.charset.StandardCharsets.UTF_8);
                         String type = "", id = "";
@@ -1669,7 +1816,8 @@ public class Actions extends Module {
                         trigger.cooldownMs = cooldown;
                         triggers.add(trigger);
                     } catch (IOException ignored) {}
-                });
+                    });
+            }
 
             info("Loaded %d triggers.", triggers.size());
         } catch (IOException e) {
@@ -2221,12 +2369,15 @@ public class Actions extends Module {
     private Vec3 lastVelocity = Vec3.ZERO;
 
     private void trackVelocity() {
-        if (mc.player == null) return;
         Vec3 currentVelocity = mc.player.getDeltaMovement();
         double magnitude = currentVelocity.length();
 
-        if (velocityEnabled.get() && magnitude >= velocityThreshold.get()) {
+        boolean exceeded = magnitude >= velocityThreshold.get();
+        if (velocityEnabled.get() && exceeded && !velocityLatched) {
+            velocityLatched = true;
             fire(velocityAction.get());
+        } else if (!exceeded) {
+            velocityLatched = false;
         }
 
         lastVelocity = currentVelocity;

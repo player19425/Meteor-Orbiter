@@ -208,12 +208,13 @@ public class ParticleSpam extends CreativeSafetyModule {
                         String trailP = "minecraft:" + trailParticle.get().replace("minecraft:", "");
                         int trailBudget = Math.min(maxParticlesPerBurst.get(), 64);
                         for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
-                                if (trailBudget <= 0) break;
+                                if (trailBudget <= 0 || System.nanoTime() >= deadline) break;
                                 if (entity instanceof Arrow || entity instanceof Snowball
                                                 || entity instanceof ThrownEgg || entity instanceof ThrownTrident
                                                 || entity instanceof Fireball) {
                                         int trailLimit = Math.min(crispTrails.get() ? 1 : trailDensity.get(), trailBudget);
                                         for (int t = 0; t < trailLimit; t++) {
+                                                if (!GlobalSendLimiter.tryAcquireOne()) break;
                                                 String trailCmd = CommandUtils.formatCommand(
                                                                 "particle %s %.2f %.2f %.2f %s %s %s 0.01 1 force @a",
                                                                 trailP, entity.getX(), entity.getY(), entity.getZ(),

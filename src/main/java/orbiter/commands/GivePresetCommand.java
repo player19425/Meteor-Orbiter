@@ -2,6 +2,8 @@ package orbiter.commands;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import meteordevelopment.meteorclient.commands.Command;
 import net.minecraft.client.multiplayer.ClientSuggestionProvider;
 import net.minecraft.core.component.DataComponents;
@@ -32,6 +34,9 @@ import java.util.concurrent.ThreadLocalRandom;
 import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 
 public class GivePresetCommand extends Command {
+
+    private static final SimpleCommandExceptionType NOT_IN_CREATIVE =
+            new SimpleCommandExceptionType(Component.literal("You must be in creative mode to use this."));
 
     private final Map<String, PresetFactory> presets = new LinkedHashMap<>();
 
@@ -134,7 +139,7 @@ public class GivePresetCommand extends Command {
         presets.put("mossy-cobble-64", () -> stackLore(Items.MOSSY_COBBLESTONE, 64, "Mossy Cobblestone", ChatFormatting.GREEN, "Ancient ruins", "64 blocks of age"));
         presets.put("snow-block-64", () -> stackLore(Items.SNOW_BLOCK, 64, "Snow Block", ChatFormatting.WHITE, "Winter wonderland", "64 blocks of frost"));
         presets.put("deepslate-64", () -> stackLore(Items.DEEPSLATE, 64, "Deepslate", ChatFormatting.DARK_GRAY, "Deep underground", "64 blocks of depth"));
-        presets.put("resin-block-64", () -> stackLore(Items.COPPER_BLOCK.weathering().unaffected(), 64, "Resin Block", ChatFormatting.GOLD, "Creaking resin", "64 blocks of the pale garden"));
+        presets.put("resin-block-64", () -> stackLore(Items.RESIN_BLOCK, 64, "Resin Block", ChatFormatting.GOLD, "Creaking resin", "64 blocks of the pale garden"));
 
         presets.put("potion-strength-ii", () -> potionLore(Potions.STRONG_STRENGTH, "Strength II Splash", ChatFormatting.RED, "Double your damage", "Melee power boost"));
         presets.put("potion-speed-ii", () -> potionLore(Potions.STRONG_SWIFTNESS, "Speed II Splash", ChatFormatting.AQUA, "Run faster than light", "Movement speed boost"));
@@ -165,7 +170,6 @@ public class GivePresetCommand extends Command {
         presets.put("echo-shard-stack", () -> stackLore(Items.ECHO_SHARD, 64, "Echo Shard", ChatFormatting.DARK_AQUA, "Sculk resonance", "64 shards of echo"));
         presets.put("recovery-compass", () -> simpleLore(Items.RECOVERY_COMPASS, "Recovery Compass", ChatFormatting.AQUA, "Find your death location", "Points to last death"));
         presets.put("bundle-stack", () -> stackLore(Items.BUNDLE, 64, "Bundle Stack", ChatFormatting.GOLD, "Carry more items", "64 empty bundles"));
-        presets.put("saddle-stack", () -> stackLore(Items.SADDLE, 64, "Saddle Stack", ChatFormatting.GOLD, "Mount everything", "64 saddles"));
         presets.put("debug-stick", () -> simpleLore(Items.STICK, "Debug Stick", ChatFormatting.AQUA, "Edit block states", "Creative only"));
         presets.put("lodestone-compass", () -> simpleLore(Items.COMPASS, "Lodestone Compass", ChatFormatting.YELLOW, "Points to lodestone", "Navigate with precision"));
     }
@@ -176,9 +180,10 @@ public class GivePresetCommand extends Command {
         builder.then(literal("list").executes(c -> { showList(); return SINGLE_SUCCESS; }));
         for (var e : presets.entrySet()) {
             String name = e.getKey();
-            builder.then(literal(name).executes(c -> { giveItem(e.getValue().create()); info("Gave: " + name); return SINGLE_SUCCESS; }));
+            builder.then(literal(name).executes(c -> { ensureCreative(); giveItem(e.getValue().create()); info("Gave: " + name); return SINGLE_SUCCESS; }));
         }
         builder.then(literal("random").executes(c -> {
+            ensureCreative();
             String[] keys = presets.keySet().toArray(new String[0]);
             String k = keys[ThreadLocalRandom.current().nextInt(keys.length)];
             giveItem(presets.get(k).create());
@@ -186,6 +191,7 @@ public class GivePresetCommand extends Command {
             return SINGLE_SUCCESS;
         }));
         builder.then(literal("category").then(argument("name", StringArgumentType.word()).executes(c -> {
+            ensureCreative();
             String q = StringArgumentType.getString(c, "name").toLowerCase(Locale.ROOT);
             List<String> m = new ArrayList<>();
             for (String k : presets.keySet()) if (k.contains(q)) m.add(k);
@@ -195,6 +201,7 @@ public class GivePresetCommand extends Command {
             return SINGLE_SUCCESS;
         })));
         builder.then(literal("search").then(argument("query", StringArgumentType.greedyString()).executes(c -> {
+            ensureCreative();
             String q = StringArgumentType.getString(c, "query").toLowerCase(Locale.ROOT);
             List<String> m = new ArrayList<>();
             for (String k : presets.keySet()) if (k.contains(q)) m.add(k);
@@ -215,16 +222,42 @@ public class GivePresetCommand extends Command {
         sb.append("OP Blocks: command-block, chain-command-block, repeating-command-block, bedrock, barrier, light-block, structure-block, jigsaw-block, end-portal-frame, dragon-egg, command-block-minecart, structure-void, barrier-stack, piston-stack, sticky-piston-stack\n");
         sb.append("Spawns: spawn-wither, spawn-ender-dragon, spawn-warden, spawn-elder-guardian, spawn-ravager, spawn-ghast, spawn-blaze, spawn-piglin-brute, spawn-breeze, spawn-creaking, charged-creeper, all-spawn-eggs\n");
         sb.append("Blocks: netherite-block-64, diamond-block-64, emerald-block-64, gold-block-64, iron-block-64, obsidian-64, end-stone-64, crying-obsidian-64, ancient-debris-64, copper-block-64, amethyst-block-64, tnt-64, packed-ice-64, blue-ice-64, mossy-cobble-64, snow-block-64, deepslate-64, resin-block-64\n");
-        sb.append("Potions: potion-strength-ii, potion-speed-ii, potion-regen-ii, potion-healing-ii, potion-fire-resist, potion-invisibility, potion-night-vision, potion-water-breathing, potion-absorption-ii, potion-slow-falling, potion-poison-ii, potion-wither-ii, potion-harming-ii, potion-leaping-ii\n");
+        sb.append("Potions: potion-strength-ii, potion-speed-ii, potion-regen-ii, potion-healing-ii, potion-fire-resist, potion-invisibility, potion-night-vision, potion-water-breathing, potion-slow-falling, potion-poison-ii, potion-harming-ii, potion-harming, potion-leaping\n");
         sb.append("Kits: ultimate-kit, pvp-kit, builder-kit, end-kit, nether-kit, fishing-kit, redstone-kit\n");
-        sb.append("Special: shulker-full, music-discs, lodestone, echo-shard-stack, recovery-compass, bundle-stack, saddle-stack, debug-stick, lodestone-compass");
+        sb.append("Special: shulker-full, music-discs, lodestone, echo-shard-stack, recovery-compass, bundle-stack, debug-stick, lodestone-compass");
         info(sb.toString());
     }
 
+    private void ensureCreative() throws CommandSyntaxException {
+        if (mc.player == null || mc.getConnection() == null || !mc.player.getAbilities().instabuild) {
+            throw NOT_IN_CREATIVE.create();
+        }
+    }
+
     private void giveItem(ItemStack item) {
-        int slot = mc.player.getInventory().getSelectedSlot();
-        mc.getConnection().send(new ServerboundSetCreativeModeSlotPacket(36 + slot, item));
-        mc.player.containerMenu.getSlot(36 + slot).set(item);
+        if (mc.player == null || mc.getConnection() == null) return;
+        int selected = mc.player.getInventory().getSelectedSlot();
+        int slot = -1;
+        for (int i = 0; i < 9; i++) {
+            int hotbar = (selected + i) % 9;
+            if (mc.player.getInventory().getItem(hotbar).isEmpty()) {
+                slot = 36 + hotbar;
+                break;
+            }
+        }
+        if (slot < 0) {
+            for (int i = 9; i < 36; i++) {
+                if (mc.player.getInventory().getItem(i).isEmpty()) {
+                    slot = i;
+                    break;
+                }
+            }
+        }
+        if (slot < 0) slot = 36 + selected;
+        mc.getConnection().send(new ServerboundSetCreativeModeSlotPacket(slot, item));
+        if (mc.player.containerMenu == mc.player.inventoryMenu && slot < mc.player.inventoryMenu.slots.size()) {
+            mc.player.inventoryMenu.getSlot(slot).set(item);
+        }
     }
 
     private Component name(String value, ChatFormatting color) {
@@ -362,7 +395,7 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.MACE);
         s.set(DataComponents.CUSTOM_NAME, name("God Mace", ChatFormatting.GOLD));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("density:255","wind_burst:255","smashing:1","unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("density:255","wind_burst:255","unbreaking:255","mending:1").toImmutable());
         ItemAttributeModifiers.Builder a = ItemAttributeModifiers.builder();
         a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","gm_d"), 4096, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
         s.set(DataComponents.ATTRIBUTE_MODIFIERS, a.build());
@@ -752,9 +785,11 @@ public class GivePresetCommand extends Command {
             if (mc.level != null) {
                 ItemEnchantments.Mutable b = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
                 var enchRegistry = mc.level.registryAccess().getOrThrow(Registries.ENCHANTMENT).value();
-                enchRegistry.keySet().stream().limit(3).forEach(id -> enchRegistry.get(id).ifPresent(r -> b.set(r, 255)));
+                var ids = new ArrayList<>(enchRegistry.keySet());
+                Collections.shuffle(ids);
+                ids.stream().limit(3).forEach(id -> enchRegistry.get(id).ifPresent(r -> b.set(r, 255)));
                 is.set(DataComponents.ENCHANTMENTS, b.toImmutable());
-    }
+            }
 
             contents.add(is);
         }

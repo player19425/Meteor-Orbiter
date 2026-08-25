@@ -20,7 +20,8 @@ public class PluginDatabase {
 
     private static void w(String p, String n, String c) { WILDCARD_DB.put(p.toLowerCase(), new PluginEntry(n, c)); }
     private static void e(String p, String n, String c) { EXACT_DB.put(p.toLowerCase(), new PluginEntry(n, c)); }
-    private static void cmd(String c, String n, String cat) { COMMAND_DB.put(c.toLowerCase(), new PluginEntry(n, cat)); }
+    private static void cmd(String c, String n, String cat) { COMMAND_DB.put(commandKey(c), new PluginEntry(n, cat)); }
+    private static String commandKey(String c) { String k = c.toLowerCase().trim(); while (k.startsWith("/")) k = k.substring(1); return k; }
     private static void ns(String k, String v) { NAMESPACE_ALIASES.put(k.toLowerCase(), v); }
 
     static { init(); }
@@ -1295,7 +1296,7 @@ public class PluginDatabase {
         ns("itemgenerator", "ItemGenerator");
         ch("itemgenerator:*");
 
-        ch(".limboauth:mod/541f59e4256a337ea252bc482a009d46");
+        ch("limboauth:mod/541f59e4256a337ea252bc482a009d46");
         ch("aac:*");
         ch("accountguard:*");
         ch("acf:*");
@@ -3252,6 +3253,10 @@ public class PluginDatabase {
         PluginEntry entry = new PluginEntry(name, "Unknown");
         if (p.endsWith(":*")) {
             WILDCARD_DB.put(p, entry);
+        } else if (p.endsWith("*")) {
+            p = p.substring(0, p.length() - 1);
+            while (p.endsWith("/") || p.endsWith(":")) p = p.substring(0, p.length() - 1);
+            if (!p.isEmpty()) WILDCARD_DB.put(p + ":*", entry);
         } else {
             EXACT_DB.put(p, entry);
         }
@@ -3296,8 +3301,7 @@ public class PluginDatabase {
 
     public static PluginEntry lookupCommand(String command) {
         if (command == null) return null;
-        String lower = command.toLowerCase().replace("/", "").trim();
-        return COMMAND_DB.get(lower);
+        return COMMAND_DB.get(commandKey(command));
     }
 
     public static String resolveNamespace(String ns) {
@@ -3336,6 +3340,8 @@ public class PluginDatabase {
     }
 
     public static int levenshtein(String s, String t) {
+        if (s == null) s = "";
+        if (t == null) t = "";
         if (s.isEmpty()) return t.length();
         if (t.isEmpty()) return s.length();
         int[] prev = new int[t.length() + 1];
@@ -3355,15 +3361,31 @@ public class PluginDatabase {
     private static PluginEntry fuzzyLookup(String input) {
         if (input.length() < 4) return null;
         PluginEntry best = null;
+        String bestKey = null;
         int bestDist = Integer.MAX_VALUE;
         for (var e : WILDCARD_DB.entrySet()) {
             String key = e.getKey().replace(":*", "");
+            int maxDist = Math.min(2, Math.min(input.length(), key.length()) / 2);
+            if (maxDist <= 0 || Math.abs(key.length() - input.length()) > 3) continue;
             int dist = levenshtein(input, key);
-            if (dist < bestDist && dist <= 2) { bestDist = dist; best = e.getValue(); }
+            if (dist > maxDist) continue;
+            if (dist < bestDist || (dist == bestDist && key.compareTo(bestKey) < 0)) {
+                bestDist = dist;
+                bestKey = key;
+                best = e.getValue();
+            }
         }
         for (var e : EXACT_DB.entrySet()) {
-            int dist = levenshtein(input, e.getKey());
-            if (dist < bestDist && dist <= 2) { bestDist = dist; best = e.getValue(); }
+            String key = e.getKey();
+            int maxDist = Math.min(2, Math.min(input.length(), key.length()) / 2);
+            if (maxDist <= 0 || Math.abs(key.length() - input.length()) > 3) continue;
+            int dist = levenshtein(input, key);
+            if (dist > maxDist) continue;
+            if (dist < bestDist || (dist == bestDist && key.compareTo(bestKey) < 0)) {
+                bestDist = dist;
+                bestKey = key;
+                best = e.getValue();
+            }
         }
         return best;
     }

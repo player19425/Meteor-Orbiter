@@ -2,6 +2,7 @@ package orbiter.modules.render;
 
 import orbiter.util.CommandUtils;
 import orbiter.modules.CreativeSafetyModule;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
@@ -14,6 +15,9 @@ import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCommandBlockPacket;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.level.Level;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -261,8 +265,11 @@ public class FireworkShow extends CreativeSafetyModule {
     private int tickCounter = 0;
     private int currentTick = 0;
     private boolean inFinale = false;
+    private int finaleRemaining = 0;
+    private int finaleIndex = 0;
     private int omegaPlusBudgetLeft = -1;
     private long omegaLastPlacementAtMs = 0L;
+    private ResourceKey<Level> lastDimension = null;
     private final Map<BlockPos, Integer> omegaCleanupTicks = new HashMap<>();
     private final Map<BlockPos, Integer> omegaRedstoneCleanupTicks = new HashMap<>();
 
@@ -297,8 +304,11 @@ public class FireworkShow extends CreativeSafetyModule {
         tickCounter = 0;
         currentTick = 0;
         inFinale = false;
+        finaleRemaining = 0;
+        finaleIndex = 0;
         omegaPlusBudgetLeft = -1;
         omegaLastPlacementAtMs = 0L;
+        lastDimension = null;
         omegaCleanupTicks.clear();
         omegaRedstoneCleanupTicks.clear();
         if (isOmegaPlusMode()) {
@@ -310,9 +320,27 @@ public class FireworkShow extends CreativeSafetyModule {
     }
 
     @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        omegaCleanupTicks.clear();
+        omegaRedstoneCleanupTicks.clear();
+        omegaLastPlacementAtMs = 0L;
+        lastDimension = null;
+    }
+
+    @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.player.connection == null)
             return;
+
+        if (mc.level != null) {
+            ResourceKey<Level> dimension = mc.level.dimension();
+            if (!dimension.equals(lastDimension)) {
+                lastDimension = dimension;
+                omegaCleanupTicks.clear();
+                omegaRedstoneCleanupTicks.clear();
+                omegaLastPlacementAtMs = 0L;
+            }
+        }
 
         currentTick++;
         processOmegaCleanup();
@@ -328,12 +356,14 @@ public class FireworkShow extends CreativeSafetyModule {
                 } else if (isOmegaMode()) {
                     finaleLaunches = Math.min(finaleLaunches + omegaExtraCommands.get() * 2, 300);
                 }
-                for (int i = 0; i < finaleLaunches; i++) launchFirework(i);
+                finaleRemaining = finaleLaunches;
             }
 
-            info("Firework Show complete! Launched " + launchedCount + " fireworks.");
-            toggle();
-            return;
+            if (!inFinale || finaleRemaining <= 0) {
+                info("Firework Show complete! Launched " + launchedCount + " fireworks.");
+                toggle();
+                return;
+            }
         }
 
         if (tickCounter < delayTicks.get() && !inFinale)
@@ -346,6 +376,8 @@ public class FireworkShow extends CreativeSafetyModule {
         } else if (isOmegaMode()) {
             launchesPerTick = Math.min(launchesPerTick + omegaExtraCommands.get(), 80);
         }
+        if (inFinale && finaleRemaining < launchesPerTick)
+            launchesPerTick = finaleRemaining;
 
         for (int i = 0; i < launchesPerTick; i++) {
             if (isOmegaPlusMode()) {
@@ -354,16 +386,21 @@ public class FireworkShow extends CreativeSafetyModule {
                     toggle();
                     return;
                 }
-                if (omegaPlusBudgetLeft > 0) omegaPlusBudgetLeft--;
             }
-            if (totalFireworks.get() > 0 && launchedCount >= totalFireworks.get()) break;
-            launchFirework(launchedCount);
-            launchedCount++;
+            if (!inFinale && totalFireworks.get() > 0 && launchedCount >= totalFireworks.get()) break;
+            if (!launchFirework(inFinale ? finaleIndex : launchedCount)) break;
+            if (isOmegaPlusMode() && omegaPlusBudgetLeft > 0) omegaPlusBudgetLeft--;
+            if (inFinale) {
+                finaleIndex++;
+                finaleRemaining--;
+            } else {
+                launchedCount++;
+            }
         }
     }
 
-    private void launchFirework(int index) {
-        if (mc.player == null || mc.player.connection == null) return;
+    private boolean launchFirework(int index) {
+        if (mc.player == null || mc.player.connection == null) return false;
 
         double x;
         double y;
@@ -416,15 +453,15 @@ public class FireworkShow extends CreativeSafetyModule {
             if (!mc.player.getAbilities().instabuild || mc.level == null || mc.gameMode == null) {
                 warning("Omega+ requires Creative mode and interaction manager.");
                 toggle();
-                return;
+                return false;
             }
             String cmd = buildOmegaPlusSummonCommand(x, y, z);
-            launchOmegaPlusCommand(cmd, index);
-            return;
+            return launchOmegaPlusCommand(cmd, index);
         }
 
         String cmd = buildFireworkSummonCommand(x, y, z);
         mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
+        return true;
     }
 
     private String buildFireworkSummonCommand(double x, double y, double z) {
@@ -516,10 +553,10 @@ public class FireworkShow extends CreativeSafetyModule {
         }
     }
 
-    private void launchOmegaPlusCommand(String command, int index) {
-        if (mc.player == null || mc.player.connection == null || mc.level == null) return;
+    private boolean launchOmegaPlusCommand(String command, int index) {
+        if (mc.player == null || mc.player.connection == null || mc.level == null) return false;
 
-        if (!canPlaceOmegaPlusBlockNow()) return;
+        if (!canPlaceOmegaPlusBlockNow()) return false;
 
         BlockPos playerPos = mc.player.blockPosition();
         Direction facing = mc.player.getDirection();
@@ -529,6 +566,7 @@ public class FireworkShow extends CreativeSafetyModule {
         int clones = Math.min(Math.max(1, omegaPlusClones.get()), OMEGA_PLUS_HARD_MAX_CLONES);
         int spacing = Math.max(1, omegaPlusCloneSpacing.get());
         Set<BlockPos> used = new HashSet<>();
+        boolean sent = false;
 
         OmegaPlusDelivery mode = omegaPlusDelivery.get();
         boolean creativeGive = omegaPlusUseCreativeGive.get() || mode == OmegaPlusDelivery.CreativeGiveAndPlace || mode == OmegaPlusDelivery.Both;
@@ -548,7 +586,9 @@ public class FireworkShow extends CreativeSafetyModule {
             BlockPos placePos = mode == OmegaPlusDelivery.Both ? cloneBase.offset(right.getStepX(), right.getStepY(), right.getStepZ()) : cloneBase;
             placeAndProgramCommandBlockViaSetblock(placePos, command, facing);
             markOmegaPlacement();
+            sent = true;
         }
+        return sent;
     }
 
     private void placeAndProgramCommandBlockViaSetblock(BlockPos pos, String command, Direction facing) {
@@ -587,6 +627,7 @@ public class FireworkShow extends CreativeSafetyModule {
 
     private void giveCommandBlockToHotbar() {
         if (mc.player == null || mc.player.connection == null) return;
+        if (!(mc.player.containerMenu instanceof InventoryMenu)) return;
 
         int selected = mc.player.getInventory().getSelectedSlot();
         int targetSlot = selected;

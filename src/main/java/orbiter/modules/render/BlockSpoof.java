@@ -1,12 +1,14 @@
 package orbiter.modules.render;
 
 import orbiter.Orbiter;
+import meteordevelopment.meteorclient.MeteorClient;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -302,13 +304,19 @@ public class BlockSpoof extends Module {
     private boolean needsChunkRefresh = false;
     private int refreshTimer = 0;
 
-    private boolean toggleKeyWasDown = false;
-
     private float pulsePhase = 0.0f;
 
     private int oreScanTickCounter = 0;
 
-    private static final int ORE_SCAN_BLOCK_BUDGET = 8192;
+    private static final int ORE_SCAN_BLOCK_BUDGET = 32768;
+
+    private final List<HighlightedOre> pendingOres = new ArrayList<>();
+    private boolean oreScanInProgress = false;
+    private int oreScanShell = 0;
+    private long oreScanIndex = 0;
+    private int oreScanRangeAtStart = -1;
+
+    private ClientLevel lastLevel = null;
 
     private final Map<String, Block> blockIdCache = new ConcurrentHashMap<>();
 
@@ -365,6 +373,35 @@ public class BlockSpoof extends Module {
     public BlockSpoof() {
         super(Orbiter.CATEGORY, "block-spoof",
             "Spoofs block textures client-side.");
+        if (toggleKeyWatcher == null) {
+            toggleKeyWatcher = new ToggleKeyWatcher(this);
+            MeteorClient.EVENT_BUS.subscribe(toggleKeyWatcher);
+        }
+    }
+
+    private static ToggleKeyWatcher toggleKeyWatcher;
+
+    public static class ToggleKeyWatcher {
+        private final BlockSpoof module;
+        private boolean wasDown = false;
+
+        ToggleKeyWatcher(BlockSpoof module) {
+            this.module = module;
+        }
+
+        @EventHandler
+        private void onTick(TickEvent.Post event) {
+            if (!module.toggleKeyEnabled.get()) return;
+
+            try {
+                int keyCode = module.toggleKeyCode.get();
+                boolean isDown = org.lwjgl.glfw.GLFW.glfwGetKey(module.mc.getWindow().handle(), keyCode) == 1;
+                if (isDown && !wasDown) module.toggle();
+                wasDown = isDown;
+            } catch (Exception ignored) {
+                wasDown = false;
+            }
+        }
     }
 
     @Override
@@ -375,6 +412,8 @@ public class BlockSpoof extends Module {
         refreshTimer = 0;
         pulsePhase = 0.0f;
         oreScanTickCounter = 0;
+        oreScanInProgress = false;
+        pendingOres.clear();
         blockIdCache.clear();
         requestWorldRendererRefresh();
     }
@@ -384,6 +423,8 @@ public class BlockSpoof extends Module {
         instance = null;
         replacementMap.clear();
         highlightedOres.clear();
+        pendingOres.clear();
+        oreScanInProgress = false;
         needsChunkRefresh = false;
         blockIdCache.clear();
         requestWorldRendererRefresh();
@@ -521,9 +562,14 @@ public class BlockSpoof extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (mc.player == null || mc.level == null) return;
+        if (mc.level != lastLevel) {
+            lastLevel = mc.level;
+            highlightedOres.clear();
+            pendingOres.clear();
+            oreScanInProgress = false;
+        }
 
-        handleToggleKey();
+        if (mc.player == null || mc.level == null) return;
 
         if (needsChunkRefresh) {
             if (--refreshTimer <= 0) {
@@ -538,62 +584,80 @@ public class BlockSpoof extends Module {
         }
 
         if (oreHighlight.get() != OreHighlightMode.Off) {
-            oreScanTickCounter++;
-            if (oreScanTickCounter >= 40) {
-                oreScanTickCounter = 0;
+            if (oreScanInProgress) {
                 scanOreHighlights();
+            } else {
+                oreScanTickCounter++;
+                if (oreScanTickCounter >= 40) {
+                    oreScanTickCounter = 0;
+                    scanOreHighlights();
+                }
             }
         } else {
             highlightedOres.clear();
         }
     }
 
-    private void handleToggleKey() {
-        if (!toggleKeyEnabled.get()) return;
-
-        boolean isDown = false;
-        try {
-            int keyCode = toggleKeyCode.get();
-            isDown = org.lwjgl.glfw.GLFW.glfwGetKey(mc.getWindow().handle(), keyCode) == 1;
-        } catch (Exception ignored) {
-            return;
-        }
-
-        if (isDown && !toggleKeyWasDown) {
-            toggle();
-            return;
-        }
-
-        toggleKeyWasDown = isDown;
-    }
-
     private void scanOreHighlights() {
-        highlightedOres.clear();
-
-        if (mc.player == null || mc.level == null) return;
+        if (mc.player == null || mc.level == null) {
+            oreScanInProgress = false;
+            return;
+        }
 
         int r = range.get();
+        if (!oreScanInProgress || oreScanRangeAtStart != r) {
+            oreScanInProgress = true;
+            oreScanRangeAtStart = r;
+            oreScanShell = 0;
+            oreScanIndex = 0;
+            pendingOres.clear();
+        }
+
         BlockPos playerPos = mc.player.blockPosition();
         BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
-
         int budget = ORE_SCAN_BLOCK_BUDGET;
+        boolean exhausted = false;
 
-        for (int x = -r; x <= r; x += 2) {
-            for (int y = -r; y <= r; y += 2) {
-                for (int z = -r; z <= r; z += 2) {
-                    if (budget-- <= 0) return;
-                    mutable.set(playerPos.getX() + x, playerPos.getY() + y, playerPos.getZ() + z);
+        while (!exhausted && oreScanShell <= r) {
+            int shell = oreScanShell;
+            int side = 2 * shell + 1;
+            long shellSize = (long) side * side * side;
 
-                    if (playerPos.distSqr(mutable) > (long) r * r) continue;
+            while (oreScanIndex < shellSize) {
+                long idx = oreScanIndex++;
+                int x = (int) (idx / ((long) side * side)) - shell;
+                int y = (int) ((idx % ((long) side * side)) / side) - shell;
+                int z = (int) (idx % side) - shell;
 
-                    Block block = mc.level.getBlockState(mutable).getBlock();
-                    SettingColor color = getOreHighlightColor(block);
-                    if (color != null) {
-                        highlightedOres.add(new HighlightedOre(
-                            mutable.immutable(), color, block));
-                    }
+                if (Math.max(Math.abs(x), Math.max(Math.abs(y), Math.abs(z))) != shell) continue;
+
+                mutable.set(playerPos.getX() + x, playerPos.getY() + y, playerPos.getZ() + z);
+                if (playerPos.distSqr(mutable) > (long) r * r) continue;
+
+                Block block = mc.level.getBlockState(mutable).getBlock();
+                SettingColor color = getOreHighlightColor(block);
+                if (color != null) {
+                    pendingOres.add(new HighlightedOre(
+                        mutable.immutable(), color, block));
+                }
+
+                if (--budget <= 0) {
+                    exhausted = true;
+                    break;
                 }
             }
+
+            if (!exhausted && oreScanIndex >= shellSize) {
+                oreScanShell++;
+                oreScanIndex = 0;
+            }
+        }
+
+        if (oreScanShell > r) {
+            oreScanInProgress = false;
+            highlightedOres.clear();
+            highlightedOres.addAll(pendingOres);
+            pendingOres.clear();
         }
     }
 

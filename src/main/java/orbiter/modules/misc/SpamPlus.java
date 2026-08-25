@@ -319,7 +319,9 @@ public class SpamPlus extends Module {
             }
             current = sb.toString();
             if (current.length() > 256) {
-                current = current.substring(0, 256);
+                int cut = 256;
+                if (Character.isHighSurrogate(current.charAt(cut - 1))) cut--;
+                current = current.substring(0, cut);
                 break;
             }
         }
@@ -354,13 +356,13 @@ public class SpamPlus extends Module {
 
         ladderIndex++;
 
-        if (ladderIndex > ladderCount.get()) {
+        if (ladderIndex >= ladderCount.get()) {
 
             if (!ladderSeparate.get()) {
                 StringBuilder sb = new StringBuilder();
-                for (int i = 0; i <= ladderCount.get(); i++) {
+                for (int i = 0; i < ladderCount.get(); i++) {
                     sb.append(base).append(ladderChar.get().repeat(i));
-                    if (i < ladderCount.get()) sb.append("\n");
+                    if (i < ladderCount.get() - 1) sb.append("\n");
                 }
                 sendMessage(sb.toString());
             }

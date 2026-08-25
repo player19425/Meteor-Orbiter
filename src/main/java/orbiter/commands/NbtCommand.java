@@ -3,6 +3,7 @@ package orbiter.commands;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
 import net.minecraft.client.multiplayer.ClientSuggestionProvider;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
@@ -24,7 +25,8 @@ public class NbtCommand extends Command {
                 return SINGLE_SUCCESS;
             }
 
-            ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, stack)
+            RegistryOps<net.minecraft.nbt.Tag> ops = RegistryOps.create(NbtOps.INSTANCE, mc.level.registryAccess());
+            ItemStack.CODEC.encodeStart(ops, stack)
                 .resultOrPartial(err -> info("Failed to encode item: " + err))
                 .ifPresent(tag -> {
                     CompoundTag compound = (CompoundTag) tag;

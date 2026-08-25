@@ -20,8 +20,10 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
+import net.minecraft.resources.RegistryOps;
 import net.minecraft.world.inventory.MerchantMenu;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
@@ -522,6 +524,9 @@ public class ItemStealer extends Module {
             root.putString("timestamp", Instant.now().toString());
             root.putInt("slotCount", handler.slots.size());
 
+            RegistryOps<Tag> ops = registryOps();
+            if (ops == null) return;
+
             int savedCount = 0;
             for (int i = 0; i < handler.slots.size(); i++) {
                 Slot slot = handler.getSlot(i);
@@ -530,7 +535,7 @@ public class ItemStealer extends Module {
                 ItemStack stack = slot.getItem();
                 if (stack == null || stack.isEmpty()) continue;
 
-                var encoded = ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, stack);
+                var encoded = ItemStack.CODEC.encodeStart(ops, stack);
                 if (encoded.isSuccess()) {
                     CompoundTag itemTag = (CompoundTag) encoded.getOrThrow();
                     CompoundTag entry = new CompoundTag();
@@ -587,14 +592,16 @@ public class ItemStealer extends Module {
         if (original == null || original.isEmpty()) return ItemStack.EMPTY;
 
         try {
-
-            var result = ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, original);
-            if (result.isSuccess()) {
-                CompoundTag tag = (CompoundTag) result.getOrThrow();
-                var parsed = ItemStack.CODEC.parse(NbtOps.INSTANCE, tag);
-                if (parsed.isSuccess()) {
-                    ItemStack clone = parsed.resultOrPartial(s -> {}).orElse(null);
-                    if (clone != null && !clone.isEmpty()) return clone;
+            RegistryOps<Tag> ops = registryOps();
+            if (ops != null) {
+                var result = ItemStack.CODEC.encodeStart(ops, original);
+                if (result.isSuccess()) {
+                    CompoundTag tag = (CompoundTag) result.getOrThrow();
+                    var parsed = ItemStack.CODEC.parse(ops, tag);
+                    if (parsed.isSuccess()) {
+                        ItemStack clone = parsed.resultOrPartial(s -> {}).orElse(null);
+                        if (clone != null && !clone.isEmpty()) return clone;
+                    }
                 }
             }
         } catch (Exception e) {
@@ -602,6 +609,11 @@ public class ItemStealer extends Module {
         }
 
         return original.copy();
+    }
+
+    private RegistryOps<Tag> registryOps() {
+        if (mc.level == null) return null;
+        return RegistryOps.create(NbtOps.INSTANCE, mc.level.registryAccess());
     }
 
     public boolean injectClonedIntoInventory(ItemStack stack) {
@@ -641,8 +653,8 @@ public class ItemStealer extends Module {
         if (slot < 0) slot = 36 + mc.player.getInventory().getSelectedSlot();
 
         mc.getConnection().send(new ServerboundSetCreativeModeSlotPacket(slot, stack));
-        if (mc.player.containerMenu != null && slot < mc.player.containerMenu.slots.size()) {
-            mc.player.containerMenu.getSlot(slot).set(stack);
+        if (mc.player.containerMenu == mc.player.inventoryMenu && slot < mc.player.inventoryMenu.slots.size()) {
+            mc.player.inventoryMenu.getSlot(slot).set(stack);
         }
     }
 
@@ -684,46 +696,47 @@ public class ItemStealer extends Module {
     @EventHandler
     private void onPacketSend(PacketEvent.Send event) {
 
-        if (pendingShiftCancel) {
-            pendingShiftCancel = false;
-            bypassedThisClick = false;
-            event.cancel();
-            return;
-        }
+        if (event.packet instanceof ServerboundContainerClickPacket click) {
+            if (pendingShiftCancel) {
+                pendingShiftCancel = false;
+                bypassedThisClick = false;
+                event.cancel();
+                return;
+            }
 
-        if (bypassedThisClick) {
-            bypassedThisClick = false;
-            event.cancel();
-            return;
-        }
+            if (bypassedThisClick) {
+                bypassedThisClick = false;
+                event.cancel();
+                return;
+            }
 
-        if (!tradeBypass.get() && !tradeBypassOnPick.get()) return;
-        if (mc.player == null) return;
-        if (!(event.packet instanceof net.minecraft.network.protocol.game.ServerboundContainerClickPacket click)) return;
-        if (!(mc.player.containerMenu instanceof MerchantMenu merchant)) return;
-        if (click.slotNum() != 2) return;
+            if (!tradeBypass.get() && !tradeBypassOnPick.get()) return;
+            if (mc.player == null) return;
+            if (!(mc.player.containerMenu instanceof MerchantMenu merchant)) return;
+            if (click.slotNum() != 2) return;
 
-        if (shiftClickSteal.get() && click.containerInput() == ContainerInput.QUICK_MOVE) {
-            ItemStack result = merchant.getSlot(2).getItem();
-            if (result != null && !result.isEmpty()) {
-                ItemStack copy = perfectClone(result);
-                injectClonedIntoInventory(copy);
-                if (notify.get()) info("Shift-clone trade: " + copy.getItemName().getString() + " x" + copy.getCount());
-                if (shiftClickCancelPacket.get()) {
-                    event.cancel();
+            if (shiftClickSteal.get() && click.containerInput() == ContainerInput.QUICK_MOVE) {
+                ItemStack result = merchant.getSlot(2).getItem();
+                if (result != null && !result.isEmpty()) {
+                    ItemStack copy = perfectClone(result);
+                    injectClonedIntoInventory(copy);
+                    if (notify.get()) info("Shift-clone trade: " + copy.getItemName().getString() + " x" + copy.getCount());
+                    if (shiftClickCancelPacket.get()) {
+                        event.cancel();
+                    }
                     return;
                 }
             }
+
+            ItemStack result = merchant.getSlot(2).getItem();
+            if (result == null || result.isEmpty()) return;
+
+            ItemStack copy = perfectClone(result);
+            injectClonedIntoInventory(copy);
+            if (notify.get()) info("Trade bypassed: " + copy.getItemName().getString() + " x" + copy.getCount());
+
+            event.cancel();
         }
-
-        ItemStack result = merchant.getSlot(2).getItem();
-        if (result == null || result.isEmpty()) return;
-
-        ItemStack copy = perfectClone(result);
-        injectClonedIntoInventory(copy);
-        if (notify.get()) info("Trade bypassed: " + copy.getItemName().getString() + " x" + copy.getCount());
-
-        event.cancel();
     }
 
     public boolean givePresetItem(String presetName) {
@@ -796,13 +809,17 @@ public class ItemStealer extends Module {
             CompoundTag root = new CompoundTag();
             root.putString("name", name);
             root.putString("savedAt", Instant.now().toString());
-            for (int i = 0; i < 9; i++) {
-                ItemStack stack = hotbar[i];
-                if (stack.isEmpty()) continue;
-                var encoded = ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, stack);
-                if (encoded.isSuccess()) {
-                    CompoundTag itemTag = (CompoundTag) encoded.getOrThrow();
-                    root.put("slot_" + i, itemTag);
+
+            RegistryOps<Tag> ops = registryOps();
+            if (ops != null) {
+                for (int i = 0; i < 9; i++) {
+                    ItemStack stack = hotbar[i];
+                    if (stack.isEmpty()) continue;
+                    var encoded = ItemStack.CODEC.encodeStart(ops, stack);
+                    if (encoded.isSuccess()) {
+                        CompoundTag itemTag = (CompoundTag) encoded.getOrThrow();
+                        root.put("slot_" + i, itemTag);
+                    }
                 }
             }
             NbtIo.writeCompressed(root, dir.resolve(sanitizeId(name) + ".dat"));
@@ -829,10 +846,12 @@ public class ItemStealer extends Module {
             }
 
             CompoundTag root = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
+            RegistryOps<Tag> ops = registryOps();
+            if (ops == null) return false;
             ItemStack[] hotbar = new ItemStack[9];
             for (int i = 0; i < 9; i++) {
                 if (root.contains("slot_" + i)) {
-                    hotbar[i] = ItemStack.CODEC.parse(NbtOps.INSTANCE, root.get("slot_" + i))
+                    hotbar[i] = ItemStack.CODEC.parse(ops, root.get("slot_" + i))
                         .result().orElse(ItemStack.EMPTY);
                 } else {
                     hotbar[i] = ItemStack.EMPTY;
@@ -898,7 +917,11 @@ public class ItemStealer extends Module {
         try {
             Path dir = storageDir();
             Files.createDirectories(dir);
-            var result = ItemStack.CODEC.encodeStart(NbtOps.INSTANCE, stack);
+
+            RegistryOps<Tag> ops = registryOps();
+            if (ops == null) return false;
+
+            var result = ItemStack.CODEC.encodeStart(ops, stack);
             if (result.isError()) return false;
             CompoundTag tag = (CompoundTag) result.getOrThrow();
             CompoundTag wrapper = new CompoundTag();
@@ -913,23 +936,30 @@ public class ItemStealer extends Module {
         }
     }
 
-    public ItemStack loadItem(String id) {
+    public ItemStack peekItem(String id) {
         try {
             Path file = storageDir().resolve(sanitizeId(id) + ".dat");
             if (!Files.exists(file)) return null;
             CompoundTag wrapper = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
             if (wrapper == null || !wrapper.contains("item")) return null;
-            ItemStack loaded = ItemStack.CODEC.parse(NbtOps.INSTANCE, wrapper.get("item")).result().orElse(null);
-            if (loaded != null && !loaded.isEmpty()) {
 
-                if (creativeGive.get() && mc.player != null && mc.player.getAbilities().instabuild) {
-                    giveInCreative(loaded.copy());
-                }
-            }
-            return loaded;
+            RegistryOps<Tag> ops = registryOps();
+            if (ops == null) return null;
+
+            return ItemStack.CODEC.parse(ops, wrapper.get("item")).result().orElse(null);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    public ItemStack loadItem(String id) {
+        ItemStack loaded = peekItem(id);
+        if (loaded != null && !loaded.isEmpty()) {
+            if (creativeGive.get() && mc.player != null && mc.player.getAbilities().instabuild) {
+                giveInCreative(loaded.copy());
+            }
+        }
+        return loaded;
     }
 
     public boolean deleteItem(String id) {

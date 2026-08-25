@@ -93,35 +93,13 @@ public abstract class HandledScreenMixin {
         cir.setReturnValue(true);
     }
 
-    @Inject(method = "mouseReleased(Lnet/minecraft/client/input/MouseButtonEvent;)Z", at = @At("HEAD"), cancellable = true)
-    private void orbiter$onMouseReleased(MouseButtonEvent click, CallbackInfoReturnable<Boolean> cir) {
-        if (hoveredSlot == null || !hoveredSlot.hasItem()) return;
-
-        if (click.button() == 0) {
-            Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null && mc.options.keyShift.isDown()) {
-                int slotIndex = hoveredSlot.index;
-                boolean shouldCancel = ItemStealer.onShiftClickSlot(
-                    slotIndex, 0, ContainerInput.QUICK_MOVE
-                );
-                if (shouldCancel) {
-                    cir.setReturnValue(true);
-                    return;
-                }
-            }
-        }
-    }
-
     private int orbiter$resolveHotbarSlot(Slot slot) {
         Minecraft client = Minecraft.getInstance();
         if (client.player == null || slot == null) return -1;
+        if (!(slot.container instanceof Inventory)) return -1;
 
-        if (slot.container instanceof Inventory) {
-            int index = slot.index;
-            if (index >= 0 && index < 9) return index;
-        }
-
-        if (slot.index >= 36 && slot.index <= 44) return slot.index - 36;
+        int containerIndex = slot.getContainerSlot();
+        if (containerIndex >= 0 && containerIndex < 9) return containerIndex;
         return -1;
     }
 }

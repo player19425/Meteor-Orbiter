@@ -41,7 +41,8 @@ import net.minecraft.world.item.alchemy.Potions;
 import net.minecraft.core.Holder;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.server.network.Filterable;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.Component;
@@ -555,7 +556,7 @@ public class GivePresetItemsCommand extends Command {
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
         s.set(DataComponents.CUSTOM_NAME, name("God Fishing Rod", ChatFormatting.AQUA));
         ItemEnchantments.Mutable eb = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
-        addEnchant(eb, "luck", 255);
+        addEnchant(eb, "luck_of_the_sea", 255);
         addEnchant(eb, "lure", 255);
         addEnchant(eb, "unbreaking", 255);
         addEnchant(eb, "mending", 1);
@@ -847,8 +848,10 @@ public class GivePresetItemsCommand extends Command {
                 CompoundTag nbt = new CompoundTag();
                 nbt.putString("id", eid);
                 nbt.putInt("CustomNameVisible", cnv);
-                s.set(DataComponents.ENTITY_DATA, TypedEntityData.of(
-                    net.minecraft.world.entity.EntityTypes.CAVE_SPIDER, nbt));
+                EntityType<?> type = resolveEntityType(eid);
+                if (type != null) {
+                    s.set(DataComponents.ENTITY_DATA, TypedEntityData.of(type, nbt));
+                }
                 s.set(DataComponents.LORE, new ItemLore(List.of(
                     line(cname + " spawn egg x" + cnt),
                     gold("Orbiter Preset"))));
@@ -926,9 +929,8 @@ public class GivePresetItemsCommand extends Command {
         box.set(DataComponents.CUSTOM_NAME, name("Building Kit", ChatFormatting.GREEN));
         List<ItemStack> contents = new ArrayList<>();
         Item[] blocks = {
-            Items.STONE, Items.DEEPSLATE, Items.OAK_PLANKS, Items.SPRUCE_PLANKS,
-            Items.BIRCH_PLANKS, Items.JUNGLE_PLANKS, Items.ACACIA_PLANKS, Items.DARK_OAK_PLANKS,
-            Items.COBBLESTONE, Items.BRICKS, Items.STONE_BRICKS, Items.NETHER_BRICKS,
+            Items.STONE, Items.DEEPSLATE, Items.OAK_PLANKS, Items.COBBLESTONE,
+            Items.BRICKS, Items.STONE_BRICKS, Items.NETHER_BRICKS,
             Items.GLASS, Items.STAINED_GLASS.pick(DyeColor.WHITE), Items.OBSIDIAN, Items.CRYING_OBSIDIAN,
             Items.GLOWSTONE, Items.SEA_LANTERN, Items.SHROOMLIGHT, Items.IRON_BLOCK,
             Items.DIAMOND_BLOCK, Items.GOLD_BLOCK, Items.EMERALD_BLOCK, Items.NETHERITE_BLOCK,
@@ -944,7 +946,7 @@ public class GivePresetItemsCommand extends Command {
         contents.add(makeGodAxe(MATS[5]));
         box.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(contents));
         box.set(DataComponents.LORE, new ItemLore(List.of(
-            line("30 block types x64 + OP tools • complete building kit"),
+            line("25 block types x64 + OP tools • complete building kit"),
             gold("Orbiter Preset"))));
         return box;
     }
@@ -1004,8 +1006,8 @@ public class GivePresetItemsCommand extends Command {
         contents.add(makeGodShears());
         contents.add(makeGodFishingRod());
 
-        for (PotionDef p : POTIONS) {
-            contents.add(makePotion(p, true, false));
+        for (int i = 0; i < 7 && i < POTIONS.length; i++) {
+            contents.add(makePotion(POTIONS[i], true, false));
         }
         ItemStack totems = new ItemStack(Items.TOTEM_OF_UNDYING, 64);
         totems.set(DataComponents.CUSTOM_NAME, name("Totems x64", ChatFormatting.GOLD));
@@ -1661,12 +1663,29 @@ public class GivePresetItemsCommand extends Command {
     }
 
     private void giveItem(ItemStack item) {
-        giveItem(item, mc.player.getInventory().getSelectedSlot());
-    }
-
-    private void giveItem(ItemStack item, int hotbarSlot) {
-        mc.getConnection().send(new ServerboundSetCreativeModeSlotPacket(36 + hotbarSlot, item));
-        mc.player.containerMenu.getSlot(36 + hotbarSlot).set(item);
+        if (mc.player == null || mc.getConnection() == null) return;
+        int selected = mc.player.getInventory().getSelectedSlot();
+        int slot = -1;
+        for (int i = 0; i < 9; i++) {
+            int hotbar = (selected + i) % 9;
+            if (mc.player.getInventory().getItem(hotbar).isEmpty()) {
+                slot = 36 + hotbar;
+                break;
+            }
+        }
+        if (slot < 0) {
+            for (int i = 9; i < 36; i++) {
+                if (mc.player.getInventory().getItem(i).isEmpty()) {
+                    slot = i;
+                    break;
+                }
+            }
+        }
+        if (slot < 0) slot = 36 + selected;
+        mc.getConnection().send(new ServerboundSetCreativeModeSlotPacket(slot, item));
+        if (mc.player.containerMenu == mc.player.inventoryMenu && slot < mc.player.inventoryMenu.slots.size()) {
+            mc.player.inventoryMenu.getSlot(slot).set(item);
+        }
     }
 
     private static Component name(String value, ChatFormatting color) {
@@ -1695,6 +1714,16 @@ public class GivePresetItemsCommand extends Command {
         ResourceKey<Enchantment> key = ResourceKey.create(Registries.ENCHANTMENT, id);
         var registry = mc.level.registryAccess().getOrThrow(Registries.ENCHANTMENT);
         registry.value().get(key.identifier()).ifPresent(reference -> builder.set(reference, level));
+    }
+
+    private EntityType<?> resolveEntityType(String entityId) {
+        try {
+            Identifier id = Identifier.tryParse(entityId);
+            if (id == null) return null;
+            return BuiltInRegistries.ENTITY_TYPE.get(id).map(Holder::value).orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private ResolvableProfile resolvePlayerProfile(String playerName) {
@@ -1743,7 +1772,7 @@ public class GivePresetItemsCommand extends Command {
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
         s.set(DataComponents.CUSTOM_NAME, name("Reach Fishing Rod", ChatFormatting.AQUA));
         ItemEnchantments.Mutable eb = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
-        addEnchant(eb, "luck", 255);
+        addEnchant(eb, "luck_of_the_sea", 255);
         addEnchant(eb, "lure", 255);
         addEnchant(eb, "unbreaking", 255);
         s.set(DataComponents.ENCHANTMENTS, eb.toImmutable());

@@ -22,14 +22,7 @@ public abstract class ItemStackSpoofMixin {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null) return;
 
-        ItemStack stack = (ItemStack) (Object) this;
-        Component mapped = ClientSpoofState.getFakeName(stack);
-        if (mapped != null) {
-            cir.setReturnValue(mapped);
-            return;
-        }
-
-        Component global = module.getGlobalFakeName(stack);
+        Component global = module.getGlobalFakeName((ItemStack) (Object) this);
         if (global != null) {
             cir.setReturnValue(global);
         }
@@ -40,10 +33,7 @@ public abstract class ItemStackSpoofMixin {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null) return;
 
-        ItemStack stack = (ItemStack) (Object) this;
-
-        List<Component> lore = ClientSpoofState.getFakeLore(stack);
-        if (lore.isEmpty()) lore = module.getGlobalFakeLore(stack);
+        List<Component> lore = module.getGlobalFakeLore((ItemStack) (Object) this);
         if (lore.isEmpty()) return;
 
         List<Component> tooltip = new ArrayList<>(cir.getReturnValue());

@@ -20,9 +20,9 @@ public class ServerTimeHud extends BaseServerInfoHud {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return null;
 
-        long timeOfDay = mc.level.getLevelData().getGameTime();
-        int ticks = (int) (timeOfDay % 24000);
-        int day = (int) (timeOfDay / 24000) + 1;
+        long clockTime = mc.level.getOverworldClockTime();
+        int ticks = (int) ((clockTime % 24000L + 24000L + 6000L) % 24000L);
+        int day = (int) (clockTime / 24000L) + 1;
         int hours = ticks / 1000;
         int minutes = (ticks % 1000) * 60 / 1000;
         return String.format("Time Day %d (%d:%02d)", day, hours, minutes);

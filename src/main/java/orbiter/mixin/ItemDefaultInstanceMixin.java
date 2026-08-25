@@ -14,7 +14,7 @@ public abstract class ItemDefaultInstanceMixin {
     private void orbiter$safeDefaultInstance(CallbackInfoReturnable<ItemStack> cir) {
         try {
             cir.setReturnValue(new ItemStack((ItemLike) (Object) this));
-        } catch (Throwable throwable) {
+        } catch (RuntimeException e) {
             cir.setReturnValue(ItemStack.EMPTY);
         }
     }

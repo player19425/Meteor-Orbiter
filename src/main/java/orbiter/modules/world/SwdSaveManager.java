@@ -99,6 +99,8 @@ public class SwdSaveManager implements AutoCloseable {
 
     private final ConcurrentLinkedQueue<String> writeErrors = new ConcurrentLinkedQueue<>();
 
+    private final Object metaLock = new Object();
+
     private static final long META_FLUSH_INTERVAL_MS = 5000L;
     private static final DateTimeFormatter ADVANCEMENT_TIME_FORMAT = DateTimeFormatter
         .ofPattern("yyyy-MM-dd HH:mm:ss Z", Locale.ROOT)
@@ -144,46 +146,49 @@ public class SwdSaveManager implements AutoCloseable {
             Files.createDirectories(path);
             Files.createDirectories(regionDir);
             createLevelDat(name);
-            saveServerIcon();
             bootstrapAdvancementsFromClientCache();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private void saveServerIcon() {
-        if (mc.getCurrentServer() == null) return;
-        byte[] icon = null;
-        if (icon == null || icon.length == 0) return;
+    public void stop() {
         try {
-            Files.write(path.resolve("icon.png"), icon);
-        } catch (IOException e) {
-            System.err.println("Failed to write server icon: " + e.getMessage());
+            flushPlayerMetaFiles(true);
+        } finally {
+            isSaving = false;
+            if (diskWorker != null) {
+                diskWorker.shutdown();
+                try {
+
+                    if (!diskWorker.awaitTermination(10, TimeUnit.SECONDS)) {
+                        diskWorker.shutdownNow();
+                        diskWorker.awaitTermination(2, TimeUnit.SECONDS);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    diskWorker.shutdownNow();
+                }
+                diskWorker = null;
+            }
+            inFlightWrites.set(0);
+            try {
+                regionStorage.close();
+            } catch (IOException ignored) {}
+            blockInventoryCache.clear();
+            entityInventoryCache.clear();
+            entityOverrideCache.clear();
+            enderChestCache.clear();
+            drainWriteErrors();
         }
     }
 
-    public void stop() {
-        flushPlayerMetaFiles(true);
-        isSaving = false;
-
-        if (diskWorker != null) {
-            diskWorker.shutdown();
-            try {
-
-                if (!diskWorker.awaitTermination(10, TimeUnit.SECONDS)) {
-                    diskWorker.shutdownNow();
-                    diskWorker.awaitTermination(2, TimeUnit.SECONDS);
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                diskWorker.shutdownNow();
-            }
-            diskWorker = null;
+    public void drainWriteErrors() {
+        if (writeErrors.isEmpty()) return;
+        String error;
+        while ((error = writeErrors.poll()) != null) {
+            System.err.println("[SwdSaveManager] " + error);
         }
-        inFlightWrites.set(0);
-        try {
-            regionStorage.close();
-        } catch (IOException ignored) {}
     }
 
     private void createLevelDat(String name) throws IOException {
@@ -381,9 +386,9 @@ public class SwdSaveManager implements AutoCloseable {
         if (mc.level == null) return null;
         CompoundTag nbt = new CompoundTag();
         nbt.putInt("DataVersion", DATA_VERSION);
-        nbt.putInt("xPos", chunk.getPos().getMiddleBlockX());
+        nbt.putInt("xPos", chunk.getPos().x());
         nbt.putInt("yPos", chunk.getMinSectionY());
-        nbt.putInt("zPos", chunk.getPos().getMiddleBlockZ());
+        nbt.putInt("zPos", chunk.getPos().z());
         nbt.putLong("LastUpdate", 0L);
         nbt.putLong("InhabitedTime", 0L);
         nbt.putString("Status", "full");
@@ -692,68 +697,70 @@ public class SwdSaveManager implements AutoCloseable {
 
     public void cacheStatsPacket(ClientboundAwardStatsPacket packet) {
         if (!isSaving || path == null || mc.player == null || mc.hasSingleplayerServer() || mc.getCurrentServer() == null) return;
-        if (cachedStatsByType == null) cachedStatsByType = new JsonObject();
         if (cachePlayerUuid == null) cachePlayerUuid = mc.player.getUUID();
 
         boolean changed = false;
-        for (Object2IntMap.Entry<Stat<?>> entry : packet.stats().object2IntEntrySet()) {
-            Stat<?> stat = entry.getKey();
-            String typeId = getStatTypeId(stat);
-            String valueId = getStatValueId(stat);
-            if (typeId == null || valueId == null) continue;
+        synchronized (metaLock) {
+            if (cachedStatsByType == null) cachedStatsByType = new JsonObject();
+            for (Object2IntMap.Entry<Stat<?>> entry : packet.stats().object2IntEntrySet()) {
+                Stat<?> stat = entry.getKey();
+                String typeId = getStatTypeId(stat);
+                String valueId = getStatValueId(stat);
+                if (typeId == null || valueId == null) continue;
 
-            JsonObject typeObject = getOrCreateJsonObject(cachedStatsByType, typeId);
-            int incomingValue = entry.getIntValue();
-            int existingValue = getInt(typeObject, valueId, Integer.MIN_VALUE);
-            if (incomingValue > existingValue) {
-                typeObject.addProperty(valueId, incomingValue);
-                changed = true;
+                JsonObject typeObject = getOrCreateJsonObject(cachedStatsByType, typeId);
+                int incomingValue = entry.getIntValue();
+                int existingValue = getInt(typeObject, valueId, Integer.MIN_VALUE);
+                if (incomingValue > existingValue) {
+                    typeObject.addProperty(valueId, incomingValue);
+                    changed = true;
+                }
             }
+            if (changed) statsDirty = true;
         }
 
-        if (changed) {
-            statsDirty = true;
-            maybeFlushPlayerMetaFiles();
-        }
+        if (changed) maybeFlushPlayerMetaFiles();
     }
 
     public void cacheAdvancementPacket(ClientboundUpdateAdvancementsPacket packet) {
         if (!isSaving || path == null || mc.player == null || mc.hasSingleplayerServer() || mc.getCurrentServer() == null) return;
-        if (cachedAdvancements == null) cachedAdvancements = new JsonObject();
-        if (removedAdvancements == null) removedAdvancements = new HashSet<>();
         if (cachePlayerUuid == null) cachePlayerUuid = mc.player.getUUID();
 
         boolean changed = false;
         boolean hadProgressUpdates = !packet.getProgress().isEmpty();
         boolean hadRemovals = !packet.getRemoved().isEmpty();
 
-        if (packet.shouldReset()) {
-            cachedAdvancements = new JsonObject();
-            removedAdvancements.clear();
-            advancementsResetThisSession = true;
-            if (hadProgressUpdates || hadRemovals) changed = true;
+        synchronized (metaLock) {
+            if (cachedAdvancements == null) cachedAdvancements = new JsonObject();
+            if (removedAdvancements == null) removedAdvancements = new HashSet<>();
+
+            if (packet.shouldReset()) {
+                cachedAdvancements = new JsonObject();
+                removedAdvancements.clear();
+                advancementsResetThisSession = true;
+                if (hadProgressUpdates || hadRemovals) changed = true;
+            }
+
+            for (Identifier removedId : packet.getRemoved()) {
+                String key = removedId.toString();
+                cachedAdvancements.remove(key);
+                removedAdvancements.add(key);
+                changed = true;
+            }
+
+            for (Map.Entry<Identifier, AdvancementProgress> e : packet.getProgress().entrySet()) {
+                String key = e.getKey().toString();
+                JsonObject incoming = buildAdvancementJson(e.getValue());
+                JsonObject existing = getJsonObject(cachedAdvancements, key);
+                cachedAdvancements.add(key, mergeAdvancementObjects(existing, incoming));
+                removedAdvancements.remove(key);
+            }
+
+            if (hadProgressUpdates) changed = true;
+            if (changed) advancementsDirty = true;
         }
 
-        for (Identifier removedId : packet.getRemoved()) {
-            String key = removedId.toString();
-            cachedAdvancements.remove(key);
-            removedAdvancements.add(key);
-            changed = true;
-        }
-
-        for (Map.Entry<Identifier, AdvancementProgress> e : packet.getProgress().entrySet()) {
-            String key = e.getKey().toString();
-            JsonObject incoming = buildAdvancementJson(e.getValue());
-            JsonObject existing = getJsonObject(cachedAdvancements, key);
-            cachedAdvancements.add(key, mergeAdvancementObjects(existing, incoming));
-            removedAdvancements.remove(key);
-        }
-
-        if (hadProgressUpdates) changed = true;
-        if (changed) {
-            advancementsDirty = true;
-            maybeFlushPlayerMetaFiles();
-        }
+        if (changed) maybeFlushPlayerMetaFiles();
     }
 
     @SuppressWarnings("unchecked")
@@ -768,14 +775,16 @@ public class SwdSaveManager implements AutoCloseable {
             if (progressMap == null || progressMap.isEmpty()) return;
 
             boolean seeded = false;
-            for (Map.Entry<AdvancementHolder, AdvancementProgress> entry : progressMap.entrySet()) {
-                if (entry.getKey() == null || entry.getValue() == null) continue;
-                String key = entry.getKey().id().toString();
-                JsonObject existing = getJsonObject(cachedAdvancements, key);
-                cachedAdvancements.add(key, mergeAdvancementObjects(existing, buildAdvancementJson(entry.getValue())));
-                seeded = true;
+            synchronized (metaLock) {
+                for (Map.Entry<AdvancementHolder, AdvancementProgress> entry : progressMap.entrySet()) {
+                    if (entry.getKey() == null || entry.getValue() == null) continue;
+                    String key = entry.getKey().id().toString();
+                    JsonObject existing = getJsonObject(cachedAdvancements, key);
+                    cachedAdvancements.add(key, mergeAdvancementObjects(existing, buildAdvancementJson(entry.getValue())));
+                    seeded = true;
+                }
+                if (seeded) advancementsDirty = true;
             }
-            if (seeded) advancementsDirty = true;
         } catch (ReflectiveOperationException e) {
             System.err.println("Failed to bootstrap advancements from client cache: " + e.getMessage());
         }
@@ -786,29 +795,31 @@ public class SwdSaveManager implements AutoCloseable {
     }
 
     private void flushPlayerMetaFiles(boolean force) {
-        if ((!statsDirty && !advancementsDirty) && !force) return;
-        if (path == null) return;
+        synchronized (metaLock) {
+            if ((!statsDirty && !advancementsDirty) && !force) return;
+            if (path == null) return;
 
-        long now = System.currentTimeMillis();
-        if (!force && now - lastMetaFlushTimeMs < META_FLUSH_INTERVAL_MS) return;
+            long now = System.currentTimeMillis();
+            if (!force && now - lastMetaFlushTimeMs < META_FLUSH_INTERVAL_MS) return;
 
-        UUID target = cachePlayerUuid;
-        if (target == null && mc.player != null) target = mc.player.getUUID();
-        if (target == null) return;
+            UUID target = cachePlayerUuid;
+            if (target == null && mc.player != null) target = mc.player.getUUID();
+            if (target == null) return;
 
-        Path playersPath = path;
-        try {
-            if (statsDirty || force) {
-                writeStatsFile(playersPath.resolve("stats").resolve(target + ".json"));
-                statsDirty = false;
+            Path playersPath = path;
+            try {
+                if (statsDirty || force) {
+                    writeStatsFile(playersPath.resolve("stats").resolve(target + ".json"));
+                    statsDirty = false;
+                }
+                if (advancementsDirty || force) {
+                    writeAdvancementsFile(playersPath.resolve("advancements").resolve(target + ".json"));
+                    advancementsDirty = false;
+                }
+                lastMetaFlushTimeMs = now;
+            } catch (IOException e) {
+                System.err.println("Failed to write player advancement/stats files: " + e.getMessage());
             }
-            if (advancementsDirty || force) {
-                writeAdvancementsFile(playersPath.resolve("advancements").resolve(target + ".json"));
-                advancementsDirty = false;
-            }
-            lastMetaFlushTimeMs = now;
-        } catch (IOException e) {
-            System.err.println("Failed to write player advancement/stats files: " + e.getMessage());
         }
     }
 

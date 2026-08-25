@@ -38,6 +38,11 @@ public final class UserListLoader {
 
         Path root = controlledRoot.toAbsolutePath().normalize();
         Path file = root.resolve(relativePath.trim()).normalize();
+        try {
+            root = root.toRealPath();
+            if (Files.exists(file)) file = file.toRealPath();
+        } catch (IOException ignored) {
+        }
         if (!file.startsWith(root)) {
             return new Result(List.of(), List.of("Import path escapes the Orbiter data directory."), 0L);
         }

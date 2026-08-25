@@ -1,5 +1,7 @@
 package orbiter.mixin;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -35,6 +37,16 @@ public abstract class ClientSideHudMixin {
             }
         }
         ci.cancel();
+    }
+
+    @WrapMethod(method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V")
+    private void orbiter$hudRenderScope(GuiGraphicsExtractor context, DeltaTracker tickCounter, Operation<Void> original) {
+        ClientSpoofState.pushHudRenderScope();
+        try {
+            original.call(context, tickCounter);
+        } finally {
+            ClientSpoofState.popHudRenderScope();
+        }
     }
 
     @Inject(method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("RETURN"))

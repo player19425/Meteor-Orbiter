@@ -25,6 +25,7 @@ import net.minecraft.resources.Identifier;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -534,13 +535,16 @@ public class PeakPluginScanner extends Module {
 
     private final Deque<ProbeSpec> probeQueue = new ArrayDeque<>();
 
+    private final Queue<Object> pendingPackets = new ConcurrentLinkedQueue<>();
+
     private boolean scanScheduled;
     private int scanTickCounter;
     private boolean scanned;
 
     private boolean probing;
     private int probeTickCounter;
-    private int nextCompletionId = 1000;
+    private static final int PROBE_ID_BASE = 1_000_000_000 + new Random().nextInt(100_000_000);
+    private int nextCompletionId = PROBE_ID_BASE;
     private int totalProbesSent;
     private int totalProbesQueued;
     private int sentProbes;
@@ -553,7 +557,7 @@ public class PeakPluginScanner extends Module {
     private int protocolVersion;
     private int totalCommandsScanned;
 
-    private boolean waitingForPluginList;
+    private volatile boolean waitingForPluginList;
     private int querySentTick;
     private static final Pattern PLUGIN_LIST_PATTERN = Pattern.compile(
         "(?:plugins|running plugins|server plugins|\\d+ plugins)[^:]*?:\\s*(.+)",
@@ -589,9 +593,7 @@ public class PeakPluginScanner extends Module {
     @EventHandler
     private void onGameLeft(GameLeftEvent event) {
         saveCache();
-        RawPacketCapture.clearPending();
-        probing = false;
-        waitingForPluginList = false;
+        reset();
     }
 
     private void reset() {
@@ -599,14 +601,18 @@ public class PeakPluginScanner extends Module {
         observedPluginCommands.clear();
         probeMap.clear();
         probeQueue.clear();
+        pendingPackets.clear();
         scanScheduled = false;
         scanTickCounter = 0;
         scanned = false;
         probing = false;
         probeTickCounter = 0;
-        nextCompletionId = 1000;
+        nextCompletionId = PROBE_ID_BASE;
         totalProbesSent = 0;
         totalProbesQueued = 0;
+        sentProbes = 0;
+        retriedProbes = 0;
+        failedProbes = 0;
         serverBrand = null;
         serverIp = null;
         serverVersion = null;
@@ -621,14 +627,10 @@ public class PeakPluginScanner extends Module {
     private void onPacketReceive(PacketEvent.Receive event) {
         if (!isActive()) return;
 
-        if (event.packet instanceof ClientboundCustomPayloadPacket pkt) {
-            handlePayload(pkt.payload());
-        }
-        if (event.packet instanceof ClientboundCommandSuggestionsPacket pkt) {
-            onCommandSuggestions(pkt.id(), pkt);
-        }
-        if (waitingForPluginList && event.packet instanceof ClientboundSystemChatPacket pkt) {
-            handlePluginListResponse(pkt.content().getString());
+        if (event.packet instanceof ClientboundCustomPayloadPacket
+            || event.packet instanceof ClientboundCommandSuggestionsPacket
+            || (waitingForPluginList && event.packet instanceof ClientboundSystemChatPacket)) {
+            pendingPackets.add(event.packet);
         }
     }
 
@@ -654,6 +656,8 @@ public class PeakPluginScanner extends Module {
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (!isActive() || mc.player == null || mc.level == null) return;
+
+        drainPendingPackets();
 
         if (scanScheduled) {
             scanTickCounter++;
@@ -683,6 +687,21 @@ public class PeakPluginScanner extends Module {
         if (scanChannels.get()) processRawBytes();
 
         if (totalCommandsScanned == 0 || mc.player.tickCount % 100 == 0) fetchServerInfo();
+    }
+
+    private void drainPendingPackets() {
+        Object packet;
+        while ((packet = pendingPackets.poll()) != null) {
+            if (packet instanceof ClientboundCustomPayloadPacket pkt) {
+                handlePayload(pkt.payload());
+            }
+            if (packet instanceof ClientboundCommandSuggestionsPacket pkt) {
+                onCommandSuggestions(pkt.id(), pkt);
+            }
+            if (waitingForPluginList && packet instanceof ClientboundSystemChatPacket pkt) {
+                handlePluginListResponse(pkt.content().getString());
+            }
+        }
     }
 
     private void executeScan() {
@@ -784,6 +803,7 @@ public class PeakPluginScanner extends Module {
     private void buildPluginProbes() {
         probeQueue.clear();
         probeMap.clear();
+        totalProbesSent = 0;
         totalProbesQueued = 0;
 
         addProbe(new ProbeSpec("/", ProbeKind.ROOT, null));
@@ -1380,47 +1400,46 @@ public class PeakPluginScanner extends Module {
         if (mc.player == null) return;
         try {
             File file = new File("peakscan_results.txt");
-            PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8));
-
-            pw.println("Peak Plugin Scanner Results");
-            pw.println("===========================");
-            pw.println("Date: " + new Date());
-            pw.println("Brand: " + (serverBrand != null ? serverBrand : "unknown"));
-            pw.println("Version: " + (serverVersion != null ? serverVersion : "unknown"));
-            pw.println("IP: " + (serverIp != null ? serverIp : "unknown"));
-            pw.println("Protocol: " + protocolVersion);
-            pw.println("Total commands scanned: " + totalCommandsScanned);
-            pw.println("Total plugins detected: " + detectedPlugins.size());
-            pw.println("Total probes sent: " + totalProbesSent);
-            pw.println();
-
-            List<String> anticheats = detectAnticheats();
-            if (!anticheats.isEmpty()) {
-                pw.println("AntiCheat detected: " + String.join(", ", anticheats));
+            try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8))) {
+                pw.println("Peak Plugin Scanner Results");
+                pw.println("===========================");
+                pw.println("Date: " + new Date());
+                pw.println("Brand: " + (serverBrand != null ? serverBrand : "unknown"));
+                pw.println("Version: " + (serverVersion != null ? serverVersion : "unknown"));
+                pw.println("IP: " + (serverIp != null ? serverIp : "unknown"));
+                pw.println("Protocol: " + protocolVersion);
+                pw.println("Total commands scanned: " + totalCommandsScanned);
+                pw.println("Total plugins detected: " + detectedPlugins.size());
+                pw.println("Total probes sent: " + totalProbesSent);
                 pw.println();
-            }
 
-            for (Confidence conf : Confidence.values()) {
-                List<DetectedPlugin> group = new ArrayList<>();
-                for (DetectedPlugin dp : new ArrayList<>(detectedPlugins.values())) {
-                    if (dp.confidence == conf) group.add(dp);
-                }
-                if (group.isEmpty()) continue;
-
-                group.sort((a, b) -> a.name.compareToIgnoreCase(b.name));
-                pw.println("── " + conf.name() + " (" + group.size() + " plugins) " + "─".repeat(40));
-                for (DetectedPlugin dp : group) {
-                    pw.println("  " + dp.name);
-                    pw.println("    Category: " + dp.category);
-                    pw.println("    Evidence: " + dp.evidence);
-                    if (!dp.commands.isEmpty()) {
-                        pw.println("    Commands: " + String.join(", ", dp.commands));
-                    }
+                List<String> anticheats = detectAnticheats();
+                if (!anticheats.isEmpty()) {
+                    pw.println("AntiCheat detected: " + String.join(", ", anticheats));
                     pw.println();
                 }
+
+                for (Confidence conf : Confidence.values()) {
+                    List<DetectedPlugin> group = new ArrayList<>();
+                    for (DetectedPlugin dp : new ArrayList<>(detectedPlugins.values())) {
+                        if (dp.confidence == conf) group.add(dp);
+                    }
+                    if (group.isEmpty()) continue;
+
+                    group.sort((a, b) -> a.name.compareToIgnoreCase(b.name));
+                    pw.println("── " + conf.name() + " (" + group.size() + " plugins) " + "─".repeat(40));
+                    for (DetectedPlugin dp : group) {
+                        pw.println("  " + dp.name);
+                        pw.println("    Category: " + dp.category);
+                        pw.println("    Evidence: " + dp.evidence);
+                        if (!dp.commands.isEmpty()) {
+                            pw.println("    Commands: " + String.join(", ", dp.commands));
+                        }
+                        pw.println();
+                    }
+                }
             }
 
-            pw.close();
             mc.player.sendSystemMessage(txt("§a[PeakScanner] §7Exported to §fpeakscan_results.txt"));
         } catch (Exception e) {
             mc.player.sendSystemMessage(txt("§c[PeakScanner] Export failed: " + e.getMessage()));
@@ -1501,6 +1520,7 @@ public class PeakPluginScanner extends Module {
 
         PeakScanCache.Entry cached = PeakScanCache.get(address);
         if (cached == null || cached.plugins == null || cached.plugins.isEmpty()) return false;
+        if (!"COMPLETE".equals(cached.status)) return false;
 
         long maxAgeMs = cacheAgeHours.get() * 3600_000L;
         if (System.currentTimeMillis() - cached.scannedAtMs > maxAgeMs) return false;

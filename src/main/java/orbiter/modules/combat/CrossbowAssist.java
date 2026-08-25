@@ -15,6 +15,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.EntityHitResult;
@@ -233,6 +234,7 @@ public class CrossbowAssist extends Module {
         currentTarget = null;
         lastTargetSwitchTime = 0;
         trajectoryPoints.clear();
+        ComboTracker.clearAll();
         prevVelocities.clear();
         smoothedVelocities.clear();
         tickCounter = 0;
@@ -328,16 +330,16 @@ public class CrossbowAssist extends Module {
     }
 
     private void fireCrossbow() {
-        if (mc.player == null || mc.getConnection() == null) return;
+        if (mc.player == null || mc.getConnection() == null || mc.gameMode == null) return;
 
-        mc.player.stopUsingItem();
+        mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
 
         if (currentTarget != null) {
             ComboTracker.registerHit(currentTarget.getUUID());
         }
 
         if (autoReload.get()) {
-
+            mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
         }
     }
 
@@ -476,9 +478,7 @@ public class CrossbowAssist extends Module {
         if (targetVel.lengthSqr() < 0.001) return currentPos;
 
         double dist = origin.distanceTo(currentPos);
-        double speed = hasFireworkLoaded ? 3.15 : boltSpeed.get();
-
-        if (hasFireworkLoaded) speed = 1.6;
+        double speed = hasFireworkLoaded ? 1.6 : boltSpeed.get();
 
         double flightTime = dist / speed;
         flightTime = Math.min(flightTime, predictionSteps.get());
@@ -498,22 +498,27 @@ public class CrossbowAssist extends Module {
         double horizontalDist = Math.sqrt(dx * dx + dz * dz);
 
         float yaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0f);
+        lastCalculatedYawForSim = yaw;
 
         double speed = hasFireworkLoaded ? 1.6 : boltSpeed.get();
         double g = hasFireworkLoaded ? 0.0 : boltGravity.get();
         double v2 = speed * speed;
 
         float pitch;
-        double disc = v2 * v2 - g * (g * horizontalDist * horizontalDist + 2 * dy * v2);
-
-        if (disc < 0 || speed < 0.1) {
+        if (g <= 1.0E-4 || horizontalDist <= 1.0E-4 || speed < 0.1) {
 
             pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontalDist));
         } else {
-            double tanTheta = (v2 - Math.sqrt(disc)) / (g * horizontalDist);
-            pitch = (float) -Math.toDegrees(Math.atan(tanTheta));
+            double disc = v2 * v2 - g * (g * horizontalDist * horizontalDist + 2 * dy * v2);
+            if (disc < 0) {
 
-            pitch = refinePitchWithSimulation(origin, target, pitch, speed, g);
+                pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontalDist));
+            } else {
+                double tanTheta = (v2 - Math.sqrt(disc)) / (g * horizontalDist);
+                pitch = (float) -Math.toDegrees(Math.atan(tanTheta));
+
+                pitch = refinePitchWithSimulation(origin, target, pitch, speed, g);
+            }
         }
 
         return new AimSolution(yaw, pitch);
