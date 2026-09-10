@@ -38,9 +38,12 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ServerProtect extends Module {
 
@@ -169,13 +172,6 @@ public class ServerProtect extends Module {
         .defaultValue(true)
         .build());
 
-    private final Setting<Boolean> blockMaliciousEntityData = sgItems.add(new BoolSetting.Builder()
-        .name("block-malicious-entity-data")
-        .description("Block concretely malicious entity data instead of silently rewriting the live stack.")
-        .defaultValue(true)
-        .visible(validateEntityData::get)
-        .build());
-
     private final Setting<Boolean> sanitizeCopyForTooltip = sgItems.add(new BoolSetting.Builder()
         .name("sanitize-copy-for-tooltip")
         .description("Show a local safe tooltip replacement without modifying the inventory stack.")
@@ -284,34 +280,11 @@ public class ServerProtect extends Module {
 
     private final Setting<Integer> maxAreaEffectCloud = sgEntities.add(new IntSetting.Builder()
         .name("max-area-effect-cloud")
-        .description("Maximum area_effect_cloud entities. Crashers use these with Radius:Infinity.")
-        .defaultValue(0)
+        .description("Maximum area_effect_cloud entities allowed in the world. Crashers use these with Radius:Infinity. Elder guardian and lingering potion clouds are legit, so they only get cancelled past this limit.")
+        .defaultValue(10)
         .min(1)
         .sliderRange(1, 50)
         .visible(entityLimit::get)
-        .build());
-
-    private final SettingGroup sgText = settings.createGroup("Signs and Holograms");
-
-    private final Setting<Boolean> sanitizeSigns = sgText.add(new BoolSetting.Builder()
-        .name("sanitize-signs")
-        .description("Strip excessive/abusive text from signs client-side.")
-        .defaultValue(true)
-        .build());
-
-    private final Setting<Integer> maxSignTextLength = sgText.add(new IntSetting.Builder()
-        .name("max-sign-text-length")
-        .description("Maximum characters per sign line.")
-        .defaultValue(256)
-        .min(32)
-        .sliderRange(32, 2000)
-        .visible(sanitizeSigns::get)
-        .build());
-
-    private final Setting<Boolean> hologramProtect = sgText.add(new BoolSetting.Builder()
-        .name("hologram-protection")
-        .description("Locally replace only structurally malicious hologram text. Legitimate holograms are preserved.")
-        .defaultValue(false)
         .build());
 
     private final SettingGroup sgSpam = settings.createGroup("Spam Protection");
@@ -340,10 +313,16 @@ public class ServerProtect extends Module {
     private final Setting<Integer> maxBossBars = sgSpam.add(new IntSetting.Builder()
         .name("max-bossbars")
         .description("Maximum boss bars allowed at once.")
-        .defaultValue(0)
+        .defaultValue(20)
         .min(1)
         .sliderRange(1, 20)
         .visible(bossbarLimit::get)
+        .build());
+
+    private final Setting<Boolean> blockBadEffects = sgSpam.add(new BoolSetting.Builder()
+        .name("block-mining-fatigue-and-darkness")
+        .description("Cancel mining fatigue and darkness effect packets. Off by default because elder guardians and wardens apply both legitimately.")
+        .defaultValue(false)
         .build());
 
     private final Setting<Boolean> titleLimit = sgSpam.add(new BoolSetting.Builder()
@@ -583,14 +562,14 @@ public class ServerProtect extends Module {
     private int chatCountThisTick;
     private int titleCountThisSecond;
     private long lastTitleResetTime;
-    private int bossBarCount;
+    private final Set<UUID> bossBarIds = new HashSet<>();
+    private long lastBossBarSweep;
     private int mapUpdateCountThisTick;
-    private int itemEntityCount;
-    private int entitySpawnsThisTick;
+    private volatile int itemEntityCount;
+    private final AtomicInteger entitySpawnsThisTick = new AtomicInteger();
     private final Map<EntityType<?>, Integer> entityTypeCounts = new HashMap<>();
-    private List<Entity> cachedEntities;
 
-    private int blockedCountThisTick;
+    private final AtomicInteger blockedCountThisTick = new AtomicInteger();
     private long lastBlockedTick;
     private int lowFpsTicks;
     private int lowTpsTicks;
@@ -611,11 +590,10 @@ public class ServerProtect extends Module {
         chatCountThisTick = 0;
         titleCountThisSecond = 0;
         lastTitleResetTime = System.currentTimeMillis();
-        bossBarCount = 0;
+        bossBarIds.clear();
         itemEntityCount = 0;
-        cachedEntities = null;
         entityTypeCounts.clear();
-        blockedCountThisTick = 0;
+        blockedCountThisTick.set(0);
         lastBlockedTick = -1;
         mapUpdateCountThisTick = 0;
         lowFpsTicks = 0;
@@ -627,9 +605,8 @@ public class ServerProtect extends Module {
 
     @Override
     public void onDeactivate() {
-        bossBarCount = 0;
+        bossBarIds.clear();
         itemEntityCount = 0;
-        cachedEntities = null;
         entityTypeCounts.clear();
     }
 
@@ -736,11 +713,37 @@ public class ServerProtect extends Module {
             if (soundCountThisTick > maxSoundsPerTick.get()) { event.cancel(); return; }
         }
 
-        if (bossbarLimit.get() && event.packet instanceof ClientboundBossEventPacket) {
-            bossBarCount++;
-            if (bossBarCount > maxBossBars.get()) {
-                event.cancel();
-                return;
+        if (bossbarLimit.get() && event.packet instanceof ClientboundBossEventPacket pkt) {
+            final UUID[] capturedId = new UUID[1];
+            final boolean[] removed = new boolean[1];
+            pkt.dispatch(new net.minecraft.network.protocol.game.ClientboundBossEventPacket.Handler() {
+                @Override
+                public void add(UUID id, Component name, float progress,
+                                net.minecraft.world.BossEvent.BossBarColor color,
+                                net.minecraft.world.BossEvent.BossBarOverlay overlay,
+                                boolean darkenScreen, boolean playMusic, boolean createWorldFog) {
+                    capturedId[0] = id;
+                }
+
+                @Override
+                public void remove(UUID id) {
+                    capturedId[0] = id;
+                    removed[0] = true;
+                }
+            });
+
+            UUID barId = capturedId[0];
+            if (barId != null) {
+                if (removed[0]) {
+                    bossBarIds.remove(barId);
+                } else if (!bossBarIds.contains(barId)) {
+                    if (bossBarIds.size() >= Math.max(1, maxBossBars.get())) {
+                        notifyBlocked("boss bar limit of " + Math.max(1, maxBossBars.get()) + " reached");
+                        event.cancel();
+                        return;
+                    }
+                    bossBarIds.add(barId);
+                }
             }
         }
 
@@ -801,8 +804,9 @@ public class ServerProtect extends Module {
         if (invalidSlotProtect.get() && event.packet instanceof ClientboundContainerSetSlotPacket pkt) {
             int slot = pkt.getSlot();
             int syncId = pkt.getContainerId();
+            int maxSlot = maxSlotForMenu(syncId);
 
-            if (syncId < -1 || syncId > 255 || slot < -1 || slot > 45) {
+            if (syncId < -1 || syncId > 255 || slot < -1 || slot > maxSlot) {
                 event.cancel();
                 return;
             }
@@ -831,19 +835,23 @@ public class ServerProtect extends Module {
 
         if (event.packet instanceof ClientboundAddEntityPacket pkt) {
             EntityType<?> type = pkt.getType();
-            entitySpawnsThisTick++;
+            int spawns = entitySpawnsThisTick.incrementAndGet();
 
-            if (entitySpawnsThisTick > 100) {
+            if (spawns > 100) {
                 event.cancel();
                 return;
             }
 
-            if (type == EntityTypes.AREA_EFFECT_CLOUD) {
-                event.cancel();
-                return;
+            if (type == EntityTypes.AREA_EFFECT_CLOUD && entityLimit.get()) {
+                int current = entityTypeCounts.getOrDefault(EntityTypes.AREA_EFFECT_CLOUD, 0);
+                if (current >= Math.max(1, maxAreaEffectCloud.get())) {
+                    notifyBlocked("area effect cloud limit of " + maxAreaEffectCloud.get() + " reached");
+                    event.cancel();
+                    return;
+                }
             }
 
-            if (entityLimit.get() && entitySpawnsThisTick > maxSpawnsPerTick.get()) {
+            if (entityLimit.get() && spawns > maxSpawnsPerTick.get()) {
                 event.cancel();
                 return;
             }
@@ -996,7 +1004,7 @@ public class ServerProtect extends Module {
             }
         }
 
-        if (event.packet instanceof net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket pkt) {
+        if (blockBadEffects.get() && event.packet instanceof net.minecraft.network.protocol.game.ClientboundUpdateMobEffectPacket pkt) {
             net.minecraft.core.Holder<net.minecraft.world.effect.MobEffect> effect = pkt.getEffect();
             if (effect == MobEffects.MINING_FATIGUE || effect == MobEffects.DARKNESS) {
                 event.cancel();
@@ -1011,19 +1019,22 @@ public class ServerProtect extends Module {
 
         soundCountThisTick = 0;
         chatCountThisTick = 0;
-        bossBarCount = 0;
         mapUpdateCountThisTick = 0;
-        entitySpawnsThisTick = 0;
+        entitySpawnsThisTick.set(0);
 
-        if (blockedCountThisTick > 0 && mc.level.getGameTime() != lastBlockedTick) {
-            notifyProtection("Applied " + blockedCountThisTick + " safe local item views.");
-            blockedCountThisTick = 0;
+        long gameTime = mc.level.getGameTime();
+        if (gameTime - lastBossBarSweep >= 600) {
+            bossBarIds.clear();
+            lastBossBarSweep = gameTime;
         }
-        lastBlockedTick = mc.level.getGameTime();
+
+        if (blockedCountThisTick.get() > 0 && gameTime != lastBlockedTick) {
+            notifyProtection("Applied " + blockedCountThisTick.getAndSet(0) + " safe local item views.");
+        }
+        lastBlockedTick = gameTime;
 
         List<Entity> allEntities = new ArrayList<>();
         for (Entity e : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) allEntities.add(e);
-        cachedEntities = allEntities;
 
         itemEntityCount = 0;
         entityTypeCounts.clear();
@@ -1135,7 +1146,15 @@ public class ServerProtect extends Module {
         long tick = mc.level.getGameTime();
         if (tick - lastNotificationTick < notificationCooldownTicks.get()) return;
         lastNotificationTick = tick;
-        mc.player.sendSystemMessage(Component.literal("\u00a7c[ServerProtect] \u00a77" + message));
+        String text = "\u00a7c[ServerProtect] \u00a77" + message;
+        mc.execute(() -> {
+            if (mc.player != null) mc.player.sendSystemMessage(Component.literal(text));
+        });
+    }
+
+    private int maxSlotForMenu(int syncId) {
+        if (syncId == 0) return 45;
+        return 128;
     }
 
     private boolean isValidExplosion(ClientboundExplodePacket pkt) {
@@ -1184,91 +1203,6 @@ public class ServerProtect extends Module {
         return !Float.isNaN(v) && !Float.isInfinite(v);
     }
 
-    private boolean isValidCommandTree(ClientboundCommandsPacket pkt) {
-
-        return true;
-    }
-
-    private boolean isValidEntityAttributes(ClientboundUpdateAttributesPacket pkt) {
-        List<ClientboundUpdateAttributesPacket.AttributeSnapshot> entries = pkt.getValues();
-        if (entries == null) return true;
-        for (ClientboundUpdateAttributesPacket.AttributeSnapshot entry : entries) {
-            double base = entry.base();
-            if (!isFinite(base) || Math.abs(base) > 1e9) return false;
-            if (entry.modifiers() != null) {
-                for (var mod : entry.modifiers()) {
-                    double v = mod.amount();
-                    if (!isFinite(v) || Math.abs(v) > 1e9) return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    private boolean isValidTeam(ClientboundSetPlayerTeamPacket pkt) {
-        var teamOpt = pkt.getParameters();
-        if (teamOpt == null || teamOpt.isEmpty()) return true;
-        var team = teamOpt.get();
-        if (isAbusiveText(team.displayName())) return false;
-        if (isAbusiveText(team.playerPrefix())) return false;
-        if (isAbusiveText(team.playerSuffix())) return false;
-        return true;
-    }
-
-    private boolean isValidScoreboardObjective(ClientboundSetObjectivePacket pkt) {
-        if (pkt.getMethod() == ClientboundSetObjectivePacket.METHOD_REMOVE) return true;
-        return !isAbusiveText(pkt.getDisplayName());
-    }
-
-    private boolean isValidMapUpdate(ClientboundMapItemDataPacket pkt) {
-        var decos = pkt.decorations();
-        if (decos != null && decos.isPresent()) {
-            List<?> list = decos.get();
-            if (list != null && list.size() > 256) return false;
-        }
-        return true;
-    }
-
-    private boolean isValidBlockEntityUpdate(ClientboundBlockEntityDataPacket pkt) {
-        CompoundTag nbt = pkt.getTag();
-        if (nbt == null) return true;
-
-        for (String side : new String[]{"front_text", "back_text"}) {
-            Tag sideEl = nbt.get(side);
-            if (sideEl instanceof CompoundTag sideCompound) {
-                Tag msgs = sideCompound.get("messages");
-                if (msgs instanceof ListTag list) {
-                    for (int i = 0; i < list.size(); i++) {
-                        var e = list.get(i);
-                        if (e instanceof net.minecraft.nbt.StringTag ns) {
-                            String s = ns.asString().orElse("");
-                            if (countFormatArgs(s) > 0 && countFormatArgs(s) * 4 > 32) return false;
-                        }
-                    }
-                }
-            }
-        }
-        return true;
-    }
-
-    private boolean isValidOpenScreen(ClientboundOpenScreenPacket pkt) {
-        return !isAbusiveText(pkt.getTitle());
-    }
-
-    private static boolean isValidTradeOffers(ClientboundMerchantOffersPacket pkt) {
-        net.minecraft.world.item.trading.MerchantOffers offers = pkt.getOffers();
-        if (offers == null) return true;
-        for (net.minecraft.world.item.trading.MerchantOffer offer : offers) {
-            if (isMaliciousItem(offer.getResult())) return false;
-            if (isMaliciousItem(offer.getResult())) return false;
-            net.minecraft.world.item.ItemStack first = offer.getCostA();
-            if (first != null && !first.isEmpty() && isMaliciousItem(first)) return false;
-            net.minecraft.world.item.ItemStack second = offer.getCostB();
-            if (second != null && !second.isEmpty() && isMaliciousItem(second)) return false;
-        }
-        return true;
-    }
-
     public static boolean hasExcessiveCjk(String s) {
         int cjkCount = 0;
         for (int i = 0; i < s.length(); i++) {
@@ -1278,24 +1212,12 @@ public class ServerProtect extends Module {
         return cjkCount > 50;
     }
 
-    public static String sanitizeText(String text, int maxLength) {
-        if (text == null) return "";
-        if (text.length() > maxLength) text = text.substring(0, maxLength);
-        return text.replace("\u00A7k", "");
-    }
-
-    public boolean shouldSanitizeItems() { return isActive() && sanitizeItems.get(); }
     public int getMaxLoreLength() { return maxLoreLength.get(); }
     public boolean shouldRemoveObfuscated() { return isActive() && removeObfuscated.get(); }
     public boolean shouldRemoveChinese() { return isActive() && removeChinese.get(); }
-    public boolean shouldSanitizeSigns() { return isActive() && sanitizeSigns.get(); }
-    public int getMaxSignTextLength() { return maxSignTextLength.get(); }
-    public boolean shouldLimitChat() { return isActive() && chatLengthLimit.get(); }
     public boolean shouldSanitizeNames() { return isActive() && sanitizeItems.get() && sanitizeNames.get(); }
     public int getMaxNameLength() { return maxNameLength.get(); }
-    public boolean shouldStripEntityData() { return isActive() && sanitizeItems.get() && stripEntityData.get(); }
     public boolean shouldValidateEntityData() { return isActive() && validateEntityData.get(); }
-    public boolean shouldBlockMaliciousEntityData() { return isActive() && blockMaliciousEntityData.get(); }
     public boolean shouldSanitizeCopyForTooltip() { return isActive() && sanitizeCopyForTooltip.get(); }
     public boolean isLegacyEntityRemovalEnabled() { return stripEntityData.get(); }
     public boolean shouldPacketItemGuard() { return isActive() && packetItemGuard.get(); }
@@ -1324,8 +1246,6 @@ public class ServerProtect extends Module {
         .name("sound-max-per-window").defaultValue(24).min(1).sliderRange(1, 200).build());
     private final Setting<Integer> soundMaxSamePerWindow = sgCrashFixer.add(new IntSetting.Builder()
         .name("sound-max-same-per-window").defaultValue(6).min(1).sliderRange(1, 100).build());
-    private final Setting<Integer> soundCleanupThreshold = sgCrashFixer.add(new IntSetting.Builder()
-        .name("sound-cleanup-threshold").defaultValue(4096).min(128).sliderRange(128, 10000).build());
 
     private final Setting<Boolean> translationRecursionFix = sgCrashFixer.add(new BoolSetting.Builder()
         .name("translation-recursion-fix").description("Prevent StackOverflow from recursive translatable text.").defaultValue(true).build());
@@ -1389,7 +1309,6 @@ public class ServerProtect extends Module {
     public int getSoundWindowMs() { return soundWindowMs.get(); }
     public int getMaxPlaysPerWindow() { return soundMaxPerWindow.get(); }
     public int getMaxSameSoundPerWindow() { return soundMaxSamePerWindow.get(); }
-    public int getSoundCleanupThreshold() { return soundCleanupThreshold.get(); }
     public boolean shouldRecursionGuard() { return isActive() && translationRecursionFix.get(); }
     public int getTranslationMaxRecursionDepth() { return translationMaxRecursionDepth.get(); }
     public boolean shouldPayloadGuard() { return isActive() && translationPayloadGuard.get(); }
@@ -1416,22 +1335,18 @@ public class ServerProtect extends Module {
     public boolean shouldFixElderGuardianParticle() { return isActive() && elderGuardianParticleFix.get(); }
     public void warn(String msg) { warning(msg); }
 
-    private void notify(String msg) {
-        if (mc.player != null) mc.player.sendSystemMessage(Component.literal(msg));
-    }
-
     private void notifyBlocked(String detail) {
         if (mc.player == null) return;
         long tick = mc.level == null ? 0L : mc.level.getGameTime();
         if (tick != lastBlockedTick) {
-            if (blockedCountThisTick > 0) {
-                notifyProtection("Applied " + blockedCountThisTick + " safe local item views.");
+            int pending = blockedCountThisTick.getAndSet(0);
+            if (pending > 0) {
+                notifyProtection("Applied " + pending + " safe local item views.");
             }
-            blockedCountThisTick = 0;
             lastBlockedTick = tick;
         }
-        blockedCountThisTick++;
-        if (blockedCountThisTick == 1 && detail != null) {
+        int count = blockedCountThisTick.incrementAndGet();
+        if (count == 1 && detail != null) {
             notifyProtection("Unsafe item hidden locally (" + detail + "); source data unchanged.");
         }
     }
@@ -1506,17 +1421,6 @@ public class ServerProtect extends Module {
         return false;
     }
 
-    public static boolean isMaliciousItemNamesOnly(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) return false;
-        Component name = stack.get(DataComponents.CUSTOM_NAME);
-        if (name != null && isAbusiveText(name)) return true;
-        ItemLore lore = stack.get(DataComponents.LORE);
-        if (lore != null && lore.lines() != null) {
-            for (Component line : lore.lines()) if (isAbusiveText(line)) return true;
-        }
-        return false;
-    }
-
     public static boolean isMaliciousEntityDataOnly(ItemStack stack) {
         if (stack == null || stack.isEmpty()) return false;
         if (hasMaliciousNbt(stack.get(DataComponents.ENTITY_DATA))) return true;
@@ -1538,9 +1442,6 @@ public class ServerProtect extends Module {
         if (text.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents tc) {
             int percentArgs = countFormatArgs(tc.getKey());
             Object[] args = tc.getArgs();
-            if (percentArgs == 0 && args != null && args.length > 0) {
-
-            }
             if (percentArgs > 0) {
                 expansion[0] += percentArgs * (depth + 1);
                 if (expansion[0] > maxExp) return true;

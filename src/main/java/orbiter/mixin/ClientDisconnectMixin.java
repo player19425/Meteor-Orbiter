@@ -1,6 +1,6 @@
 package orbiter.mixin;
 
-import orbiter.modules.LeaveMessage;
+import orbiter.modules.misc.LeaveMessage;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -18,12 +18,8 @@ public abstract class ClientDisconnectMixin {
 
         LeaveMessage module = Modules.get().get(LeaveMessage.class);
         if (module != null && module.isActive()) {
-
             String reasonStr = reason != null ? reason.getString() : "";
-            if (reasonStr.contains("[LeaveMessage]")) {
-
-                return;
-            }
+            if (reasonStr.contains("[LeaveMessage]")) return;
 
             if (module.onPlayerDisconnect()) {
                 ci.cancel();

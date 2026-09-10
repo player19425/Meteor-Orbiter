@@ -114,7 +114,7 @@ public abstract class BaseServerInfoHud extends HudElement {
         return sb.toString();
     }
 
-    protected SettingColor rainbowColor() {
+    public static SettingColor rainbowColor() {
         long millis = System.currentTimeMillis();
         float hue = (millis % 4000L) / 4000f;
         int rgb = java.awt.Color.HSBtoRGB(hue, 1f, 1f);

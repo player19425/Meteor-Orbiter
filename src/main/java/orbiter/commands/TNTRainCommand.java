@@ -1,6 +1,6 @@
 package orbiter.commands;
 
-import orbiter.modules.TNTRain;
+import orbiter.modules.world.TNTRain;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;

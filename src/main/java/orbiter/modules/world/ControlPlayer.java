@@ -4,7 +4,7 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.multiplayer.PlayerInfo;
-import orbiter.modules.CreativeSafetyModule;
+import orbiter.modules.world.CreativeSafetyModule;
 import orbiter.util.CommandUtils;
 
 import java.util.ArrayList;

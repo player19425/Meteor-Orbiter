@@ -10,7 +10,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
-import orbiter.modules.CreativeSafetyModule;
+import orbiter.modules.world.CreativeSafetyModule;
 import orbiter.util.CommandUtils;
 import orbiter.util.FastSend;
 import orbiter.util.GlobalSendLimiter;

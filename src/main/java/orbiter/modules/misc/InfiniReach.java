@@ -46,22 +46,24 @@ public class InfiniReach extends Module {
 
     private final Setting<Boolean> debug = sg.add(new BoolSetting.Builder()
         .name("debug").description("Show method status in chat.")
-        .defaultValue(true).build());
+        .defaultValue(false).build());
 
     private static final double VANILLA_BLOCK_REACH = 4.5;
     private static final double VANILLA_ENTITY_REACH = 3.0;
-    private static final Pattern VALUE_PATTERN = Pattern.compile("is ([0-9.]+)");
+    private static final Pattern VALUE_PATTERN = Pattern.compile("(?:base value|is) ([0-9.]+)");
+    private static final int APPLY_RETRY_DELAY = 40;
 
     private ItemStack savedOffhand = ItemStack.EMPTY;
     private boolean hasSaved = false;
     private Method lastMethod = null;
     private double lastReach = -1;
-    private double savedBlockReach = -1;
-    private double savedEntityReach = -1;
-    private int pendingReads = 0;
+    private volatile double savedBlockReach = -1;
+    private volatile double savedEntityReach = -1;
+    private volatile int pendingReads = 0;
     private int readWaitTicks = 0;
     private boolean readsSent = false;
     private boolean attributeApplied = false;
+    private int applyCooldown = 0;
 
     public InfiniReach() {
         super(Orbiter.CATEGORY_STUPID, "infini-reach",
@@ -86,22 +88,21 @@ public class InfiniReach extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null || !isActive()) return;
         if (!ConfigModifier.get().stupidModulesEnabled()) { toggle(); return; }
+        if (applyCooldown > 0) {
+            applyCooldown--;
+            return;
+        }
 
         Method selected = resolveMethod();
         double currentReach = reach.get();
 
         if (selected == lastMethod && currentReach == lastReach) return;
 
-        boolean applied = switch (selected) {
-            case OpAttributes -> applyOpAttributes();
-            case CreativeReachItem -> applyCreativeItem();
-            default -> {
-                if (debug.get()) info("Auto: no method available.");
-                yield false;
-            }
-        };
-
-        if (!applied) return;
+        boolean applied = selected == Method.OpAttributes ? applyOpAttributes() : applyCreativeItem();
+        if (!applied) {
+            applyCooldown = APPLY_RETRY_DELAY;
+            return;
+        }
 
         lastMethod = selected;
         lastReach = currentReach;
@@ -128,11 +129,21 @@ public class InfiniReach extends Module {
             pendingReads = 2;
             mc.player.connection.sendCommand(root + " @s minecraft:block_interaction_range base get");
             mc.player.connection.sendCommand(root + " @s minecraft:entity_interaction_range base get");
+        } else if (!readCurrentValues.get()) {
+            savedBlockReach = VANILLA_BLOCK_REACH;
+            savedEntityReach = VANILLA_ENTITY_REACH;
         }
 
         if (pendingReads > 0 && readWaitTicks < 40) {
             readWaitTicks++;
-            return false;
+            if (readWaitTicks == 40) {
+                if (debug.get()) info("Could not read current attribute values, restoring vanilla defaults on disable.");
+                savedBlockReach = VANILLA_BLOCK_REACH;
+                savedEntityReach = VANILLA_ENTITY_REACH;
+                pendingReads = 0;
+            } else {
+                return false;
+            }
         }
 
         mc.player.connection.sendCommand(root + " @s minecraft:block_interaction_range base set " + fmt(reach.get()));
@@ -204,9 +215,9 @@ public class InfiniReach extends Module {
 
         ItemAttributeModifiers.Builder attrs = ItemAttributeModifiers.builder();
         attrs.add(Attributes.BLOCK_INTERACTION_RANGE,
-            mod("orbiter:block_reach", reach.get() - 4.5), EquipmentSlotGroup.OFFHAND);
+            mod("block_reach", reach.get() - VANILLA_BLOCK_REACH), EquipmentSlotGroup.OFFHAND);
         attrs.add(Attributes.ENTITY_INTERACTION_RANGE,
-            mod("orbiter:entity_reach", reach.get() - 4.5), EquipmentSlotGroup.OFFHAND);
+            mod("entity_reach", reach.get() - VANILLA_ENTITY_REACH), EquipmentSlotGroup.OFFHAND);
         stack.set(DataComponents.ATTRIBUTE_MODIFIERS, attrs.build());
 
         mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(45, stack));
@@ -225,8 +236,10 @@ public class InfiniReach extends Module {
             && current.is(Items.BARRIER);
 
         if (isOurs) {
-            mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(45, savedOffhand));
-            if (debug.get()) info("Restored offhand.");
+            if (mc.player.isCreative()) {
+                mc.player.connection.send(new ServerboundSetCreativeModeSlotPacket(45, savedOffhand));
+                if (debug.get()) info("Restored offhand.");
+            }
         } else if (debug.get()) {
             info("Offhand changed externally; restore skipped.");
         }
@@ -244,10 +257,11 @@ public class InfiniReach extends Module {
         readWaitTicks = 0;
         readsSent = false;
         attributeApplied = false;
+        applyCooldown = 0;
     }
 
-    private AttributeModifier mod(String id, double value) {
-        return new AttributeModifier(Identifier.withDefaultNamespace(id), value, AttributeModifier.Operation.ADD_VALUE);
+    private AttributeModifier mod(String path, double value) {
+        return new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter", path), value, AttributeModifier.Operation.ADD_VALUE);
     }
 
     private String fmt(double v) {

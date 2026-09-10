@@ -236,11 +236,6 @@ public class ItemStealer extends Module {
         return Modules.get().get(ItemStealer.class);
     }
 
-    public static boolean isGuiCloneEnabled() {
-        ItemStealer m = get();
-        return m != null && m.isActive() && m.pickBlockClone.get();
-    }
-
     public static boolean isRightClickCloneEnabled() {
         ItemStealer m = get();
         return m != null && m.isActive() && m.rightClickClone.get() && m.cloneOnAnyGui.get();
@@ -456,12 +451,6 @@ public class ItemStealer extends Module {
         return false;
     }
 
-    public boolean consumePendingShiftCancel() {
-        boolean was = pendingShiftCancel;
-        pendingShiftCancel = false;
-        return was;
-    }
-
     private void runTradeDump(MerchantMenu merchant) {
         try {
             MerchantOffers offers = merchant.getOffers();
@@ -573,11 +562,10 @@ public class ItemStealer extends Module {
                 String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
                 nameOk = pattern.matcher(displayName).find() || pattern.matcher(itemId).find();
             } catch (PatternSyntaxException e) {
-
+                warning("Invalid filter-name-regex: " + e.getMessage());
                 nameOk = false;
             }
         } else {
-
             nameOk = true;
         }
 
@@ -631,17 +619,6 @@ public class ItemStealer extends Module {
             giveInCreative(clone);
         }
 
-        return true;
-    }
-
-    public boolean injectIntoInventory(ItemStack stack) {
-        LocalPlayer player = mc.player;
-        if (player == null || stack == null || stack.isEmpty()) return false;
-        ItemStack copy = stack.copy();
-        if (!player.getInventory().add(copy)) {
-            ItemEntity entity = new ItemEntity(mc.level, player.getX(), player.getY(), player.getZ(), copy);
-            mc.level.addEntity(entity);
-        }
         return true;
     }
 
@@ -744,9 +721,6 @@ public class ItemStealer extends Module {
         if (!creativePresets.get()) return false;
 
         try {
-
-            GivePresetItemsCommand cmd = new GivePresetItemsCommand();
-
             return givePresetItemInternal(presetName);
         } catch (Exception e) {
             return false;
@@ -754,7 +728,6 @@ public class ItemStealer extends Module {
     }
 
     private boolean givePresetItemInternal(String presetName) {
-
         ItemStack presetItem = createQuickPreset(presetName);
         if (presetItem == null || presetItem.isEmpty()) return false;
 
@@ -1026,8 +999,4 @@ public class ItemStealer extends Module {
         return mc.gui.screen() instanceof AbstractContainerScreen<?>;
     }
 
-    public AbstractContainerMenu getCurrentHandler() {
-        if (mc.player == null) return null;
-        return mc.player.containerMenu;
-    }
 }

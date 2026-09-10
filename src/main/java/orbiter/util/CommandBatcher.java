@@ -39,17 +39,6 @@ public final class CommandBatcher {
         return sent;
     }
 
-    public int cancelOwner(String owner) {
-        if (owner == null) return 0;
-        int removed = 0;
-        var iterator = queue.iterator();
-        while (iterator.hasNext()) {
-            Step step = iterator.next();
-            if (owner.equals(step.owner())) { iterator.remove(); if (step.dedupeKey() != null) dedupeKeys.remove(step.dedupeKey()); removed++; }
-        }
-        return removed;
-    }
-
     public void clear() { queue.clear(); dedupeKeys.clear(); delay = 0; }
     public int size() { return queue.size(); }
     public void setBudgetPerTick(int budget) { budgetPerTick = Math.max(1, Math.min(64, budget)); }

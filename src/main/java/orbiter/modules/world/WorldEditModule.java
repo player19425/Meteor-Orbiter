@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.world;
 
 import orbiter.Orbiter;
 import meteordevelopment.meteorclient.events.entity.player.InteractBlockEvent;
@@ -2255,7 +2255,7 @@ public class WorldEditModule extends CreativeSafetyModule {
         info("=== WorldEdit Help ===");
         info("Selection: pos1, pos2, hpos1, hpos2, chunk, size, clear, expand, contract, shift, inset, outset");
         info("Blocks: set, replace, walls, outline, floor, roof, hollow, line, center, count");
-        info("Patterns: use weighted blocks like 25%glowstone,75%acacia_log");
+        info("Patterns: use weighted blocks like 25%%glowstone,75%%acacia_log");
         info("Shapes: sphere, hsphere, cyl, hcyl, pyramid, hpyramid");
         info("Clipboard: copy, cut, paste, flip, stack, move, saveclipboard, loadclipboard");
         info("Utility: drain, replacenear, tool");

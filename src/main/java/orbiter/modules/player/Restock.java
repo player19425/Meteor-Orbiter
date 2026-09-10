@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.player;
 
 import orbiter.Orbiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -17,6 +17,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.inventory.ContainerInput;
+import orbiter.systems.combat.CombatEngine;
 
 import java.util.List;
 
@@ -89,6 +90,7 @@ public class Restock extends Module {
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.gameMode == null) return;
+        if (CombatEngine.get().isFrozen()) return;
 
         if (!(mc.gui.screen() instanceof AbstractContainerScreen<?> handledScreen)) return;
         AbstractContainerMenu handler = handledScreen.getMenu();

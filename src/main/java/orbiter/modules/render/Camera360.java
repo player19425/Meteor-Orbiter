@@ -5,9 +5,12 @@ import orbiter.util.ConfigModifier;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
 
 public class Camera360 extends Module {
 
@@ -15,10 +18,7 @@ public class Camera360 extends Module {
     private final SettingGroup sgSync   = settings.createGroup("Server Sync");
 
     private final Setting<Boolean> noLimitPitch = sgGeneral.add(new BoolSetting.Builder()
-        .name("unlock-pitch").description("Remove pitch (up/down) clamping (-90° to +90°).").defaultValue(true).build());
-
-    private final Setting<Boolean> noLimitYaw = sgGeneral.add(new BoolSetting.Builder()
-        .name("unlock-yaw").description("Remove yaw wrapping (allows infinite yaw).").defaultValue(false).build());
+        .name("unlock-pitch").description("Remove pitch (up/down) clamping (-90\u00b0 to +90\u00b0).").defaultValue(true).build());
 
     private final Setting<Boolean> invertMouse = sgGeneral.add(new BoolSetting.Builder()
         .name("invert-mouse").description("Invert mouse Y-axis.").defaultValue(false).build());
@@ -64,7 +64,7 @@ public class Camera360 extends Module {
         if (mc.player == null) return;
 
         if (!ConfigModifier.get().stupidModulesEnabled()) {
-            info("Stupid Modules was disabled • 360 Camera auto-disabled.");
+            info("Stupid Modules was disabled, 360 Camera auto-disabled.");
             toggle();
             return;
         }
@@ -91,6 +91,13 @@ public class Camera360 extends Module {
     }
 
     public boolean shouldUnlockPitch() { return isActive() && noLimitPitch.get(); }
-    public boolean shouldUnlockYaw()   { return isActive() && noLimitYaw.get(); }
     public boolean shouldInvertMouse() { return isActive() && invertMouse.get(); }
+
+    public static boolean isLocalPlayerUpsideDown(Entity self) {
+        if (self != Minecraft.getInstance().player) return false;
+        Camera360 mod = Modules.get().get(Camera360.class);
+        if (mod == null || !mod.isActive()) return false;
+        float np = ((self.getXRot() + 180) % 360 + 360) % 360 - 180;
+        return np > 90 || np < -90;
+    }
 }

@@ -1,6 +1,8 @@
 package orbiter;
 
 import orbiter.commands.AutoShopCommand;
+import orbiter.commands.CopyCommand;
+import orbiter.commands.CopyPosCommand;
 import orbiter.commands.EnchCrackCommand;
 import orbiter.commands.EnchCrackedAliasCommand;
 import orbiter.commands.EnccAliasCommand;
@@ -10,6 +12,7 @@ import orbiter.commands.ExportModuleListCommand;
 import orbiter.commands.FixDeathCommand;
 import orbiter.commands.GivePresetCommand;
 import orbiter.commands.GivePresetItemsCommand;
+import orbiter.commands.GhostBlockCommand;
 import orbiter.commands.ItemCrashCommand;
 import orbiter.commands.ItemStealerCommand;
 import orbiter.commands.MultiCommand;
@@ -47,34 +50,70 @@ import orbiter.modules.render.BlockSpam;
 import orbiter.modules.render.ParticleControl;
 import orbiter.modules.render.PlaySoundSpam;
 import orbiter.modules.render.ViewBlocks;
+import orbiter.modules.combat.AimAssistPlus;
+import orbiter.modules.combat.AntiKnockback;
+import orbiter.modules.combat.AutoTotemPlus;
 import orbiter.modules.combat.BowAssist;
 import orbiter.modules.combat.CrossbowAssist;
+import orbiter.modules.combat.MaceAssist;
+import orbiter.modules.combat.NoFriendHit;
+import orbiter.modules.combat.OutOfReach;
+import orbiter.modules.combat.PrecisionShot;
 import orbiter.modules.combat.ShieldAssist;
 import orbiter.modules.combat.SpearAssist;
 import orbiter.modules.combat.TridentAssist;
-import orbiter.modules.misc.ItemInfo;
-import orbiter.modules.misc.ItemStealer;
-import orbiter.modules.misc.ExploitPreventer;
-import orbiter.modules.misc.ServerProtect;
-import orbiter.modules.misc.PeakPluginScanner;
-import orbiter.modules.misc.SpamPlus;
-import orbiter.modules.misc.EnchCracker;
-import orbiter.modules.world.WorldDownloader;
-import orbiter.modules.world.ControlPlayer;
-import orbiter.util.ConfigModifier;
-import orbiter.util.UpdateChecker;
-import com.mojang.logging.LogUtils;
-import orbiter.modules.movement.SlimeJump;
+import orbiter.modules.movement.AntiPush;
+import orbiter.modules.movement.AutoClutch;
+import orbiter.modules.movement.ForceInvisibility;
 import orbiter.modules.movement.JumpA;
+import orbiter.modules.movement.Noclip;
+import orbiter.modules.movement.SlimeJump;
+import orbiter.modules.Actions;
+import orbiter.modules.MessageFormatter;
+import orbiter.modules.PingSpoof;
+import orbiter.modules.misc.AntiStaff;
+import orbiter.modules.misc.AutoFind;
+import orbiter.modules.misc.AutoLogin;
+import orbiter.modules.misc.AutoShop;
+import orbiter.modules.misc.ClientSideThings;
+import orbiter.modules.misc.EnchCracker;
+import orbiter.modules.misc.ExploitPreventer;
 import orbiter.modules.misc.InfiniReach;
 import orbiter.modules.misc.ISellWand;
-import orbiter.modules.world.UUIDBan;
-import orbiter.modules.*;
+import orbiter.modules.misc.ItemInfo;
+import orbiter.modules.misc.ItemStealer;
+import orbiter.modules.misc.LeaveMessage;
+import orbiter.modules.misc.PeakPluginScanner;
+import orbiter.modules.misc.ServerProtect;
+import orbiter.modules.misc.SpamPlus;
+import orbiter.modules.player.AutoCraftPlus;
+import orbiter.modules.player.ClientSideMine;
+import orbiter.modules.player.Restock;
+import orbiter.modules.world.AutoFarming;
+import orbiter.modules.world.BedDefender;
+import orbiter.modules.world.CommandBlockPlacer;
+import orbiter.modules.world.ControlPlayer;
 import orbiter.modules.world.DeathOverride;
+import orbiter.modules.world.EntitySpammer;
+import orbiter.modules.world.ItemCreator;
+import orbiter.modules.world.ItemGenerator;
+import orbiter.modules.world.OperatorNuker;
+import orbiter.modules.world.RNGSpammer;
+import orbiter.modules.world.TNTRain;
+import orbiter.modules.world.UUIDBan;
+import orbiter.modules.world.WorldDownloader;
+import orbiter.modules.world.WorldEditModule;
+import orbiter.modules.world.WorldEraser;
+import orbiter.util.ConfigModifier;
+import orbiter.util.UpdateChecker;
+import orbiter.systems.combat.CombatEngine;
+import com.mojang.logging.LogUtils;
 import meteordevelopment.meteorclient.addons.GithubRepo;
 import meteordevelopment.meteorclient.addons.MeteorAddon;
+import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.commands.Commands;
 import meteordevelopment.meteorclient.systems.hud.Hud;
+import meteordevelopment.meteorclient.systems.hud.HudElementInfo;
 import meteordevelopment.meteorclient.systems.hud.HudGroup;
 import meteordevelopment.meteorclient.systems.modules.Category;
 import meteordevelopment.meteorclient.systems.modules.Modules;
@@ -95,19 +134,19 @@ public class Orbiter extends MeteorAddon {
 
     @Override
     public void onInitialize() {
-        LOG.info("Initializing Orbiter 1.0.5");
+        LOG.info("Initializing Orbiter 1.0.6");
 
         ConfigModifier.get();
         UpdateChecker.init();
+        CombatEngine.get().init();
 
         Modules modules = Modules.get();
         if (modules == null) {
             LOG.warn("Modules system not available, skipping module registration");
             return;
-        }
-
-        modules.add(new AutoCraftPlus());
+        }        modules.add(new AutoCraftPlus());
         modules.add(new AutoShop());
+        modules.add(new AutoLogin());
         modules.add(new AntiStaff());
         modules.add(new AntiKnockback());
         modules.add(new AntiPush());
@@ -122,6 +161,7 @@ public class Orbiter extends MeteorAddon {
         modules.add(new SpearAssist());
         modules.add(new OutOfReach());
         modules.add(new NoFriendHit());
+        modules.add(new AutoTotemPlus());
         modules.add(new MessageFormatter());
         modules.add(new ViewBlocks());
         modules.add(new BlockSpoof());
@@ -131,11 +171,13 @@ public class Orbiter extends MeteorAddon {
         modules.add(new ForceInvisibility());
         modules.add(new SlimeJump());
         modules.add(new JumpA());
+        modules.add(new Noclip());
         modules.add(new InfiniReach());
         modules.add(new Actions());
         modules.add(new AutoFind());
         modules.add(new AutoClutch());
         modules.add(new AutoFarming());
+        modules.add(new BedDefender());
         modules.add(new Restock());
         modules.add(new LeaveMessage());
         modules.add(new SpamPlus());
@@ -167,57 +209,43 @@ public class Orbiter extends MeteorAddon {
         modules.add(new WorldDownloader());
         modules.add(new UUIDBan());
 
-        try {
-            Commands.add(new ItemCrashCommand());
-            Commands.add(new TNTRainCommand());
-            Commands.add(new EnchCrackCommand());
-            Commands.add(new EnchCrackedAliasCommand());
-            Commands.add(new EnccAliasCommand());
-            Commands.add(new WorldEditCommand());
-            Commands.add(new AutoShopCommand());
-            Commands.add(new ISellWandCommand());
-            Commands.add(new FixDeathCommand());
-            Commands.add(new EscapeCommand());
-            Commands.add(new ExportModuleListCommand());
-            Commands.add(new GivePresetItemsCommand());
-            Commands.add(new TransferCommand());
-            Commands.add(new MultiCommand());
-            Commands.add(new ItemStealerCommand());
-            Commands.add(new NbtCommand());
-            Commands.add(new GivePresetCommand());
-            Commands.add(new VerifyProtectCommand());
-            Commands.add(new PeakPluginScannerCommand());
-            Commands.add(new UUIDBanCommand());
-            Commands.add(new HideKeybindCommand());
-            Commands.add(new SetPrefixCommand());
-
-            HideKeybindCommand.loadAndApplyOnStartup();
-        } catch (Exception e) {
-            LOG.warn("Failed to register commands", e);
-        }
-
-        try {
-            Hud hud = Hud.get();
-            if (hud != null) {
-                hud.register(CustomTextHud.INFO);
-                hud.register(WeaponCooldownHud.INFO);
-                hud.register(RenderDistanceHud.INFO);
-                hud.register(NearestPlayerHud.INFO);
-                hud.register(ServerTpsHud.INFO);
-                hud.register(ServerPlayersHud.INFO);
-                hud.register(ServerRealIpHud.INFO);
-                hud.register(ServerRealVersionHud.INFO);
-                hud.register(ServerVersionNoteHud.INFO);
-                hud.register(ServerIpHud.INFO);
-                hud.register(ServerBrandHud.INFO);
-                hud.register(ServerVersionHud.INFO);
-                hud.register(ServerProtocolHud.INFO);
-                hud.register(ServerDifficultyHud.INFO);
-                hud.register(ServerTimeHud.INFO);
-                hud.register(ServerPluginsHud.INFO);
+        Command[] commands = {
+            new ItemCrashCommand(), new TNTRainCommand(), new EnchCrackCommand(),
+            new EnchCrackedAliasCommand(), new EnccAliasCommand(), new WorldEditCommand(),
+            new AutoShopCommand(), new ISellWandCommand(), new FixDeathCommand(),
+            new EscapeCommand(), new ExportModuleListCommand(), new GivePresetItemsCommand(),
+            new TransferCommand(), new MultiCommand(), new ItemStealerCommand(),
+            new NbtCommand(), new GivePresetCommand(), new VerifyProtectCommand(),
+            new PeakPluginScannerCommand(), new UUIDBanCommand(), new HideKeybindCommand(),
+            new SetPrefixCommand(), new GhostBlockCommand(), new CopyPosCommand(),
+            new CopyCommand()
+        };
+        for (Command command : commands) {
+            try {
+                Commands.add(command);
+            } catch (Throwable t) {
+                LOG.error("Failed to register command " + command.getClass().getSimpleName(), t);
             }
-        } catch (Exception e) {
-            LOG.warn("Failed to register HUD elements", e);
+        }
+        HideKeybindCommand.loadAndApplyOnStartup();
+
+        Hud hud = Hud.get();
+        if (hud != null) {
+            HudElementInfo<?>[] huds = {
+                CustomTextHud.INFO, WeaponCooldownHud.INFO, RenderDistanceHud.INFO,
+                NearestPlayerHud.INFO, ServerTpsHud.INFO, ServerPlayersHud.INFO,
+                ServerRealIpHud.INFO, ServerRealVersionHud.INFO, ServerVersionNoteHud.INFO,
+                ServerIpHud.INFO, ServerBrandHud.INFO, ServerVersionHud.INFO,
+                ServerProtocolHud.INFO, ServerDifficultyHud.INFO, ServerTimeHud.INFO,
+                ServerPluginsHud.INFO
+            };
+            for (HudElementInfo<?> info : huds) {
+                try {
+                    hud.register(info);
+                } catch (Throwable t) {
+                    LOG.error("Failed to register HUD element " + info.name, t);
+                }
+            }
         }
     }
 

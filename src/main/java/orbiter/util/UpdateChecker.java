@@ -24,6 +24,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class UpdateChecker {
     private static final HttpClient HTTP = HttpClient.newBuilder()
@@ -37,8 +38,8 @@ public final class UpdateChecker {
     private static final long MAX_RESPONSE_BYTES = 1024 * 1024;
     private static final long MAX_JAR_BYTES = 32L * 1024 * 1024;
 
-    private static volatile boolean checkedThisSession;
-    private static volatile boolean installing;
+    private static final AtomicBoolean checkedThisSession = new AtomicBoolean();
+    private static final AtomicBoolean installing = new AtomicBoolean();
 
     private UpdateChecker() {}
 
@@ -54,8 +55,8 @@ public final class UpdateChecker {
 
     public static void checkNow(boolean notifyWhenUpToDate) {
         if (!ConfigModifier.get().updateCheckerEnabled()) return;
-        if (checkedThisSession && !notifyWhenUpToDate) return;
-        checkedThisSession = true;
+        if (!notifyWhenUpToDate && !checkedThisSession.compareAndSet(false, true)) return;
+        if (notifyWhenUpToDate) checkedThisSession.set(true);
 
         CompletableFuture.supplyAsync(() -> fetchLatest())
             .thenAccept(release -> {
@@ -64,13 +65,13 @@ public final class UpdateChecker {
                     return;
                 }
                 if (!isNewer(release[0])) {
-                    if (notifyWhenUpToDate) ChatUtils.infoPrefix("Orbiter", "You are on the latest version.");
+                    if (notifyWhenUpToDate) chat("You are on the latest version.");
                     return;
                 }
                 String ignored = ConfigModifier.get().ignoredVersion();
                 if (release[0].equalsIgnoreCase(ignored)) return;
 
-                ChatUtils.infoPrefix("Orbiter", "There is a new update available (%s).", release[0]);
+                chat("There is a new update available (%s).", release[0]);
                 if (ConfigModifier.get().updateAutoEnabled()) {
                     install(release[0], release[2]);
                 } else {
@@ -82,13 +83,13 @@ public final class UpdateChecker {
     }
 
     public static void install(String tag, String downloadUrl) {
-        if (installing) return;
+        if (!installing.compareAndSet(false, true)) return;
         if (downloadUrl == null || downloadUrl.isBlank()) {
+            installing.set(false);
             error("Update payload missing for " + tag + ".");
             return;
         }
-        installing = true;
-        ChatUtils.infoPrefix("Orbiter", "Downloading update %s...", tag);
+        chat("Downloading update %s...", tag);
 
         CompletableFuture.supplyAsync(() -> {
             try {
@@ -111,21 +112,25 @@ public final class UpdateChecker {
                 Path target = mods.resolve(fileName);
                 Path staging = mods.resolve(fileName + ".new");
                 Files.write(staging, bytes);
+                try {
+                    Files.move(staging, target, StandardCopyOption.REPLACE_EXISTING);
+                } catch (Exception moveFailure) {
+                    throw new IllegalStateException("Could not place the new jar (is the old one locked?): " + moveFailure.getMessage(), moveFailure);
+                }
 
                 removeOldJars(mods, fileName);
-                Files.move(staging, target, StandardCopyOption.REPLACE_EXISTING);
                 return fileName;
             } catch (Exception e) {
                 throw new RuntimeException(e.getMessage(), e);
             }
         }).whenComplete((fileName, err) -> {
-            installing = false;
+            installing.set(false);
             if (err != null) {
                 error("Auto-update failed: " + rootMessage(err));
                 return;
             }
             Minecraft.getInstance().execute(() ->
-                ChatUtils.infoPrefix("Orbiter", "Updated to %s. Restart Minecraft to load it.", tag));
+                chat("Updated to %s. Restart Minecraft to load it.", tag));
         });
     }
 
@@ -193,8 +198,8 @@ public final class UpdateChecker {
             .map(container -> container.getMetadata().getVersion().getFriendlyString())
             .orElse("");
 
-        String left = strip(tag);
-        String right = strip(current);
+        String left = stripNumeric(tag);
+        String right = stripNumeric(current);
         String[] a = left.split("\\.");
         String[] b = right.split("\\.");
         int len = Math.max(a.length, b.length);
@@ -206,7 +211,7 @@ public final class UpdateChecker {
         return false;
     }
 
-    private static String strip(String version) {
+    private static String stripNumeric(String version) {
         String s = version == null ? "" : version.trim();
         while (!s.isEmpty() && !Character.isDigit(s.charAt(0))) s = s.substring(1);
         int dash = s.indexOf('-');
@@ -249,13 +254,13 @@ public final class UpdateChecker {
             Path mods = FabricLoader.getInstance().getGameDir().resolve("mods");
             if (!Files.isDirectory(mods)) return;
 
-            String current = currentJarName();
+            Path activeJar = activeModJar();
             try (var stream = Files.list(mods)) {
                 stream.filter(Files::isRegularFile)
                     .filter(p -> {
                         String n = p.getFileName().toString();
                         if (!n.startsWith("meteor-orbiter")) return false;
-                        if (n.equals(current)) return false;
+                        if (activeJar != null && n.equals(activeJar.getFileName().toString())) return false;
                         return n.endsWith(".jar") || n.endsWith(".old") || n.endsWith(".new");
                     })
                     .forEach(p -> {
@@ -269,21 +274,31 @@ public final class UpdateChecker {
         }
     }
 
-    private static String currentJarName() {
-        String friendly = FabricLoader.getInstance()
-            .getModContainer(MOD_ID)
-            .map(container -> container.getMetadata().getVersion().getFriendlyString())
-            .orElse("");
-        return friendly.isBlank() ? "" : MOD_ID + "-" + friendly + ".jar";
+    private static Path activeModJar() {
+        try {
+            return FabricLoader.getInstance()
+                .getModContainer(MOD_ID)
+                .flatMap(container -> container.getRootPaths().stream().findFirst())
+                .filter(path -> path.toString().endsWith(".jar"))
+                .orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static String sanitizeTag(String tag) {
-        return tag.replace("v", "").replace("V", "").replace("/", "_");
+        String s = tag == null ? "" : tag.trim();
+        if (s.startsWith("v") || s.startsWith("V")) s = s.substring(1);
+        return s.replace("/", "_");
     }
 
     private static String rootMessage(Throwable t) {
         while (t.getCause() != null) t = t.getCause();
         return t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
+    }
+
+    private static void chat(String message, Object... args) {
+        Minecraft.getInstance().execute(() -> ChatUtils.infoPrefix("Orbiter", message, args));
     }
 
     private static void error(String message) {

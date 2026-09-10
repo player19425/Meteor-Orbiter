@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.misc;
 
 import orbiter.Orbiter;
 import orbiter.util.CommandUtils;
@@ -105,12 +105,6 @@ public class AutoFind extends Module {
         .min(10).sliderRange(10, 200)
         .build());
 
-    private final Setting<Boolean> pauseOnKey = sgGeneral.add(new BoolSetting.Builder()
-        .name("pause-on-key")
-        .description("Pause/resume scanning with the module toggle key.")
-        .defaultValue(false)
-        .build());
-
     private final Setting<ScanPattern> scanPattern = sgGeneral.add(new EnumSetting.Builder<ScanPattern>()
         .name("scan-pattern")
         .description("Pattern used for local-area scanning (LocalRadius mode).")
@@ -170,6 +164,13 @@ public class AutoFind extends Module {
         .defaultValue(8)
         .min(1).sliderRange(1, 64)
         .visible(() -> scanMode.get() == ScanMode.WorldSweep)
+        .build());
+
+    private final Setting<Integer> scanBudgetMs = sgFlight.add(new IntSetting.Builder()
+        .name("scan-budget-ms")
+        .description("Maximum milliseconds per tick spent scanning. Lowers this if the game stutters during sweeps.")
+        .defaultValue(10)
+        .min(1).sliderRange(1, 50)
         .build());
 
     private final Setting<Boolean> worldWrap = sgFlight.add(new BoolSetting.Builder()
@@ -426,10 +427,6 @@ public class AutoFind extends Module {
         scanEnvironment();
     }
 
-    public void pause() { paused = true; }
-    public void resume() { paused = false; }
-    public boolean isPaused() { return paused; }
-
     private void scanEnvironment() {
         if (mc.player == null || mc.level == null) return;
         if (scanMode.get() == ScanMode.LocalRadius) {
@@ -554,6 +551,7 @@ public class AutoFind extends Module {
 
         int cpt = chunksPerTick.get();
         int scannedThisTick = 0;
+        long deadline = System.nanoTime() + scanBudgetMs.get() * 1_000_000L;
 
         while (scannedThisTick < cpt) {
             int cx = wrapChunkX((int) flightX >> 4);
@@ -575,6 +573,8 @@ public class AutoFind extends Module {
             }
 
             advanceFlightPosition();
+
+            if (System.nanoTime() >= deadline) break;
 
             if (totalSweepChunksScanned > 500_000) {
                 sweepComplete = true;
@@ -610,30 +610,24 @@ public class AutoFind extends Module {
             flightZ += stepBlocks;
 
             if (flightZ > WORLD_BOUNDARY) {
+                flightX += 16;
                 if (worldWrap.get()) {
                     flightZ = -WORLD_BOUNDARY;
-
-                    flightX += 16;
-                    snakeForward = false;
+                    snakeForward = true;
                 } else {
-
                     snakeForward = false;
-                    flightX += 16;
                     flightZ = WORLD_BOUNDARY;
                 }
             }
         } else {
             flightZ -= stepBlocks;
             if (flightZ < -WORLD_BOUNDARY) {
+                flightX += 16;
                 if (worldWrap.get()) {
                     flightZ = WORLD_BOUNDARY;
-
-                    flightX += 16;
-                    snakeForward = true;
+                    snakeForward = false;
                 } else {
-
                     snakeForward = true;
-                    flightX += 16;
                     flightZ = -WORLD_BOUNDARY;
                 }
             }
@@ -784,6 +778,8 @@ public class AutoFind extends Module {
 
         boolean scanEnderChests = stashEnderChests.get() || (findStorage.get() && storageEnderChests.get());
 
+        if (isExcluded(centerOfChunk)) return;
+
         if (findBases.get() || scanEnderChests) {
             int minY = mc.level.getMinY();
             int maxY = mc.level.getMaxY();
@@ -792,6 +788,7 @@ public class AutoFind extends Module {
                 for (int z = startZ; z < startZ + 16; z++) {
                     for (int y = minY; y <= maxY; y++) {
                         BlockPos.MutableBlockPos mpos = new BlockPos.MutableBlockPos(x, y, z);
+                        if (isExcluded(mpos)) continue;
                         BlockState state = chunk.getBlockState(mpos);
                         Block block = state.getBlock();
 
@@ -1012,12 +1009,4 @@ public class AutoFind extends Module {
         event.renderer.line(cx, cy, cz, cx, cy, cz + dz, color);
     }
 
-    public List<FindResult> getResults() { return Collections.unmodifiableList(results); }
-
-    public void clearResults() {
-        results.clear();
-        scannedChunks.clear();
-        renderStoragePositions.clear();
-        renderStorageColors.clear();
-    }
 }

@@ -1,6 +1,8 @@
-package orbiter.modules;
+package orbiter.modules.combat;
 
 import orbiter.Orbiter;
+import orbiter.systems.combat.CombatEngine;
+import orbiter.systems.combat.CombatRequest;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
@@ -28,7 +30,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Random;
 import java.util.Set;
 
 public class AimAssistPlus extends Module {
@@ -40,6 +41,25 @@ public class AimAssistPlus extends Module {
     private final SettingGroup sgFilters = settings.createGroup("Filters");
     private final SettingGroup sgProjectile = settings.createGroup("Projectile Aim");
     private final SettingGroup sgVisuals = settings.createGroup("Visuals");
+
+    public enum AimMode {
+        Visible,
+        Silent
+    }
+
+    private final Setting<AimMode> aimMode = sgGeneral.add(new EnumSetting.Builder<AimMode>()
+            .name("aim-mode")
+            .description("Visible moves your camera, Silent only changes what the server sees.")
+            .defaultValue(AimMode.Visible)
+            .build());
+
+    private final Setting<Integer> prioritySetting = sgGeneral.add(new IntSetting.Builder()
+            .name("priority")
+            .description("Who wins when several combat modules want to aim at once.")
+            .defaultValue(40)
+            .min(0)
+            .sliderMax(1000)
+            .build());
 
     private final Setting<Set<EntityType<?>>> entities = sgGeneral.add(new EntityTypeListSetting.Builder()
             .name("entities")
@@ -70,8 +90,8 @@ public class AimAssistPlus extends Module {
             .defaultValue(false)
             .build());
 
-    private final Setting<SortPriority> priority = sgTargeting.add(new EnumSetting.Builder<SortPriority>()
-            .name("priority")
+    private final Setting<SortPriority> targetPriority = sgTargeting.add(new EnumSetting.Builder<SortPriority>()
+            .name("target-priority")
             .description("How to select the best target.")
             .defaultValue(SortPriority.LowestHealth)
             .build());
@@ -149,15 +169,6 @@ public class AimAssistPlus extends Module {
             .visible(() -> !instant.get())
             .build());
 
-    private final Setting<Double> pitchSpeed = sgSpeed.add(new DoubleSetting.Builder()
-            .name("pitch-speed")
-            .description("Vertical aim speed.")
-            .defaultValue(6.0)
-            .min(0.1)
-            .sliderRange(0.1, 50.0)
-            .visible(() -> !instant.get())
-            .build());
-
     private final Setting<Double> maxAnglePerTick = sgSpeed.add(new DoubleSetting.Builder()
             .name("max-angle-per-tick")
             .description("Maximum degrees the aim can rotate per tick. Prevents snapping.")
@@ -170,9 +181,9 @@ public class AimAssistPlus extends Module {
     private final Setting<Double> smoothing = sgSpeed.add(new DoubleSetting.Builder()
             .name("smoothing")
             .description("Easing factor for aim movement. Higher = smoother.")
-            .defaultValue(1.0)
-            .min(0.1)
-            .sliderRange(0.1, 5.0)
+            .defaultValue(0.5)
+            .min(0.3)
+            .sliderRange(0.3, 1.0)
             .visible(() -> !instant.get())
             .build());
 
@@ -218,15 +229,6 @@ public class AimAssistPlus extends Module {
             .defaultValue(0.8)
             .min(0.1)
             .sliderRange(0.1, 10.0)
-            .visible(humanize::get)
-            .build());
-
-    private final Setting<Integer> aimPauseTicks = sgHumanize.add(new IntSetting.Builder()
-            .name("aim-pause-ticks")
-            .description("Randomly pause aiming for this many ticks to simulate human imperfection.")
-            .defaultValue(0)
-            .min(0)
-            .sliderRange(0, 10)
             .visible(humanize::get)
             .build());
 
@@ -284,8 +286,6 @@ public class AimAssistPlus extends Module {
     private Entity target;
     private Entity lockedTarget;
     private int stickyTicks = 0;
-    private int pauseTicks = 0;
-    private final Random random = new Random();
 
     public AimAssistPlus() {
         super(Orbiter.CATEGORY_VANILLA, "aim-assist-plus",
@@ -297,7 +297,6 @@ public class AimAssistPlus extends Module {
         target = null;
         lockedTarget = null;
         stickyTicks = 0;
-        pauseTicks = 0;
     }
 
     @Override
@@ -310,18 +309,12 @@ public class AimAssistPlus extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null)
             return;
+        if (CombatEngine.get().isFrozen())
+            return;
 
         if (onlyWeapon.get() && !isHoldingWeapon()) {
             target = null;
             return;
-        }
-
-        if (humanize.get() && aimPauseTicks.get() > 0 && pauseTicks > 0) {
-            pauseTicks--;
-            return;
-        }
-        if (humanize.get() && aimPauseTicks.get() > 0 && random.nextInt(100) < 3) {
-            pauseTicks = 1 + random.nextInt(aimPauseTicks.get());
         }
 
         if (targetLock.get() && lockedTarget != null) {
@@ -354,7 +347,7 @@ public class AimAssistPlus extends Module {
             lockedTarget = null;
         }
 
-        if (target != null) aim(target, 1.0);
+        if (target != null) aim(target);
     }
 
     @EventHandler
@@ -366,7 +359,7 @@ public class AimAssistPlus extends Module {
     }
 
     private Entity findTarget() {
-        return TargetUtils.get(this::isValidTarget, priority.get());
+        return TargetUtils.get(this::isValidTarget, targetPriority.get());
     }
 
     private boolean isValidTarget(Entity entity) {
@@ -421,48 +414,30 @@ public class AimAssistPlus extends Module {
         return Math.abs(diff) <= fov.get() / 2.0;
     }
 
-    private void aim(Entity target, double tickDelta) {
-        Vec3 targetPos = getTargetPosition(target, tickDelta);
-
-        double dx = targetPos.x - mc.player.getX();
-        double dz = targetPos.z - mc.player.getZ();
-        double dy = targetPos.y - (mc.player.getY() + mc.player.getEyeHeight(mc.player.getPose()));
-
-        double desiredYaw = Math.toDegrees(Math.atan2(dz, dx)) - 90.0;
+    private void aim(Entity target) {
+        Vec3 aimPoint = getTargetPosition(target);
+        double dx = aimPoint.x - mc.player.getX();
+        double dz = aimPoint.z - mc.player.getZ();
+        double dy = aimPoint.y - (mc.player.getY() + mc.player.getEyeHeight(mc.player.getPose()));
         double horizontalDist = Math.sqrt(dx * dx + dz * dz);
-        double desiredPitch;
+
+        double smoothingFactor = smoothing.get();
+        double speedFactor = instant.get() ? 1.0 : Mth.clamp(yawSpeed.get() / 20.0 * (1.0 - smoothingFactor), 0.05, 1.0);
+        CombatRequest.Profile profile = new CombatRequest.Profile(
+            speedFactor,
+            smoothingFactor,
+            humanize.get() ? jitterYaw.get() : 0.0,
+            humanize.get() ? jitterPitch.get() : 0.0,
+            0.0,
+            maxAnglePerTick.get()
+        );
+        CombatRequest.Mode mode = aimMode.get() == AimMode.Silent ? CombatRequest.Mode.Silent : CombatRequest.Mode.Visible;
 
         if (projectileAim.get() && isHoldingProjectileWeapon()) {
-            desiredPitch = calculateBallisticPitch(horizontalDist, dy);
+            CombatEngine.get().submit(CombatRequest.rotation(this, prioritySetting.get(), aimPoint,
+                calculateBallisticPitch(horizontalDist, dy), mode, profile, null));
         } else {
-            desiredPitch = -Math.toDegrees(Math.atan2(dy, horizontalDist));
-        }
-
-        if (humanize.get()) {
-            desiredYaw += (random.nextDouble() - 0.5) * 2.0 * jitterYaw.get();
-            desiredPitch += (random.nextDouble() - 0.5) * 2.0 * jitterPitch.get();
-        }
-
-        desiredPitch = Mth.clamp(desiredPitch, -90.0, 90.0);
-
-        if (instant.get()) {
-            mc.player.setYRot((float) desiredYaw);
-            mc.player.setXRot((float) desiredPitch);
-        } else {
-
-            double deltaYaw = Mth.wrapDegrees(desiredYaw - mc.player.getYRot());
-            double deltaPitch = Mth.wrapDegrees(desiredPitch - mc.player.getXRot());
-
-            double easeFactor = 1.0 / smoothing.get();
-
-            double yawRotation = yawSpeed.get() * Math.signum(deltaYaw) * tickDelta * easeFactor;
-            yawRotation = clampRotation(yawRotation, deltaYaw, maxAnglePerTick.get());
-
-            double pitchRotation = pitchSpeed.get() * Math.signum(deltaPitch) * tickDelta * easeFactor;
-            pitchRotation = clampRotation(pitchRotation, deltaPitch, maxAnglePerTick.get());
-
-            mc.player.setYRot(mc.player.getYRot() + (float) yawRotation);
-            mc.player.setXRot(Mth.clamp(mc.player.getXRot() + (float) pitchRotation, -90f, 90f));
+            CombatEngine.get().submit(CombatRequest.rotation(this, prioritySetting.get(), aimPoint, mode, profile, null));
         }
     }
 
@@ -523,19 +498,7 @@ public class AimAssistPlus extends Module {
                 || stack.is(Items.TRIDENT);
     }
 
-    private double clampRotation(double rotation, double delta, double maxAngle) {
-
-        if ((rotation >= 0 && rotation > delta) || (rotation < 0 && rotation < delta)) {
-            rotation = delta;
-        }
-
-        if (Math.abs(rotation) > maxAngle) {
-            rotation = maxAngle * Math.signum(rotation);
-        }
-        return rotation;
-    }
-
-    private Vec3 getTargetPosition(Entity entity, double tickDelta) {
+    private Vec3 getTargetPosition(Entity entity) {
         if (entity == null) return Vec3.ZERO;
 
         Vec3 lerpedPos = entity.position();

@@ -2,13 +2,14 @@ package orbiter.modules.misc;
 
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.ComponentContents;
-
+import net.minecraft.network.chat.contents.PlainTextContents;
 
 import java.util.ArrayDeque;
 import java.util.List;
 
 public final class DisplayTextSanitizer {
+
+    private static final int MAX_ANALYZED_NODES = 256;
 
     private DisplayTextSanitizer() {}
 
@@ -16,6 +17,7 @@ public final class DisplayTextSanitizer {
                                           int maxStyleScore, int maxObfuscatedChars, int maxComplexNodes) {
         TextCost cost = analyze(component, Math.max(1, maxDepth));
         return cost.tooDeep
+            || cost.truncated
             || cost.nodeCount > Math.max(1, maxNodes)
             || cost.totalChars > Math.max(1, maxChars)
             || cost.styleScore > Math.max(1, maxStyleScore)
@@ -36,6 +38,10 @@ public final class DisplayTextSanitizer {
         ArrayDeque<VisitNode> stack = new ArrayDeque<>();
         stack.push(new VisitNode(root, 0));
         while (!stack.isEmpty()) {
+            if (cost.nodeCount >= MAX_ANALYZED_NODES) {
+                cost.truncated = true;
+                return cost;
+            }
             VisitNode node = stack.removeLast();
             if (node.depth > maxDepth) {
                 cost.tooDeep = true;
@@ -49,7 +55,7 @@ public final class DisplayTextSanitizer {
             if (component.getStyle().isObfuscated()) {
                 cost.obfuscatedChars += Math.max(directChars, 8);
             }
-            if (!(component.getContents() instanceof net.minecraft.network.chat.contents.PlainTextContents)) {
+            if (!(component.getContents() instanceof PlainTextContents)) {
                 cost.complexNodeCount++;
             }
             List<Component> siblings = component.getSiblings();
@@ -61,9 +67,10 @@ public final class DisplayTextSanitizer {
     }
 
     private static int estimateDirectChars(Component component) {
-        String collapsed = component.getString();
-        if (collapsed != null) return collapsed.length();
-        return component.getString().length();
+        if (component.getContents() instanceof PlainTextContents literal) {
+            return literal.text().length();
+        }
+        return 0;
     }
 
     private static int estimateStyleScore(Style style, int directChars) {
@@ -84,7 +91,7 @@ public final class DisplayTextSanitizer {
 
     private static final class TextCost {
         int totalChars, nodeCount, styleScore, obfuscatedChars, complexNodeCount;
-        boolean tooDeep;
+        boolean tooDeep, truncated;
     }
 
     private record VisitNode(Component component, int depth) {}

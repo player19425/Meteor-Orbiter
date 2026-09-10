@@ -10,6 +10,7 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 import orbiter.Orbiter;
+import orbiter.systems.combat.CombatEngine;
 import orbiter.util.ConfigModifier;
 
 public class JumpA extends Module {
@@ -56,6 +57,7 @@ public class JumpA extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null) return;
         if (!ConfigModifier.get().stupidModulesEnabled()) { toggle(); return; }
+        if (CombatEngine.get().isFrozen()) return;
 
         if (!mc.options.keyJump.isDown()) return;
         if (requireGrounded.get() && !mc.player.onGround()) return;

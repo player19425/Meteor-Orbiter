@@ -5,7 +5,6 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
 import net.minecraft.core.component.DataComponents;
@@ -14,16 +13,16 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.ClipContext;
 import orbiter.Orbiter;
+import orbiter.systems.combat.CombatEngine;
+import orbiter.systems.combat.CombatRequest;
 import orbiter.util.ConfigModifier;
 import orbiter.util.ComboTracker;
 
@@ -39,6 +38,7 @@ import java.util.UUID;
 public class CrossbowAssist extends Module {
 
     public enum TargetMode { Closest, Crosshair, LowestHealth }
+    public enum AimMode { Visible, Silent }
     public enum FireMode { Manual, Auto, Burst }
     public enum RenderMode { Off, Line, Both }
 
@@ -47,6 +47,7 @@ public class CrossbowAssist extends Module {
     private final SettingGroup sgAim = settings.createGroup("Aiming");
     private final SettingGroup sgPhysics = settings.createGroup("Projectile Physics");
     private final SettingGroup sgRender = settings.createGroup("Rendering");
+    private final SettingGroup sgHumanize = settings.createGroup("Humanization");
 
     private final Setting<FireMode> fireMode = sgGeneral.add(new EnumSetting.Builder<FireMode>()
         .name("fire-mode")
@@ -137,11 +138,74 @@ public class CrossbowAssist extends Module {
         .build()
     );
 
-    private final Setting<Double> aimSpeed = sgAim.add(new DoubleSetting.Builder()
+    private final Setting<AimMode> aimMode = sgAim.add(new EnumSetting.Builder<AimMode>()
+        .name("aim-mode")
+        .description("Visible = rotate client view. Silent = server-side only (anticheat risk).")
+        .defaultValue(AimMode.Silent)
+        .build()
+    );
+
+    private final Setting<Integer> priority = sgAim.add(new IntSetting.Builder()
+        .name("priority")
+        .description("Who wins when several combat modules want to aim at once.")
+        .defaultValue(55)
+        .min(0)
+        .max(100)
+        .sliderRange(0, 100)
+        .build()
+    );
+
+    private final Setting<Double> aimSpeed = sgHumanize.add(new DoubleSetting.Builder()
         .name("aim-speed")
-        .defaultValue(0.6)
+        .description("Aim responsiveness toward the target.")
+        .defaultValue(0.35)
         .min(0.05)
         .sliderRange(0.05, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> aimDamping = sgHumanize.add(new DoubleSetting.Builder()
+        .name("aim-damping")
+        .description("Velocity damping applied to aim movement.")
+        .defaultValue(0.75)
+        .min(0.3)
+        .sliderRange(0.3, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> jitterYaw = sgHumanize.add(new DoubleSetting.Builder()
+        .name("jitter-yaw")
+        .description("Maximum horizontal jitter in degrees.")
+        .defaultValue(0.0)
+        .min(0.0)
+        .sliderRange(0.0, 3.0)
+        .build()
+    );
+
+    private final Setting<Double> jitterPitch = sgHumanize.add(new DoubleSetting.Builder()
+        .name("jitter-pitch")
+        .description("Maximum vertical jitter in degrees.")
+        .defaultValue(0.0)
+        .min(0.0)
+        .sliderRange(0.0, 3.0)
+        .build()
+    );
+
+    private final Setting<Double> overshoot = sgHumanize.add(new DoubleSetting.Builder()
+        .name("overshoot")
+        .description("Overshoot factor applied near the target angle.")
+        .defaultValue(0.1)
+        .min(0.0)
+        .sliderRange(0.0, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> maxDegrees = sgHumanize.add(new DoubleSetting.Builder()
+        .name("max-degrees-per-tick")
+        .description("Maximum degrees the aim can rotate per tick.")
+        .defaultValue(40.0)
+        .min(5.0)
+        .sliderRange(5.0, 90.0)
         .build()
     );
 
@@ -212,6 +276,7 @@ public class CrossbowAssist extends Module {
     private final List<Vec3> trajectoryPoints = new ArrayList<>();
     private int tickCounter = 0;
     private int burstCounter = 0;
+    private float lastCalculatedYawForSim;
 
     private final Map<UUID, Vec3> prevVelocities = new HashMap<>();
     private final Map<UUID, Vec3> smoothedVelocities = new HashMap<>();
@@ -254,6 +319,7 @@ public class CrossbowAssist extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null) return;
         tickCounter++;
+        if (fireMode.get() == FireMode.Burst && burstCounter > 0) burstCounter--;
 
         if (mc.player.getMainHandItem().getItem() != Items.CROSSBOW) {
             currentTarget = null;
@@ -288,54 +354,47 @@ public class CrossbowAssist extends Module {
 
         AimSolution solution = solveAim(origin, targetPos);
 
-        applyAim(solution.yaw, solution.pitch);
+        Vec3 aimPoint = origin.add(Vec3.directionFromRotation(solution.pitch, solution.yaw).scale(origin.distanceTo(targetPos)));
+
+        submitAim(aimPoint);
 
         if (renderMode.get() != RenderMode.Off) {
             simulateTrajectory(origin, solution.yaw, solution.pitch, trajectoryPoints);
         } else {
             trajectoryPoints.clear();
         }
-
-        if (isLoaded) {
-            handleFireLogic(solution);
-        }
     }
 
-    private void handleFireLogic(AimSolution solution) {
+    private void submitAim(Vec3 aimPoint) {
+        if (CombatEngine.get().isFrozen()) return;
 
-        float yawDiff = Math.abs(Mth.wrapDegrees(solution.yaw - mc.player.getYRot()));
-        float pitchDiff = Math.abs(solution.pitch - mc.player.getXRot());
-        boolean aimedClose = yawDiff < 5.0f && pitchDiff < 5.0f;
+        LivingEntity target = currentTarget;
+        CombatRequest.Mode mode = aimMode.get() == AimMode.Silent ? CombatRequest.Mode.Silent : CombatRequest.Mode.Visible;
 
-        switch (fireMode.get()) {
-            case Manual -> {
-
+        CombatEngine.get().submit(CombatRequest.rotation(this, priority.get(), aimPoint, mode, buildProfile(), () -> {
+            if (!isActive() || CombatEngine.get().isFrozen()) return;
+            if (target == null || !target.isAlive() || !isValidTarget(target) || !isInRange(target)) return;
+            if (fireMode.get() == FireMode.Manual) return;
+            if (!isCrossbowLoaded()) return;
+            if (fireMode.get() == FireMode.Burst && burstCounter > 0) return;
+            fireCrossbow(target);
+            if (fireMode.get() == FireMode.Burst) {
+                burstCounter = burstDelay.get();
             }
-            case Auto -> {
-                if (aimedClose) {
-                    fireCrossbow();
-                }
-            }
-            case Burst -> {
-                if (burstCounter > 0) {
-                    burstCounter--;
-                    return;
-                }
-                if (aimedClose) {
-                    fireCrossbow();
-                    burstCounter = burstDelay.get();
-                }
-            }
-        }
+        }));
     }
 
-    private void fireCrossbow() {
+    private CombatRequest.Profile buildProfile() {
+        return new CombatRequest.Profile(aimSpeed.get(), aimDamping.get(), jitterYaw.get(), jitterPitch.get(), overshoot.get(), maxDegrees.get());
+    }
+
+    private void fireCrossbow(LivingEntity target) {
         if (mc.player == null || mc.getConnection() == null || mc.gameMode == null) return;
 
         mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
 
-        if (currentTarget != null) {
-            ComboTracker.registerHit(currentTarget.getUUID());
+        if (target != null) {
+            ComboTracker.registerHit(target.getUUID());
         }
 
         if (autoReload.get()) {
@@ -559,8 +618,6 @@ public class CrossbowAssist extends Module {
         return bestDist;
     }
 
-    private float lastCalculatedYawForSim;
-
     private void simulateTrajectory(Vec3 origin, float yaw, float pitch, List<Vec3> out) {
         out.clear();
         lastCalculatedYawForSim = yaw;
@@ -591,21 +648,6 @@ public class CrossbowAssist extends Module {
             vel = vel.add(0, -g, 0);
             if (pos.y < mc.level.getMinY() - 4) break;
         }
-    }
-
-    private void applyAim(float targetYaw, float targetPitch) {
-        double speed = aimSpeed.get();
-        float currentYaw = mc.player.getYRot();
-        float currentPitch = mc.player.getXRot();
-
-        float yawDelta = Mth.wrapDegrees(targetYaw - currentYaw);
-        float pitchDelta = targetPitch - currentPitch;
-
-        float newYaw = currentYaw + (float) (yawDelta * speed);
-        float newPitch = currentPitch + (float) (pitchDelta * speed);
-
-        mc.player.setYRot(newYaw);
-        mc.player.setXRot(newPitch);
     }
 
     @EventHandler

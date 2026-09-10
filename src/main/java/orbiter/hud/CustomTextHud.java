@@ -66,7 +66,7 @@ public class CustomTextHud extends HudElement {
         double h = renderer.textHeight(shadow.get(), s);
         setSize(w, h);
 
-        SettingColor color = rainbow.get() ? rainbowColor() : textColor.get();
+        SettingColor color = rainbow.get() ? BaseServerInfoHud.rainbowColor() : textColor.get();
         renderer.text(display, x, y, color, shadow.get(), s);
     }
 
@@ -99,10 +99,4 @@ public class CustomTextHud extends HudElement {
         return out;
     }
 
-    private SettingColor rainbowColor() {
-        long millis = System.currentTimeMillis();
-        float hue = (millis % 4000L) / 4000f;
-        int rgb = java.awt.Color.HSBtoRGB(hue, 1f, 1f);
-        return new SettingColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, 255);
-    }
 }

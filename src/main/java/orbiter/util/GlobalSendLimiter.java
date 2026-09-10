@@ -15,10 +15,6 @@ public final class GlobalSendLimiter {
         perTick = Math.max(1, value);
     }
 
-    public static int perTick() {
-        return perTick;
-    }
-
     public static synchronized int acquire(int wanted) {
         if (wanted <= 0) return 0;
         refill();

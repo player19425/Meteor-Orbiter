@@ -1,6 +1,7 @@
-package orbiter.modules;
+package orbiter.modules.movement;
 
 import orbiter.Orbiter;
+import orbiter.systems.combat.CombatEngine;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
@@ -21,7 +22,6 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.phys.Vec3;
-
 import java.util.List;
 
 public class AutoClutch extends Module {
@@ -140,6 +140,7 @@ public class AutoClutch extends Module {
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null || mc.gameMode == null) return;
+        if (CombatEngine.get().isFrozen()) return;
 
         if (survivalOnly.get() && (mc.player.isCreative() || mc.player.isSpectator())) {
             restoreSlot();
@@ -337,7 +338,7 @@ public class AutoClutch extends Module {
             BlockPos neighbor = below.offset(dir.getStepX(), dir.getStepY(), dir.getStepZ());
             BlockState neighborState = mc.level.getBlockState(neighbor);
 
-            if (neighborState.isAir() || !neighborState.isSolid()) continue;
+            if (neighborState.isAir() || !neighborState.isFaceSturdy(mc.level, neighbor, dir.getOpposite())) continue;
 
             Direction clickFace = dir.getOpposite();
             Vec3 hitPos = Vec3.atCenterOf(neighbor).add(

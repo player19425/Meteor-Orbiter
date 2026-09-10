@@ -1,7 +1,7 @@
 package orbiter.modules.render;
 
 import orbiter.util.CommandUtils;
-import orbiter.modules.CreativeSafetyModule;
+import orbiter.modules.world.CreativeSafetyModule;
 import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;

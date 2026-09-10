@@ -5,7 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import net.minecraft.client.gui.render.GuiItemAtlas;
 import net.minecraft.client.gui.render.GuiRenderer;
 import net.minecraft.client.renderer.state.gui.GuiItemRenderState;
-import orbiter.modules.ClientSideThings;
+import orbiter.modules.misc.ClientSideThings;
 import orbiter.util.ClientSpoofState;
 import org.joml.Matrix3x2f;
 import org.spongepowered.asm.mixin.Mixin;

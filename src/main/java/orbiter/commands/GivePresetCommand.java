@@ -25,8 +25,13 @@ import net.minecraft.server.network.Filterable;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.Component;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Unit;
+import net.minecraft.world.level.Level;
 
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
@@ -108,7 +113,7 @@ public class GivePresetCommand extends Command {
         presets.put("piston-stack", () -> stackLore(Items.PISTON, 64, "Piston Stack", ChatFormatting.GRAY, "64 pistons", "Redstone automation"));
         presets.put("sticky-piston-stack", () -> stackLore(Items.STICKY_PISTON, 64, "Sticky Piston Stack", ChatFormatting.GREEN, "64 sticky pistons", "Push and pull blocks"));
 
-        presets.put("spawn-wither", () -> simpleLore(Items.WITHER_SKELETON_SPAWN_EGG, "Wither Spawn Egg", ChatFormatting.DARK_GRAY, "Summon the Wither", "Brings destruction"));
+        presets.put("spawn-wither", () -> simpleLore(Items.WITHER_SPAWN_EGG, "Wither Spawn Egg", ChatFormatting.DARK_GRAY, "Summon the Wither", "Brings destruction"));
         presets.put("spawn-ender-dragon", () -> simpleLore(Items.ENDER_DRAGON_SPAWN_EGG, "Ender Dragon Egg", ChatFormatting.DARK_PURPLE, "The final boss", "Spawns in the overworld"));
         presets.put("spawn-warden", () -> simpleLore(Items.WARDEN_SPAWN_EGG, "Warden Spawn Egg", ChatFormatting.DARK_AQUA, "Blind beast of the deep", "Detects through vibration"));
         presets.put("spawn-elder-guardian", () -> simpleLore(Items.ELDER_GUARDIAN_SPAWN_EGG, "Elder Guardian Egg", ChatFormatting.AQUA, "The ocean fortress boss", "Gives mining fatigue"));
@@ -118,8 +123,8 @@ public class GivePresetCommand extends Command {
         presets.put("spawn-piglin-brute", () -> simpleLore(Items.PIGLIN_BRUTE_SPAWN_EGG, "Piglin Brute Egg", ChatFormatting.YELLOW, "Always hostile piglin", "Guards the bastion"));
         presets.put("spawn-breeze", () -> simpleLore(Items.BREEZE_SPAWN_EGG, "Breeze Spawn Egg", ChatFormatting.AQUA, "Wind mob from trial chambers", "Shoots wind charges"));
         presets.put("spawn-creaking", () -> simpleLore(Items.CREAKING_SPAWN_EGG, "Creaking Spawn Egg", ChatFormatting.DARK_GREEN, "Pale garden guardian", "Appears at night"));
-        presets.put("charged-creeper", () -> simpleLore(Items.CREEPER_SPAWN_EGG, "Charged Creeper Egg", ChatFormatting.GREEN, "Explosion x2 power", "Lightning strikes made it"));
-        presets.put("spawn-elder", () -> simpleLore(Items.WITHER_SKELETON_SPAWN_EGG, "Wither Skeleton Egg", ChatFormatting.DARK_GRAY, "Fortress warrior", "Drops wither skulls"));
+        presets.put("charged-creeper", this::chargedCreeper);
+        presets.put("spawn-elder", () -> simpleLore(Items.ELDER_GUARDIAN_SPAWN_EGG, "Elder Guardian Egg", ChatFormatting.AQUA, "The ocean fortress boss", "Gives mining fatigue"));
         presets.put("all-spawn-eggs", this::allSpawnEggs);
 
         presets.put("netherite-block-64", () -> stackLore(Items.NETHERITE_BLOCK, 64, "Netherite Block", ChatFormatting.DARK_GRAY, "The most valuable block", "64 blocks of ancient debris"));
@@ -164,14 +169,14 @@ public class GivePresetCommand extends Command {
         presets.put("redstone-kit", this::redstoneKit);
 
         presets.put("shulker-full", this::fullShulker);
-        presets.put("music-discs", this::musicDiscs);
+        presets.put("music-disc", this::musicDisc);
 
         presets.put("lodestone", () -> simpleLore(Items.LODESTONE, "Lodestone", ChatFormatting.GRAY, "Compass anchor", "Points to this block"));
         presets.put("echo-shard-stack", () -> stackLore(Items.ECHO_SHARD, 64, "Echo Shard", ChatFormatting.DARK_AQUA, "Sculk resonance", "64 shards of echo"));
         presets.put("recovery-compass", () -> simpleLore(Items.RECOVERY_COMPASS, "Recovery Compass", ChatFormatting.AQUA, "Find your death location", "Points to last death"));
         presets.put("bundle-stack", () -> stackLore(Items.BUNDLE, 64, "Bundle Stack", ChatFormatting.GOLD, "Carry more items", "64 empty bundles"));
-        presets.put("debug-stick", () -> simpleLore(Items.STICK, "Debug Stick", ChatFormatting.AQUA, "Edit block states", "Creative only"));
-        presets.put("lodestone-compass", () -> simpleLore(Items.COMPASS, "Lodestone Compass", ChatFormatting.YELLOW, "Points to lodestone", "Navigate with precision"));
+        presets.put("debug-stick", () -> simpleLore(Items.DEBUG_STICK, "Debug Stick", ChatFormatting.AQUA, "Edit block states", "Creative only"));
+        presets.put("lodestone-compass", this::lodestoneCompass);
     }
 
     @Override
@@ -224,7 +229,7 @@ public class GivePresetCommand extends Command {
         sb.append("Blocks: netherite-block-64, diamond-block-64, emerald-block-64, gold-block-64, iron-block-64, obsidian-64, end-stone-64, crying-obsidian-64, ancient-debris-64, copper-block-64, amethyst-block-64, tnt-64, packed-ice-64, blue-ice-64, mossy-cobble-64, snow-block-64, deepslate-64, resin-block-64\n");
         sb.append("Potions: potion-strength-ii, potion-speed-ii, potion-regen-ii, potion-healing-ii, potion-fire-resist, potion-invisibility, potion-night-vision, potion-water-breathing, potion-slow-falling, potion-poison-ii, potion-harming-ii, potion-harming, potion-leaping\n");
         sb.append("Kits: ultimate-kit, pvp-kit, builder-kit, end-kit, nether-kit, fishing-kit, redstone-kit\n");
-        sb.append("Special: shulker-full, music-discs, lodestone, echo-shard-stack, recovery-compass, bundle-stack, debug-stick, lodestone-compass");
+        sb.append("Special: shulker-full, music-disc, lodestone, echo-shard-stack, recovery-compass, bundle-stack, debug-stick, lodestone-compass");
         info(sb.toString());
     }
 
@@ -577,7 +582,7 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.SHIELD);
         s.set(DataComponents.CUSTOM_NAME, name("Pain Reflector", ChatFormatting.RED));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("thorns:3","unbreaking:255","mending:1").toImmutable());
         setLore(s, "Every hit hurts the attacker", "Reflect damage back");
         return s;
     }
@@ -798,10 +803,29 @@ public class GivePresetCommand extends Command {
         return s;
     }
 
-    private ItemStack musicDiscs() {
+    private ItemStack musicDisc() {
         ItemStack s = new ItemStack(Items.MUSIC_DISC_CREATOR);
         s.set(DataComponents.CUSTOM_NAME, name("Music Disc: Creator", ChatFormatting.LIGHT_PURPLE));
         setLore(s, "The latest music disc", "Beautiful soundtrack");
+        return s;
+    }
+
+    private ItemStack chargedCreeper() {
+        ItemStack s = simpleLore(Items.CREEPER_SPAWN_EGG, "Charged Creeper Egg", ChatFormatting.GREEN, "Explosion x2 power", "Lightning strikes made it");
+        CompoundTag nbt = new CompoundTag();
+        nbt.putString("id", "minecraft:creeper");
+        nbt.putBoolean("Powered", true);
+        Identifier id = Identifier.tryParse("minecraft:creeper");
+        if (id != null) {
+            BuiltInRegistries.ENTITY_TYPE.get(id).ifPresent(holder ->
+                s.set(DataComponents.ENTITY_DATA, TypedEntityData.of(holder.value(), nbt)));
+        }
+        return s;
+    }
+
+    private ItemStack lodestoneCompass() {
+        ItemStack s = simpleLore(Items.COMPASS, "Lodestone Compass", ChatFormatting.YELLOW, "Points to 0 0 in the Overworld", "Navigate with precision");
+        s.set(DataComponents.LODESTONE_TRACKER, new LodestoneTracker(Optional.of(GlobalPos.of(Level.OVERWORLD, BlockPos.ZERO)), true));
         return s;
     }
 

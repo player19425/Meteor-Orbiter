@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.world;
 
 import orbiter.util.CommandUtils;
 import orbiter.util.FastSend;

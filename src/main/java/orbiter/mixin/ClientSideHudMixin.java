@@ -8,7 +8,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.Hud;
 import net.minecraft.network.chat.Component;
-import orbiter.modules.ClientSideThings;
+import orbiter.modules.misc.ClientSideThings;
 import orbiter.util.ClientSpoofState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -29,11 +29,27 @@ public abstract class ClientSideHudMixin {
             int size = Math.max(2, (int) Math.round(4 * module.getCrosshairScale()));
             int thickness = Math.max(1, module.getCrosshairThickness());
             int color = 0xFFFFFFFF;
-            if (style == ClientSideThings.CrosshairStyle.Dot || style == ClientSideThings.CrosshairStyle.Circle) {
-                context.fill(cx - thickness, cy - thickness, cx + thickness + 1, cy + thickness + 1, color);
-            } else {
-                context.fill(cx - size, cy - thickness, cx + size + 1, cy + thickness + 1, color);
-                context.fill(cx - thickness, cy - size, cx + thickness + 1, cy + size + 1, color);
+            switch (style) {
+                case Dot -> context.fill(cx - thickness, cy - thickness, cx + thickness + 1, cy + thickness + 1, color);
+                case Circle -> {
+                    int radius = size + thickness;
+                    for (int angle = 0; angle < 64; angle++) {
+                        double a = Math.toRadians(angle * (360.0 / 64));
+                        int px = cx + (int) Math.round(radius * Math.cos(a));
+                        int py = cy + (int) Math.round(radius * Math.sin(a));
+                        context.fill(px, py, px + 1, py + 1, color);
+                    }
+                }
+                case Cross, Thin -> {
+                    int half = style == ClientSideThings.CrosshairStyle.Thin ? size / 2 : size;
+                    int lineThickness = style == ClientSideThings.CrosshairStyle.Thin ? 1 : thickness;
+                    context.fill(cx - half, cy - lineThickness, cx + half + 1, cy + lineThickness + 1, color);
+                    context.fill(cx - lineThickness, cy - half, cx + lineThickness + 1, cy + half + 1, color);
+                }
+                default -> {
+                    context.fill(cx - size, cy - thickness, cx + size + 1, cy + thickness + 1, color);
+                    context.fill(cx - thickness, cy - size, cx + thickness + 1, cy + size + 1, color);
+                }
             }
         }
         ci.cancel();

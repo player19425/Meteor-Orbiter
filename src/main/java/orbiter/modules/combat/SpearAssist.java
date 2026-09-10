@@ -4,15 +4,12 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
-import meteordevelopment.orbit.EventPriority;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.MaceItem;
 import net.minecraft.world.item.TridentItem;
@@ -22,6 +19,8 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.ClipContext;
 import orbiter.Orbiter;
+import orbiter.systems.combat.CombatEngine;
+import orbiter.systems.combat.CombatRequest;
 import orbiter.util.ConfigModifier;
 import orbiter.util.ComboTracker;
 
@@ -42,6 +41,7 @@ public class SpearAssist extends Module {
     private final SettingGroup sgJab = settings.createGroup("Jab Attack");
     private final SettingGroup sgCharge = settings.createGroup("Charge Attack");
     private final SettingGroup sgCombo = settings.createGroup("Combo");
+    private final SettingGroup sgHumanize = settings.createGroup("Humanization");
 
     private final Setting<AttackMode> attackMode = sgGeneral.add(new EnumSetting.Builder<AttackMode>()
         .name("attack-mode")
@@ -131,11 +131,67 @@ public class SpearAssist extends Module {
         .build()
     );
 
-    private final Setting<Double> aimSpeed = sgAim.add(new DoubleSetting.Builder()
+    private final Setting<Integer> priority = sgAim.add(new IntSetting.Builder()
+        .name("priority")
+        .description("Who wins when several combat modules want to aim at once.")
+        .defaultValue(50)
+        .min(0)
+        .max(100)
+        .sliderRange(0, 100)
+        .build()
+    );
+
+    private final Setting<Double> aimSpeed = sgHumanize.add(new DoubleSetting.Builder()
         .name("aim-speed")
-        .defaultValue(0.6)
+        .description("Aim responsiveness toward the target.")
+        .defaultValue(0.35)
         .min(0.05)
         .sliderRange(0.05, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> aimDamping = sgHumanize.add(new DoubleSetting.Builder()
+        .name("aim-damping")
+        .description("Velocity damping applied to aim movement.")
+        .defaultValue(0.75)
+        .min(0.3)
+        .sliderRange(0.3, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> jitterYaw = sgHumanize.add(new DoubleSetting.Builder()
+        .name("jitter-yaw")
+        .description("Maximum horizontal jitter in degrees.")
+        .defaultValue(0.0)
+        .min(0.0)
+        .sliderRange(0.0, 3.0)
+        .build()
+    );
+
+    private final Setting<Double> jitterPitch = sgHumanize.add(new DoubleSetting.Builder()
+        .name("jitter-pitch")
+        .description("Maximum vertical jitter in degrees.")
+        .defaultValue(0.0)
+        .min(0.0)
+        .sliderRange(0.0, 3.0)
+        .build()
+    );
+
+    private final Setting<Double> overshoot = sgHumanize.add(new DoubleSetting.Builder()
+        .name("overshoot")
+        .description("Overshoot factor applied near the target angle.")
+        .defaultValue(0.1)
+        .min(0.0)
+        .sliderRange(0.0, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> maxDegrees = sgHumanize.add(new DoubleSetting.Builder()
+        .name("max-degrees-per-tick")
+        .description("Maximum degrees the aim can rotate per tick.")
+        .defaultValue(40.0)
+        .min(5.0)
+        .sliderRange(5.0, 90.0)
         .build()
     );
 
@@ -211,7 +267,6 @@ public class SpearAssist extends Module {
 
     private LivingEntity currentTarget;
     private int jabCooldown = 0;
-    private int tickCounter = 0;
     private boolean isCharging = false;
     private boolean lastJabWasJab = false;
 
@@ -229,7 +284,6 @@ public class SpearAssist extends Module {
         }
         currentTarget = null;
         jabCooldown = 0;
-        tickCounter = 0;
         isCharging = false;
         lastJabWasJab = false;
     }
@@ -242,13 +296,12 @@ public class SpearAssist extends Module {
         ComboTracker.clearAll();
     }
 
-    @EventHandler(priority = EventPriority.HIGH)
+    @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null) {
             stopCharging();
             return;
         }
-        tickCounter++;
         if (jabCooldown > 0) jabCooldown--;
 
         if (onlyWhenHoldingSpear.get() && !isHoldingMeleeWeapon()) {
@@ -278,22 +331,11 @@ public class SpearAssist extends Module {
 
         Vec3 aimPos = aimAtCenter.get() ? targetCenter : new Vec3(currentTarget.getX(), currentTarget.getEyeY(), currentTarget.getZ());
         float targetYaw = (float) (Math.toDegrees(Math.atan2(aimPos.z - eyes.z, aimPos.x - eyes.x)) - 90.0f);
-        float targetPitch = (float) -Math.toDegrees(Math.atan2(aimPos.y - eyes.y, Math.sqrt(
-            (aimPos.x - eyes.x) * (aimPos.x - eyes.x) + (aimPos.z - eyes.z) * (aimPos.z - eyes.z))));
 
         float angleDiff = Math.abs(Mth.wrapDegrees(targetYaw - mc.player.getYRot()));
         if (angleDiff > maxAimAngle.get().floatValue()) {
             stopCharging();
             return;
-        }
-
-        double speed = aimSpeed.get();
-        float newYaw = (float) (mc.player.getYRot() + Mth.wrapDegrees(targetYaw - mc.player.getYRot()) * speed);
-        float newPitch = (float) (mc.player.getXRot() + (targetPitch - mc.player.getXRot()) * speed);
-
-        if (aimMode.get() == AimMode.Visible) {
-            mc.player.setYRot(newYaw);
-            mc.player.setXRot(newPitch);
         }
 
         if (!autoAttack.get()) {
@@ -315,24 +357,53 @@ public class SpearAssist extends Module {
         switch (effectiveMode) {
             case JabOnly -> {
                 stopCharging();
-                tryJabAttack(currentTarget, dist, angleDiff);
+                submitAim(aimPos);
             }
-            case ChargeOnly -> tryChargeAttack(currentTarget, dist);
+            case ChargeOnly -> {
+                submitAim(aimPos);
+                tryChargeAttack(currentTarget, dist);
+            }
             case JabCharge -> {
                 if (lastJabWasJab) {
-                    lastJabWasJab = !tryChargeAttack(currentTarget, dist);
+                    submitAim(aimPos);
+                    boolean chargeStarted = tryChargeAttack(currentTarget, dist);
+                    if (chargeStarted) lastJabWasJab = false;
                 } else {
-                    lastJabWasJab = tryJabAttack(currentTarget, dist, angleDiff);
+                    stopCharging();
+                    submitAim(aimPos);
                 }
             }
             case Auto -> {
                 stopCharging();
-                tryJabAttack(currentTarget, dist, angleDiff);
+                submitAim(aimPos);
             }
         }
     }
 
-    private boolean tryJabAttack(LivingEntity target, double dist, float angleDiff) {
+    private void submitAim(Vec3 aimPos) {
+        if (CombatEngine.get().isFrozen()) return;
+
+        LivingEntity target = currentTarget;
+        CombatRequest.Mode mode = aimMode.get() == AimMode.Silent ? CombatRequest.Mode.Silent : CombatRequest.Mode.Visible;
+
+        CombatEngine.get().submit(CombatRequest.rotation(this, priority.get(), aimPos, mode, buildProfile(), () -> {
+            if (!isActive() || CombatEngine.get().isFrozen()) return;
+            if (!autoAttack.get()) return;
+            if (target == null || !target.isAlive() || !isValidTarget(target)) return;
+
+            double distNow = mc.player.getEyePosition().distanceTo(target.getBoundingBox().getCenter());
+            if (distNow < minAttackRange.get() || distNow > range.get()) return;
+
+            stopCharging();
+            lastJabWasJab = tryJabAttack(target, distNow);
+        }));
+    }
+
+    private CombatRequest.Profile buildProfile() {
+        return new CombatRequest.Profile(aimSpeed.get(), aimDamping.get(), jitterYaw.get(), jitterPitch.get(), overshoot.get(), maxDegrees.get());
+    }
+
+    private boolean tryJabAttack(LivingEntity target, double dist) {
         if (jabCooldown > 0) return false;
 
         if (!ignoreJabCooldown.get() && mc.player.getAttackStrengthScale(0.5f) < 1.0f) return false;
@@ -343,7 +414,6 @@ public class SpearAssist extends Module {
         }
 
         if (dist > range.get()) return false;
-        if (angleDiff > 15.0f) return false;
 
         if (mc.gameMode != null) {
             mc.gameMode.attack(mc.player, target);
@@ -356,6 +426,10 @@ public class SpearAssist extends Module {
     }
 
     private boolean tryChargeAttack(LivingEntity target, double dist) {
+        if (CombatEngine.get().isFrozen()) {
+            stopCharging();
+            return false;
+        }
         if (!enableChargeAttack.get()) return false;
 
         double playerSpeed = new Vec3(mc.player.getDeltaMovement().x, 0, mc.player.getDeltaMovement().z).length() * 20;

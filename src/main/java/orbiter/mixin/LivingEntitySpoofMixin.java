@@ -1,6 +1,6 @@
 package orbiter.mixin;
 
-import orbiter.modules.ClientSideThings;
+import orbiter.modules.misc.ClientSideThings;
 import orbiter.util.ClientSpoofState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.EquipmentSlot;

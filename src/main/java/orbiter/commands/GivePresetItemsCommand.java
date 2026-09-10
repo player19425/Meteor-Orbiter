@@ -13,7 +13,6 @@ import net.minecraft.client.multiplayer.ClientSuggestionProvider;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
-import net.minecraft.world.item.component.BundleContents;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.component.FireworkExplosion;
 import net.minecraft.world.item.component.Fireworks;
@@ -21,7 +20,6 @@ import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.item.alchemy.PotionContents;
-import net.minecraft.world.item.component.WrittenBookContent;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.component.TypedEntityData;
 import net.minecraft.world.entity.ai.attributes.Attribute;
@@ -34,7 +32,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
 import net.minecraft.network.protocol.game.ServerboundSetCreativeModeSlotPacket;
 import net.minecraft.world.item.alchemy.Potion;
 import net.minecraft.world.item.alchemy.Potions;
@@ -43,7 +40,6 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.server.network.Filterable;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.Component;
 import net.minecraft.ChatFormatting;
@@ -63,6 +59,8 @@ public class GivePresetItemsCommand extends Command {
     private static final SimpleCommandExceptionType NOT_IN_CREATIVE =
             new SimpleCommandExceptionType(Component.literal("You must be in creative mode to use this."));
     private static final Pattern PLAYER_NAME_PATTERN = Pattern.compile("^[A-Za-z0-9_]{3,16}$");
+    private static final int ALL_BATCH_SIZE = 27;
+    private static int allBatchIndex = 0;
 
     private record Preset(String name, String desc, Supplier<ItemStack> creator) {}
     private final List<Preset> allPresets = new ArrayList<>();
@@ -120,14 +118,15 @@ public class GivePresetItemsCommand extends Command {
 
         builder.then(literal("all").executes(context -> {
             ensureCreative();
-            int count = 0;
-            for (Preset p : allPresets) {
-                giveItem(p.creator().get());
-                count++;
-            }
-            info("Gave " + count + " preset items.");
+            giveNextBatch();
             return SINGLE_SUCCESS;
         }));
+
+        builder.then(literal("all").then(literal("reset").executes(context -> {
+            allBatchIndex = 0;
+            info("Batch counter reset. Next .gpi all starts from batch 1.");
+            return SINGLE_SUCCESS;
+        })));
 
         builder.then(literal("head")
                 .then(argument("player", StringArgumentType.word()).executes(context -> {
@@ -141,6 +140,27 @@ public class GivePresetItemsCommand extends Command {
                 runPreset(safeName, p.creator().get());
                 return SINGLE_SUCCESS;
             }));
+        }
+    }
+
+    private void giveNextBatch() {
+        int total = allPresets.size();
+        int start = allBatchIndex * ALL_BATCH_SIZE;
+        if (start >= total) {
+            info("All " + total + " presets already given. Use .gpi all reset to start over.");
+            return;
+        }
+        int end = Math.min(start + ALL_BATCH_SIZE, total);
+        for (int i = start; i < end; i++) {
+            giveItem(allPresets.get(i).creator().get());
+        }
+        int batch = allBatchIndex + 1;
+        allBatchIndex++;
+        info("Gave batch " + batch + ": items " + (start + 1) + " to " + end + " of " + total + ".");
+        if (end < total) {
+            info("Run .gpi all again for the next batch. Use .gpi all reset to restart from batch 1.");
+        } else {
+            info("That was the final batch. Use .gpi all reset to start over.");
         }
     }
 
@@ -805,9 +825,9 @@ public class GivePresetItemsCommand extends Command {
                        int customNameVisible, ChatFormatting color) {}
         EggDef[] eggs = {
             new EggDef("Dragon", Items.ENDER_DRAGON_SPAWN_EGG, "minecraft:ender_dragon", "Ender Dragon", 1, 1, ChatFormatting.DARK_PURPLE),
-            new EggDef("Wither", Items.WITHER_SKELETON_SPAWN_EGG, "minecraft:wither", "Wither Boss", 1, 1, ChatFormatting.DARK_GRAY),
+            new EggDef("Wither", Items.WITHER_SPAWN_EGG, "minecraft:wither", "Wither Boss", 1, 1, ChatFormatting.DARK_GRAY),
             new EggDef("Elder Guardian", Items.ELDER_GUARDIAN_SPAWN_EGG, "minecraft:elder_guardian", "Elder Guardian", 64, 1, ChatFormatting.AQUA),
-            new EggDef("Wither Storm", Items.WARDEN_SPAWN_EGG, "minecraft:warden", "Warden", 64, 1, ChatFormatting.DARK_BLUE),
+            new EggDef("Warden", Items.WARDEN_SPAWN_EGG, "minecraft:warden", "Warden", 64, 1, ChatFormatting.DARK_BLUE),
             new EggDef("Ravager", Items.RAVAGER_SPAWN_EGG, "minecraft:ravager", "Ravager", 64, 1, ChatFormatting.GRAY),
             new EggDef("Iron Golem", Items.IRON_GOLEM_SPAWN_EGG, "minecraft:iron_golem", "Iron Golem", 64, 1, ChatFormatting.WHITE),
             new EggDef("Snow Golem", Items.SNOW_GOLEM_SPAWN_EGG, "minecraft:snow_golem", "Snow Golem", 64, 1, ChatFormatting.WHITE),
@@ -1085,15 +1105,6 @@ public class GivePresetItemsCommand extends Command {
         return s;
     }
 
-    private ItemStack makeTotemStack() {
-        ItemStack s = new ItemStack(Items.TOTEM_OF_UNDYING, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("God Totem Stack", ChatFormatting.GOLD));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x Totem of Undying • max death protection"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
     private ItemStack makeGodApples64() {
         ItemStack s = new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 64);
         s.set(DataComponents.CUSTOM_NAME, name("God Apple Stack x64", ChatFormatting.GOLD));
@@ -1103,140 +1114,11 @@ public class GivePresetItemsCommand extends Command {
         return s;
     }
 
-    private ItemStack makeGoldenCarrots64() {
-        ItemStack s = new ItemStack(Items.GOLDEN_CARROT, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Golden Carrots x64", ChatFormatting.GOLD));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x best food in the game • max saturation"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeCookedBeef64() {
-        ItemStack s = new ItemStack(Items.COOKED_BEEF, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Steak Stack x64", ChatFormatting.GOLD));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x steak • instant hunger fill"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeCakeStack() {
-        ItemStack s = new ItemStack(Items.CAKE, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Cake Stack x64", ChatFormatting.YELLOW));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64 cakes • place and eat everywhere"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeEnchantedBread() {
-        ItemStack s = new ItemStack(Items.BREAD, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Enchanted Bread x64", ChatFormatting.GREEN));
-        s.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("Glowing bread • looks magical, feeds well"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeEnchantedSteak() {
-        ItemStack s = new ItemStack(Items.COOKED_BEEF, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Enchanted Steak x64", ChatFormatting.RED));
-        s.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true);
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("Glowing steak • the fanciest food"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeTippedArrow64(Holder<Potion> base, String displayName) {
-        ItemStack s = new ItemStack(Items.TIPPED_ARROW, 64);
-        s.set(DataComponents.CUSTOM_NAME, name(displayName + " Arrow x64", ChatFormatting.AQUA));
-        s.set(DataComponents.POTION_CONTENTS, new PotionContents(base));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x " + displayName + " Tipped Arrows"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeEnderPearls64() {
-        ItemStack s = new ItemStack(Items.ENDER_PEARL, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Ender Pearls x64", ChatFormatting.DARK_PURPLE));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x ender pearls • teleport at will"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeEyes64() {
-        ItemStack s = new ItemStack(Items.ENDER_EYE, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Eyes of Ender x64", ChatFormatting.DARK_PURPLE));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x eyes of ender • find the stronghold instantly"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeSponge64() {
-        ItemStack s = new ItemStack(Items.SPONGE, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Sponges x64", ChatFormatting.YELLOW));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x sponges • drain entire ocean monuments"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeWetSponge64() {
-        ItemStack s = new ItemStack(Items.WET_SPONGE, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Wet Sponges x64", ChatFormatting.AQUA));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x wet sponges • decorative or drain in the nether"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeShulkerShells64() {
-        ItemStack s = new ItemStack(Items.SHULKER_SHELL, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Shulker Shells x64", ChatFormatting.LIGHT_PURPLE));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x shulker shells • craft 32 shulker boxes"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeEchoShards64() {
-        ItemStack s = new ItemStack(Items.ECHO_SHARD, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Echo Shards x64", ChatFormatting.DARK_PURPLE));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x echo shards • craft 16 recovery compasses"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeNetherStars64() {
-        ItemStack s = new ItemStack(Items.NETHER_STAR, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Nether Stars x64", ChatFormatting.GOLD));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x nether stars • craft 64 beacons"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
     private ItemStack makeDragonEggs() {
-        ItemStack s = new ItemStack(Items.DRAGON_EGG, 1);
-        s.set(DataComponents.CUSTOM_NAME, name("Dragon Egg", ChatFormatting.DARK_PURPLE));
+        ItemStack s = new ItemStack(Items.DRAGON_EGG, 64);
+        s.set(DataComponents.CUSTOM_NAME, name("Dragon Eggs x64", ChatFormatting.DARK_PURPLE));
         s.set(DataComponents.LORE, new ItemLore(List.of(
             line("The rarest block in vanilla • unobtainable in survival"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeEndCrystals64() {
-        ItemStack s = new ItemStack(Items.END_CRYSTAL, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("End Crystals x64", ChatFormatting.RED));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x end crystals • respawn the dragon or use as weapon"),
             gold("Orbiter Preset"))));
         return s;
     }
@@ -1329,78 +1211,6 @@ public class GivePresetItemsCommand extends Command {
         return s;
     }
 
-    private ItemStack makeNameTag(String text, ChatFormatting color) {
-        ItemStack s = new ItemStack(Items.NAME_TAG, 1);
-        s.set(DataComponents.CUSTOM_NAME, name(text, color));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("Custom name tag • rename anything"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeAllMusicDiscs() {
-        ItemStack s = new ItemStack(Items.MUSIC_DISC_13, 1);
-        s.set(DataComponents.CUSTOM_NAME, name("Music Disc: 13", ChatFormatting.WHITE));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("Classic disc • first ever Minecraft music disc"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeJukebox64() {
-        ItemStack s = new ItemStack(Items.JUKEBOX, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Jukeboxes x64", ChatFormatting.GOLD));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x jukeboxes • play music everywhere"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeLodestoneCompass() {
-        ItemStack s = new ItemStack(Items.COMPASS, 1);
-        s.set(DataComponents.CUSTOM_NAME, name("Lodestone Compass", ChatFormatting.GOLD));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("Points to lodestone • never get lost"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeRecoveryCompass() {
-        ItemStack s = new ItemStack(Items.RECOVERY_COMPASS, 1);
-        s.set(DataComponents.CUSTOM_NAME, name("Recovery Compass", ChatFormatting.AQUA));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("Points to your last death • find your stuff"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeBoat64() {
-        ItemStack s = new ItemStack(Items.OAK_BOAT, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Oak Boats x64", ChatFormatting.YELLOW));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x boats • travel by water fast"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeChestBoat64() {
-        ItemStack s = new ItemStack(Items.OAK_CHEST_BOAT, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Oak Chest Boats x64", ChatFormatting.YELLOW));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x chest boats • mobile storage on water"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeMobEgg64(Item egg, String mobName) {
-        ItemStack s = new ItemStack(egg, 64);
-        s.set(DataComponents.CUSTOM_NAME, name(mobName + " Egg x64", ChatFormatting.GREEN));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x " + mobName + " spawn eggs"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
     private void registerMisc() {
 
         reg("ender-pearl-far", "Ender Pearl • +20 Entity Reach", this::makeFarPearl);
@@ -1461,24 +1271,6 @@ public class GivePresetItemsCommand extends Command {
         return s;
     }
 
-    private ItemStack makeSaddleStack() {
-        ItemStack s = new ItemStack(Items.SADDLE, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Saddles x64", ChatFormatting.GOLD));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x saddles • ride everything"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeAnvilStack() {
-        ItemStack s = new ItemStack(Items.ANVIL, 64);
-        s.set(DataComponents.CUSTOM_NAME, name("Anvils x64", ChatFormatting.GRAY));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x anvils • rename and enchant anything"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
     private ItemStack makeKnockbackStick() {
         ItemStack s = new ItemStack(Items.STICK, 1);
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
@@ -1525,106 +1317,10 @@ public class GivePresetItemsCommand extends Command {
         return s;
     }
 
-    private ItemStack makeBanner(Item bannerItem, String colorName, ChatFormatting color) {
-        ItemStack s = new ItemStack(bannerItem, 64);
-        s.set(DataComponents.CUSTOM_NAME, name(colorName + " Banner x64", color));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x " + colorName.toLowerCase() + " banners for decoration"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeBed(Item bedItem, String colorName, ChatFormatting color) {
-        ItemStack s = new ItemStack(bedItem, 64);
-        s.set(DataComponents.CUSTOM_NAME, name(colorName + " Bed x64", color));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x " + colorName.toLowerCase() + " beds • set spawn anywhere"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeSkull64(Item skullItem, String skullName) {
-        ItemStack s = new ItemStack(skullItem, 64);
-        s.set(DataComponents.CUSTOM_NAME, name(skullName + " x64", ChatFormatting.GRAY));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("64x " + skullName.toLowerCase() + " for decoration"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeColoredShulker(Item shulkerItem, String colorName, ChatFormatting color) {
-        ItemStack s = new ItemStack(shulkerItem, 1);
-        s.set(DataComponents.CUSTOM_NAME, name(colorName + " Shulker AABB", color));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line(colorName + " shulker box • portable storage"),
-            gold("Orbiter Preset"))));
-        return s;
-    }
-
-    private ItemStack makeCommandBook() {
-        ItemStack s = new ItemStack(Items.WRITTEN_BOOK, 1);
-        s.set(DataComponents.CUSTOM_NAME, name("Command Reference", ChatFormatting.AQUA));
-        List<Filterable<Component>> pages = new ArrayList<>();
-        pages.add(Filterable.passThrough(Component.literal("Orbiter Commands\n\n")
-            .append(Component.literal("/gpi").setStyle(Style.EMPTY.withBold(true).withColor(ChatFormatting.AQUA)))
-            .append(Component.literal(" • Give Preset Items\n"))
-            .append(Component.literal("/gpi list").setStyle(Style.EMPTY.withColor(ChatFormatting.YELLOW)))
-            .append(Component.literal(" • List all presets\n"))
-            .append(Component.literal("/gpi all").setStyle(Style.EMPTY.withColor(ChatFormatting.RED)))
-            .append(Component.literal(" • Give ALL presets"))));
-        pages.add(Filterable.passThrough(Component.literal("Useful Presets:\n")
-            .append(Component.literal("/gpi kit-god").setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD)))
-            .append(Component.literal(" • Ultimate kit\n"))
-            .append(Component.literal("/gpi flight127-rocket").setStyle(Style.EMPTY.withColor(ChatFormatting.AQUA)))
-            .append(Component.literal(" • Max flight\n"))
-            .append(Component.literal("/gpi god-elytra").setStyle(Style.EMPTY.withColor(ChatFormatting.AQUA)))
-            .append(Component.literal(" • OP elytra\n"))));
-        WrittenBookContent content = new WrittenBookContent(
-            Filterable.passThrough("Orbiter Commands"), "Orbiter", 0, pages, true);
-        s.set(DataComponents.WRITTEN_BOOK_CONTENT, content);
-        return s;
-    }
-
-    private ItemStack makeCoordsBook() {
-        ItemStack s = new ItemStack(Items.WRITTEN_BOOK, 1);
-        s.set(DataComponents.CUSTOM_NAME, name("Coordinates Book", ChatFormatting.GREEN));
-        List<Filterable<Component>> pages = new ArrayList<>();
-        pages.add(Filterable.passThrough(Component.literal("Coordinates Reference\n\n")
-            .append(Component.literal("Overworld Origin: ").setStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)))
-            .append(Component.literal("0 0 0\n").setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)))
-            .append(Component.literal("Nether Hub: ").setStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)))
-            .append(Component.literal("0 0 0\n").setStyle(Style.EMPTY.withColor(ChatFormatting.WHITE)))
-            .append(Component.literal("End Portal: ").setStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)))
-            .append(Component.literal("find with /locate"))));
-        WrittenBookContent content = new WrittenBookContent(
-            Filterable.passThrough("Coordinates"), "Orbiter", 0, pages, true);
-        s.set(DataComponents.WRITTEN_BOOK_CONTENT, content);
-        return s;
-    }
-
-    private ItemStack makeEnchantGuideBook() {
-        ItemStack s = new ItemStack(Items.WRITTEN_BOOK, 1);
-        s.set(DataComponents.CUSTOM_NAME, name("Enchantment Guide", ChatFormatting.LIGHT_PURPLE));
-        List<Filterable<Component>> pages = new ArrayList<>();
-        pages.add(Filterable.passThrough(Component.literal("Max Enchantments Guide\n\n")
-            .append(Component.literal("Sword: ").setStyle(Style.EMPTY.withColor(ChatFormatting.RED)))
-            .append(Component.literal("Sharp 255, Fire Aspect 255, Looting 255\n"))
-            .append(Component.literal("Pickaxe: ").setStyle(Style.EMPTY.withColor(ChatFormatting.AQUA)))
-            .append(Component.literal("Efficiency 255, Fortune 255, Silk Touch\n"))
-            .append(Component.literal("Armor: ").setStyle(Style.EMPTY.withColor(ChatFormatting.GOLD)))
-            .append(Component.literal("All Protection 255, Thorns 255\n"))
-            .append(Component.literal("Bow: ").setStyle(Style.EMPTY.withColor(ChatFormatting.GREEN)))
-            .append(Component.literal("Power 255, Flame 255, Infinity"))));
-        WrittenBookContent content = new WrittenBookContent(
-            Filterable.passThrough("Enchant Guide"), "Orbiter", 0, pages, true);
-        s.set(DataComponents.WRITTEN_BOOK_CONTENT, content);
-        return s;
-    }
-
     private void showList() {
         info("Total presets: " + allPresets.size());
         info("Type /gpi <name> to get an item. Use /gpi list to see all.");
-        info("Use /gpi all to get every preset. Use /gpi head <player> for player heads.");
+        info("Use /gpi all for presets in batches of 27. Use /gpi all reset to restart batches. Use /gpi head <player> for player heads.");
 
         int shown = Math.min(30, allPresets.size());
         StringBuilder sb = new StringBuilder("Preview: ");
@@ -1736,15 +1432,6 @@ public class GivePresetItemsCommand extends Command {
             }
         }
         return ResolvableProfile.createUnresolved(playerName);
-    }
-
-    private ItemStack makeStackItem(Item item, int count, String displayName, ChatFormatting color) {
-        ItemStack s = new ItemStack(item, count);
-        s.set(DataComponents.CUSTOM_NAME, name(displayName, color));
-        s.set(DataComponents.LORE, new ItemLore(List.of(
-            line("Stack of " + count + " • available only via creative write"),
-            gold("Orbiter Preset"))));
-        return s;
     }
 
     private ItemStack makeReachTrident() {

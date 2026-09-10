@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.world;
 
 import orbiter.Orbiter;
 import meteordevelopment.meteorclient.events.game.GameLeftEvent;

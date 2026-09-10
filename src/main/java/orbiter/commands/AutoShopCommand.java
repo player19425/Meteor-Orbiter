@@ -3,7 +3,7 @@ package orbiter.commands;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import orbiter.modules.AutoShop;
+import orbiter.modules.misc.AutoShop;
 import net.minecraft.client.multiplayer.ClientSuggestionProvider;
 
 public class AutoShopCommand extends Command {

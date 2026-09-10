@@ -19,6 +19,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import orbiter.Orbiter;
+import orbiter.systems.combat.CombatEngine;
 import orbiter.util.ConfigModifier;
 
 import java.util.HashSet;
@@ -203,6 +204,12 @@ public class ShieldAssist extends Module {
     @EventHandler(priority = EventPriority.HIGH)
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null) return;
+
+        if (CombatEngine.get().isFrozen()) {
+            if (isBlocking) stopBlocking();
+            return;
+        }
+
         tickCounter++;
         if (releaseTimer > 0) releaseTimer--;
 
