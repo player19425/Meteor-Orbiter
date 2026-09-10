@@ -1,20 +1,9 @@
 package orbiter.util;
 
-import orbiter.modules.ClientSideThings;
+import orbiter.modules.misc.ClientSideThings;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.network.chat.Component;
-
-import java.util.Collections;
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.Map;
 
 public final class ClientSpoofState {
-
-    private static final Map<ItemStack, Integer> fakeCounts = Collections.synchronizedMap(new IdentityHashMap<>());
-    private static final Map<ItemStack, Component> fakeNames = Collections.synchronizedMap(new IdentityHashMap<>());
-    private static final Map<ItemStack, List<Component>> fakeLore = Collections.synchronizedMap(new IdentityHashMap<>());
 
     private static ClientSideThings cachedModule;
     private static final ThreadLocal<Integer> hudRenderDepth = ThreadLocal.withInitial(() -> 0);
@@ -47,25 +36,5 @@ public final class ClientSpoofState {
 
     public static boolean isHudRenderScope() {
         return hudRenderDepth.get() > 0;
-    }
-
-    public static void clearAll() {
-        fakeCounts.clear();
-        fakeNames.clear();
-        fakeLore.clear();
-    }
-
-    public static Component getFakeName(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) return null;
-        return fakeNames.get(stack);
-    }
-
-    public static List<Component> getFakeLore(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) return List.of();
-
-        List<Component> lore = fakeLore.get(stack);
-        if (lore == null) return List.of();
-
-        return lore;
     }
 }

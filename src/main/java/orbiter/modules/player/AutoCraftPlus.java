@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.player;
 
 import orbiter.Orbiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;

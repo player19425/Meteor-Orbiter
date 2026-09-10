@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.world;
 
 import orbiter.Orbiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -428,7 +428,7 @@ public class AutoFarming extends Module {
                     BlockPos placePos = farmlandPos.above();
                     if (!mc.level.getBlockState(placePos).canBeReplaced()) continue;
                     BlockPos support = placePos.below();
-                    if (!mc.level.getBlockState(support).isSolid()) continue;
+                    if (!mc.level.getBlockState(support).isFaceSturdy(mc.level, support, Direction.UP)) continue;
 
                     int prev = mc.player.getInventory().getSelectedSlot();
                     InvUtils.swap(waterBucketSlot, false);

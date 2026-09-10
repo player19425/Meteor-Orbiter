@@ -230,6 +230,7 @@ public class MultiCommand extends Command {
     private Set<String> getAllPlayers() {
         if (mc.level == null) return Collections.emptySet();
         return mc.level.players().stream()
+            .filter(p -> p != mc.player)
             .map(p -> p.getName().getString())
             .collect(Collectors.toCollection(LinkedHashSet::new));
     }

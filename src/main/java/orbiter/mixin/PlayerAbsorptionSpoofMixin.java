@@ -2,7 +2,7 @@ package orbiter.mixin;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
-import orbiter.modules.ClientSideThings;
+import orbiter.modules.misc.ClientSideThings;
 import orbiter.util.ClientSpoofState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

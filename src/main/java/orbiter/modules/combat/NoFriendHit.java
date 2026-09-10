@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.combat;
 
 import orbiter.Orbiter;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;

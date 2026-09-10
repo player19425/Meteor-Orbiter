@@ -5,6 +5,7 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import orbiter.Orbiter;
+import orbiter.systems.combat.CombatEngine;
 import orbiter.util.ConfigModifier;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.core.BlockPos;
@@ -85,6 +86,14 @@ public class SlimeJump extends Module {
         if (!ConfigModifier.get().stupidModulesEnabled()) {
             info("Stupid Modules was disabled. SlimeJump turning off.");
             toggle();
+            return;
+        }
+
+        if (CombatEngine.get().isFrozen()) {
+            boolean frozenOnSlime = isOnSlime();
+            double frozenYVel = mc.player.getDeltaMovement().y;
+            wasFalling = frozenYVel < -0.1;
+            wasOnSlime = frozenOnSlime;
             return;
         }
 

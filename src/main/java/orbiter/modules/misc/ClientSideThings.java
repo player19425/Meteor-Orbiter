@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.misc;
 
 import orbiter.Orbiter;
 import orbiter.util.ClientSpoofState;
@@ -176,13 +176,6 @@ public class ClientSideThings extends Module {
         .defaultValue(false)
         .build());
 
-    private final Setting<Boolean> creativeInventory = sgHud.add(new BoolSetting.Builder()
-        .name("creative-inventory")
-        .description("Allows opening Creative inventory UI locally when visual creative mode is on.")
-        .defaultValue(false)
-        .visible(visualCreative::get)
-        .build());
-
     private final Setting<Boolean> hideItemDamage = sgHud.add(new BoolSetting.Builder()
         .name("hide-item-damage")
         .description("Hides durability bars and damaged state rendering locally.")
@@ -266,12 +259,6 @@ public class ClientSideThings extends Module {
         .min(0.1).max(4.0).sliderRange(0.1, 3.0)
         .build());
 
-    private final Setting<Double> glintMultiplier = sgVisuals.add(new DoubleSetting.Builder()
-        .name("glint-multiplier")
-        .defaultValue(1.0)
-        .min(0.1).max(25.0).sliderRange(0.1, 10.0)
-        .build());
-
     private final Setting<WeatherMode> weatherMode = sgWeather.add(new EnumSetting.Builder<WeatherMode>()
         .name("weather")
         .defaultValue(WeatherMode.Server)
@@ -340,13 +327,6 @@ public class ClientSideThings extends Module {
         .defaultValue(OverlayMode.Server)
         .build());
 
-    private final Setting<Boolean> replacePumpkinOverlay = sgOverlay.add(new BoolSetting.Builder()
-        .name("replace-pumpkin-overlay")
-        .description("Replace the pumpkin blur with a transparent overlay instead of fully removing it.")
-        .defaultValue(false)
-        .visible(() -> pumpkinOverlayMode.get() == OverlayMode.ForceOff)
-        .build());
-
     private final Setting<OverlayMode> waterOverlayMode = sgOverlay.add(new EnumSetting.Builder<OverlayMode>()
         .name("water-overlay-mode")
         .description("Server preserves vanilla; ForceOn/ForceOff control the local underwater overlay.")
@@ -413,67 +393,6 @@ public class ClientSideThings extends Module {
         .min(1).max(6)
         .visible(() -> crosshairStyle.get() == CrosshairStyle.Cross
             || crosshairStyle.get() == CrosshairStyle.Thin)
-        .build());
-
-    private final Setting<Boolean> crosshairDebugHide = sgCrosshair.add(new BoolSetting.Builder()
-        .name("crosshair-debug-hide")
-        .description("Also hide crosshair in F3 debug screen.")
-        .defaultValue(false)
-        .visible(() -> crosshairStyle.get() == CrosshairStyle.None)
-        .build());
-
-    private final Setting<Boolean> fogOverrideEnabled = sgFog.add(new BoolSetting.Builder()
-        .name("fog-override-enabled")
-        .description("Override per-dimension fog distances.")
-        .defaultValue(false)
-        .build());
-
-    private final Setting<Double> fogOverworldStart = sgFog.add(new DoubleSetting.Builder()
-        .name("fog-overworld-start")
-        .description("Fog start distance in overworld.")
-        .defaultValue(0.0)
-        .min(0.0).max(65536.0).sliderRange(0.0, 2048.0)
-        .visible(fogOverrideEnabled::get)
-        .build());
-
-    private final Setting<Double> fogOverworldEnd = sgFog.add(new DoubleSetting.Builder()
-        .name("fog-overworld-end")
-        .description("Fog end distance in overworld.")
-        .defaultValue(65536.0)
-        .min(0.0).max(65536.0).sliderRange(0.0, 65536.0)
-        .visible(fogOverrideEnabled::get)
-        .build());
-
-    private final Setting<Double> fogNetherStart = sgFog.add(new DoubleSetting.Builder()
-        .name("fog-nether-start")
-        .description("Fog start distance in the Nether.")
-        .defaultValue(0.0)
-        .min(0.0).max(65536.0).sliderRange(0.0, 2048.0)
-        .visible(fogOverrideEnabled::get)
-        .build());
-
-    private final Setting<Double> fogNetherEnd = sgFog.add(new DoubleSetting.Builder()
-        .name("fog-nether-end")
-        .description("Fog end distance in the Nether.")
-        .defaultValue(65536.0)
-        .min(0.0).max(65536.0).sliderRange(0.0, 65536.0)
-        .visible(fogOverrideEnabled::get)
-        .build());
-
-    private final Setting<Double> fogEndStart = sgFog.add(new DoubleSetting.Builder()
-        .name("fog-the-end-start")
-        .description("Fog start distance in The End.")
-        .defaultValue(0.0)
-        .min(0.0).max(65536.0).sliderRange(0.0, 2048.0)
-        .visible(fogOverrideEnabled::get)
-        .build());
-
-    private final Setting<Double> fogEndEnd = sgFog.add(new DoubleSetting.Builder()
-        .name("fog-the-end-end")
-        .description("Fog end distance in The End.")
-        .defaultValue(65536.0)
-        .min(0.0).max(65536.0).sliderRange(0.0, 65536.0)
-        .visible(fogOverrideEnabled::get)
         .build());
 
     private final Setting<Boolean> bossbarOverrideEnabled = sgBossbar.add(new BoolSetting.Builder()
@@ -604,7 +523,6 @@ public class ClientSideThings extends Module {
 
     @Override
     public void onActivate() {
-        ClientSpoofState.clearAll();
         chaosTimer = 0;
         smoothT = 0.0f;
         xpSnapshotValid = false;
@@ -646,7 +564,6 @@ public class ClientSideThings extends Module {
     public void onDeactivate() {
         restoreXp();
         restoreSpoof();
-        ClientSpoofState.clearAll();
         showingFakeDeath = false;
         fakeDeathFadeAlpha = 0.0f;
     }
@@ -853,17 +770,6 @@ public class ClientSideThings extends Module {
         }
     }
 
-    public void triggerFakeDeath() {
-        showingFakeDeath = true;
-        fakeDeathStartTimeMs = System.currentTimeMillis();
-        fakeDeathFadeAlpha = 0.0f;
-    }
-
-    public void dismissFakeDeath() {
-        showingFakeDeath = false;
-        fakeDeathFadeAlpha = 0.0f;
-    }
-
     public boolean isShowingFakeDeath() {
         return fakeDeathScreenEnabled.get() && showingFakeDeath;
     }
@@ -952,10 +858,6 @@ public class ClientSideThings extends Module {
         return visualCreative.get();
     }
 
-    public boolean creativeInventoryEnabled() {
-        return visualCreative.get() && creativeInventory.get();
-    }
-
     public boolean hideItemDamageEnabled() {
         return hideItemDamage.get();
     }
@@ -980,10 +882,6 @@ public class ClientSideThings extends Module {
         return itemScale.get();
     }
 
-    public double getGlintMultiplier() {
-        return glintMultiplier.get();
-    }
-
     public boolean shouldOverrideFireOverlay() {
         return fireOverlayMode.get() != OverlayMode.Server;
     }
@@ -997,10 +895,6 @@ public class ClientSideThings extends Module {
 
     public boolean shouldDisablePumpkinOverlay() {
         return pumpkinOverlayMode.get() == OverlayMode.ForceOff;
-    }
-
-    public boolean shouldReplacePumpkinOverlay() {
-        return pumpkinOverlayMode.get() == OverlayMode.ForceOff && replacePumpkinOverlay.get();
     }
 
     public boolean shouldDisableWaterOverlay() {
@@ -1034,32 +928,6 @@ public class ClientSideThings extends Module {
 
     public int getCrosshairThickness() {
         return crosshairThickness.get();
-    }
-
-    public boolean shouldHideCrosshairDebug() {
-        return crosshairStyle.get() == CrosshairStyle.None && crosshairDebugHide.get();
-    }
-
-    public boolean shouldOverrideFog() {
-        return fogOverrideEnabled.get();
-    }
-
-    public double getFogStart() {
-        if (mc.player == null || mc.level == null) return 0.0;
-        var dimKey = mc.level.dimension();
-        if (dimKey == net.minecraft.world.level.Level.OVERWORLD) return fogOverworldStart.get();
-        if (dimKey == net.minecraft.world.level.Level.NETHER) return fogNetherStart.get();
-        if (dimKey == net.minecraft.world.level.Level.END) return fogEndStart.get();
-        return fogOverworldStart.get();
-    }
-
-    public double getFogEnd() {
-        if (mc.player == null || mc.level == null) return 65536.0;
-        var dimKey = mc.level.dimension();
-        if (dimKey == net.minecraft.world.level.Level.OVERWORLD) return fogOverworldEnd.get();
-        if (dimKey == net.minecraft.world.level.Level.NETHER) return fogNetherEnd.get();
-        if (dimKey == net.minecraft.world.level.Level.END) return fogEndEnd.get();
-        return fogOverworldEnd.get();
     }
 
     public boolean shouldOverrideBossbar() {
@@ -1106,11 +974,6 @@ public class ClientSideThings extends Module {
 
     public boolean isFakeHotbarItemsEnabled() {
         return fakeHotbarItems.get();
-    }
-
-    public boolean hasConfiguredFakeHotbarItem(int hotbarSlot) {
-        Item item = getConfiguredHotbarItem(hotbarSlot);
-        return item != null && item != Items.AIR;
     }
 
     public int getHotbarSpoofCount(int hotbarSlot, int fallbackCount) {
@@ -1230,34 +1093,6 @@ public class ClientSideThings extends Module {
         return item.getDefaultInstance();
     }
 
-    public FakeGameMode getFakeGamemodeSetting() {
-        return fakeGamemode.get();
-    }
-
-    public int getFakePingSetting() {
-        return fakePing.get();
-    }
-
-    public boolean isFireOverlayOverrideActive() {
-        return fireOverlayMode.get() != OverlayMode.Server;
-    }
-
-    public boolean isPumpkinOverlayDisabled() {
-        return pumpkinOverlayMode.get() == OverlayMode.ForceOff;
-    }
-
-    public boolean isWaterOverlayDisabled() {
-        return waterOverlayMode.get() == OverlayMode.ForceOff;
-    }
-
-    public boolean isFogOverrideActive() {
-        return fogOverrideEnabled.get();
-    }
-
-    public boolean isBossbarOverrideActive() {
-        return bossbarOverrideEnabled.get();
-    }
-
     public boolean isCrosshairOverrideActive() {
         return crosshairStyle.get() != CrosshairStyle.Default;
     }
@@ -1272,9 +1107,8 @@ public class ClientSideThings extends Module {
         if (shouldOverrideFireOverlay()) parts.add("Fire");
         if (shouldDisablePumpkinOverlay()) parts.add("Pumpkin");
         if (shouldDisableWaterOverlay()) parts.add("Water");
-        if (shouldOverrideFog()) parts.add("Fog");
         if (isCrosshairOverrideActive()) parts.add("Cross");
-        if (isBossbarOverrideActive()) parts.add("Boss");
+        if (shouldOverrideBossbar()) parts.add("Boss");
         if (isShowingFakeDeath()) parts.add("Death");
         if (shouldFakeBreathe()) parts.add("Breathe");
         return parts.isEmpty() ? null : String.join(",", parts);

@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.misc;
 
 import orbiter.Orbiter;
 import com.mojang.authlib.GameProfile;
@@ -42,7 +42,7 @@ public class AntiStaff extends Module {
     private final Setting<String> watchedPrefixes = sgGeneral.add(new StringSetting.Builder()
         .name("watched-prefixes")
         .description("Comma-separated prefixes to detect (color codes are auto-stripped).")
-        .defaultValue("[ADMIN],[MOD],[STAFF],[HELPER],[OWNER],[BUILDER],[DEV],[DEVELOPER],[SR.MOD],[JR.MOD],[SRMOD],[JRMOD],[OP],[MANAGER],[HEAD-MOD],[HEAD-ADMIN],[MODERATOR],[ADMINISTRATOR],[SUPPORT],[GAMEMASTER],[GM],[SRADMIN],[HEADSTAFF],[OPERATOR],[CO-OWNER],[COOWNER],[SUPERVISOR],[TRAINEE],[T-MOD],[TMOD],[TRIAL],[TRIALMOD],[TRIAL-MOD],[TRIAL-STAFF],[SENIORMOD],[SENIOR-MOD],[SENIORADMIN],[SENIOR-ADMIN],[HEADHELPER],[HEAD-HELPER],[LEAD],[LEADMOD],[LEAD-MOD],[LEADADMIN],[LEAD-ADMIN],[LEADSTAFF],[LEAD-STAFF],[ASSISTANT],[ASSISTANTMOD],[ASSTMOD],[COMMUNITY],[COMMUNITYMANAGER],[COMMUNITY-MANAGER],[CM],[EVENT],[EVENTS],[EVENTMANAGER],[EVENT-MANAGER],[ADMIN+],[MOD+],[STAFF+],[OWNER+],[MGR],[SRMGR],[JRHELPER],[SRHELPER],[MENTOR],[SENTINEL],[WATCHDOG],[GUARD],[SECURITY],[S-MOD],[S-ADMIN],[SUPERMOD],[SUPER-MOD],[SUPERADMIN],[SUPER-ADMIN],[TRUSTED],[TRUSTEDSTAFF],[TRUSTED-STAFF],[TRUSTEDMOD],[TRUSTED-MOD],[TRUSTEDADMIN],[TRUSTED-ADMIN],[INSPECTOR],[INVESTIGATOR],[ENFORCER],[ANTI-CHEAT],[ANTICHEAT],[AC],[QC],[QUALITY],[QUALITYCONTROL],[QUALITY-CONTROL],[TESTER],[QA],[ARCHITECT],[DESIGNER],[ENGINEER],[LEADDEV],[LEAD-DEV],[CORE],[CORETEAM],[CORE-TEAM],[FOUNDER],[COFOUNDER],[CO-FOUNDER],[DIRECTOR],[HEAD],[HEADDEV],[HEAD-DEV],[HEADADMIN],[HEAD-ADMINISTRATOR],[SYSADMIN],[SYS-ADMIN],[TECH],[TECHADMIN],[TECH-ADMIN],[OPERATOR+],[MODERATOR+],[ADMINISTRATOR+],[STAFFTEAM],[STAFF-TEAM],[STAFFER],[MANAGEMENT],[MGMT],[PROJECTMANAGER],[PROJECT-MANAGER],[PM],[TRIALHELPER],[TRIAL-HELPER],[JRMODERATOR],[SRMODERATOR],[GLOBALMOD],[GLOBAL-MOD],[GLOBALADMIN],[GLOBAL-ADMIN],[NETWORKADMIN],[NETWORK-ADMIN],[NETWORKMOD],[NETWORK-MOD],[PLUS],[HIDDEN],[VANISHED],[GHOST],[COUNCIL],[BOARD],[WARDEN],[CAPTAIN],[DEITY],[GOD],[SAGE],[ELDER],[CONSOLE],[WEB],[ROOT],[SHERIFF],[~],[&],[@],[#],[$],[+],[-],[*]")
+        .defaultValue("[ADMIN],[MOD],[STAFF],[HELPER],[OWNER],[BUILDER],[DEV],[DEVELOPER],[OP],[MANAGER],[HEAD-MOD],[HEAD-ADMIN],[MODERATOR],[ADMINISTRATOR],[SUPPORT],[GAMEMASTER],[GM],[SRADMIN],[OPERATOR],[CO-OWNER],[COOWNER],[SUPERVISOR],[TRIAL],[TRIALMOD],[TRIAL-MOD],[TRIAL-STAFF],[SENIORMOD],[SENIOR-MOD],[SENIORADMIN],[SENIOR-ADMIN],[HEADHELPER],[HEAD-HELPER],[LEAD],[LEADMOD],[LEAD-ADMIN],[LEADSTAFF],[LEAD-STAFF],[FOUNDER],[COFOUNDER],[CO-FOUNDER],[DIRECTOR],[HEADDEV],[HEAD-DEV],[SYSADMIN],[SYS-ADMIN],[TECHADMIN],[STAFFTEAM],[STAFF-TEAM],[STAFFER],[MANAGEMENT],[MGMT],[TRIALHELPER],[TRIAL-HELPER],[JRMODERATOR],[SRMODERATOR],[GLOBALMOD],[GLOBALADMIN],[NETWORKADMIN],[NETWORK-MOD],[ANTICHEAT],[ANTI-CHEAT],[WATCHDOG],[SENTINEL]")
         .build());
 
     private final Setting<Boolean> ignoreSelf = sgGeneral.add(new BoolSetting.Builder()
@@ -98,13 +98,13 @@ public class AntiStaff extends Module {
     private final Setting<Boolean> detectSpectators = sgDetection.add(new BoolSetting.Builder()
         .name("detect-spectators")
         .description("Trigger when any player is in Spectator mode (even if not on watch list).")
-        .defaultValue(true)
+        .defaultValue(false)
         .build());
 
     private final Setting<Boolean> vanishDetection = sgDetection.add(new BoolSetting.Builder()
         .name("vanish-detection")
         .description("Cross-check tab list vs loaded entities to detect vanished players.")
-        .defaultValue(true)
+        .defaultValue(false)
         .build());
 
     private final Setting<Integer> vanishScanInterval = sgDetection.add(new IntSetting.Builder()
@@ -203,7 +203,7 @@ public class AntiStaff extends Module {
     private final Setting<TriggerAction> onDetect = sgActions.add(new EnumSetting.Builder<TriggerAction>()
         .name("on-detect")
         .description("Action to take when a staff/watched player is detected.")
-        .defaultValue(TriggerAction.Leave)
+        .defaultValue(TriggerAction.Notify)
         .build());
 
     private final Setting<Boolean> sendChatBeforeAction = sgActions.add(new BoolSetting.Builder()
@@ -249,6 +249,9 @@ public class AntiStaff extends Module {
     private long lastLeaveMs;
     private final Set<String> tabListNames = new HashSet<>();
 
+    private record PacketPlayerUpdate(UUID uuid, String name, String display, boolean removed) {}
+    private final java.util.Queue<PacketPlayerUpdate> pendingPlayerUpdates = new java.util.concurrent.ConcurrentLinkedQueue<>();
+
     private TriggerAction pendingAction;
     private String pendingTarget;
     private int pendingDelay;
@@ -273,6 +276,7 @@ public class AntiStaff extends Module {
         knownPlayers.clear();
         alertedPlayers.clear();
         tabListNames.clear();
+        pendingPlayerUpdates.clear();
         scanTicker = 0;
         proxTicker = 0;
         vanishTicker = 0;
@@ -294,6 +298,17 @@ public class AntiStaff extends Module {
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null) return;
+
+        PacketPlayerUpdate update;
+        while ((update = pendingPlayerUpdates.poll()) != null) {
+            if (update.removed()) {
+                knownPlayers.remove(update.uuid());
+                continue;
+            }
+            if (knownPlayers.contains(update.uuid())) continue;
+            knownPlayers.add(update.uuid());
+            processPlayerDetected(update.name(), update.display(), update.uuid(), "packet");
+        }
 
         if (pendingAction != null) {
             if (pendingDelay > 0) { pendingDelay--; return; }
@@ -329,18 +344,16 @@ public class AntiStaff extends Module {
             for (ClientboundPlayerInfoUpdatePacket.Entry entry : packet.entries()) {
                 UUID uuid = entry.profileId();
                 if (uuid == null) continue;
-                if (knownPlayers.contains(uuid)) continue;
-                knownPlayers.add(uuid);
 
                 GameProfile profile = entry.profile();
                 String name = profile != null ? profile.name() : "";
                 String display = entry.displayName() != null ? entry.displayName().getString() : name;
-                processPlayerDetected(name, display, uuid, "packet");
+                pendingPlayerUpdates.add(new PacketPlayerUpdate(uuid, name, display, false));
             }
         }
         if (notifyOnLeave.get() && event.packet instanceof net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket packet) {
             for (UUID uuid : packet.profileIds()) {
-                knownPlayers.remove(uuid);
+                pendingPlayerUpdates.add(new PacketPlayerUpdate(uuid, "", "", true));
             }
         }
     }
@@ -351,20 +364,20 @@ public class AntiStaff extends Module {
         String msg = stripFormatting(event.getMessage().getString());
         if (msg.isBlank()) return;
 
-        for (String kw : split(chatJoinKeywords.get())) {
-            if (containsIC(msg, kw)) {
-                String name = extractNameBefore(msg, kw);
-                if (name != null) processChatDetection(name, "chat-join");
-                return;
-            }
-        }
-
         for (String kw : split(chatLeaveKeywords.get())) {
             if (containsIC(msg, kw)) {
                 String name = extractNameBefore(msg, kw);
                 if (name != null && notifyOnLeave.get() && isMatchName(name)) {
                     emitAlert("§a[AntiStaff] §7" + name + " left.", name, false);
                 }
+                return;
+            }
+        }
+
+        for (String kw : split(chatJoinKeywords.get())) {
+            if (containsIC(msg, kw)) {
+                String name = extractNameBefore(msg, kw);
+                if (name != null) processChatDetection(name, "chat-join");
                 return;
             }
         }
@@ -539,7 +552,13 @@ public class AntiStaff extends Module {
         switch (action) {
             case Nothing, Notify -> {}
             case Leave -> forceLeave("Detected: " + (target != null ? target : "unknown"));
-            case SendChat -> {}
+            case SendChat -> {
+                String msg = chatMessage.get();
+                if (msg != null && !msg.isBlank()) {
+                    if (msg.startsWith("/")) mc.player.connection.sendCommand(msg.substring(1));
+                    else mc.player.connection.sendChat(msg);
+                }
+            }
             case DisableModules -> toggleModules(modulesToDisable.get(), false);
             case EnableModules -> toggleModules(modulesToEnable.get(), true);
             case LeaveAndDisable -> {

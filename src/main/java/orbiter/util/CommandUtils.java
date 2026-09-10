@@ -1,17 +1,10 @@
 package orbiter.util;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 import java.util.Locale;
 
 public final class CommandUtils {
-    private static volatile String[] entityIdsCache;
-
     private CommandUtils() {
     }
 
@@ -80,60 +73,5 @@ public final class CommandUtils {
         }
 
         return sb.toString();
-    }
-
-    public static String stripLegacyFormatting(String value) {
-        if (value == null || value.isEmpty()) return "";
-
-        StringBuilder sb = new StringBuilder(value.length());
-        boolean skipNext = false;
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-
-            if (skipNext) {
-                skipNext = false;
-                continue;
-            }
-
-            if (c == '\u00A7' || c == '&') {
-                skipNext = true;
-                continue;
-            }
-
-            if (c >= 0x20 && c != 0x7F) sb.append(c);
-        }
-
-        return sb.toString();
-    }
-
-    public static String normalizeEntityId(String value) {
-        return normalizeEntityId(value, "minecraft:pig");
-    }
-
-    public static String normalizeEntityId(String value, String fallback) {
-        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
-        if (normalized.isEmpty()) normalized = fallback;
-        if (!normalized.contains(":")) normalized = "minecraft:" + normalized;
-        return normalized;
-    }
-
-    public static String[] entityIds() {
-        String[] cached = entityIdsCache;
-        if (cached != null) return cached.clone();
-
-        if (BuiltInRegistries.ENTITY_TYPE == null) return new String[0];
-
-        synchronized (CommandUtils.class) {
-            cached = entityIdsCache;
-            if (cached != null) return cached.clone();
-
-            List<String> ids = new ArrayList<>();
-            for (Identifier id : BuiltInRegistries.ENTITY_TYPE.keySet()) ids.add(id.toString());
-            ids.sort(Comparator.naturalOrder());
-
-            String[] result = ids.toArray(String[]::new);
-            entityIdsCache = result;
-            return result.clone();
-        }
     }
 }

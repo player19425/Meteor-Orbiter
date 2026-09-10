@@ -1,12 +1,10 @@
 package orbiter.commands;
 
-import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import net.minecraft.client.multiplayer.ClientSuggestionProvider;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.EnchantmentMenu;
 import net.minecraft.world.item.ItemStack;
 import orbiter.modules.misc.EnchCracker;
@@ -18,7 +16,7 @@ public class EnchCrackCommand extends Command {
 
     protected EnchCrackCommand(String name) {
         super(name,
-                "Full-auto enchantment farmer. Usage: ." + name + " get <enchant> [level] [item], stop, hand, clear");
+                "Cracks the enchanting seed and predicts every table row. Usage: ." + name + " [status|reset|fullscan|target <name>]");
         cmdName = name;
     }
 
@@ -43,113 +41,61 @@ public class EnchCrackCommand extends Command {
                 return SINGLE_SUCCESS;
             }
 
-            info("Seed " + menu.getEnchantmentSeed() + " | lapis: " + menu.getGoldCount());
-            EnchCracker.Offer[] offers = module.offersFor(menu, item);
-            if (offers == null) {
-                error("Seed not cracked yet. Keep the item in the table a few seconds until the crack locks, then run this again.");
-                return SINGLE_SUCCESS;
+            info("Synced seed " + menu.getEnchantmentSeed() + " | lapis: " + menu.getGoldCount());
+            if (!module.reportOffers(item)) {
+                info("Not cracked yet. 1) Right-click the table once. 2) Put the item in and keep it still for ~1 second. 3) Check .encc status.");
             }
-            for (EnchCracker.Offer offer : offers) info(EnchCracker.describe(offer));
             return SINGLE_SUCCESS;
         });
 
-        builder.then(literal("get")
-                .executes(context -> {
-                    error("Usage: ." + cmdName + " get <enchant> [level] [item]");
-                    return SINGLE_SUCCESS;
-                })
-                .then(argument("enchantment", StringArgumentType.word())
-                        .executes(context -> startGet(StringArgumentType.getString(context, "enchantment"), -1, null))
-                        .then(argument("level", IntegerArgumentType.integer(1))
-                                .executes(context -> startGet(
-                                        StringArgumentType.getString(context, "enchantment"),
-                                        IntegerArgumentType.getInteger(context, "level"),
-                                        null))
-                                .then(argument("item", StringArgumentType.word())
-                                        .executes(context -> startGet(
-                                                StringArgumentType.getString(context, "enchantment"),
-                                                IntegerArgumentType.getInteger(context, "level"),
-                                                StringArgumentType.getString(context, "item")))))));
+        builder.then(literal("status").executes(context -> {
+            EnchCracker module = module();
+            if (module != null) info("Cracker state: " + module.getInfoString());
+            return SINGLE_SUCCESS;
+        }));
 
-        builder.then(literal("stop").executes(context -> {
+        builder.then(literal("reset").executes(context -> {
             EnchCracker module = module();
             if (module != null) {
-                module.stopFarm(null);
-                info("Farming stopped.");
+                module.forceReset();
+                info("Cracker state cleared. It will re-crack on the next stable table reading.");
             }
             return SINGLE_SUCCESS;
         }));
 
-        builder.then(literal("hand").executes(context -> {
+        builder.then(literal("fullscan").executes(context -> {
             EnchCracker module = module();
             if (module == null) return SINGLE_SUCCESS;
-
-            if (!(mc.player.containerMenu instanceof EnchantmentMenu menu)) {
-                error("Stand at an enchanting table so I can read the seed.");
-                return SINGLE_SUCCESS;
-            }
-
-            ItemStack held = mc.player.getMainHandItem();
-            if (held.isEmpty()) {
-                error("Hold the item you want to simulate.");
-                return SINGLE_SUCCESS;
-            }
-
-            info("Simulated offers for " + BuiltInRegistries.ITEM.getKey(held.getItem()).toString().replace("minecraft:", "") + ":");
-            EnchCracker.Offer[] handOffers = module.offersFor(menu, held);
-            if (handOffers == null) {
-                error("Seed not cracked yet. Open the table and let the crack finish, then try again.");
-                return SINGLE_SUCCESS;
-            }
-            for (EnchCracker.Offer offer : handOffers) info(EnchCracker.describe(offer));
-            return SINGLE_SUCCESS;
-        }));
-
-        builder.then(literal("clear").executes(context -> {
-            EnchCracker module = module();
-            if (module != null) {
-                module.stopFarm(null);
-                module.targetEnchantment.set("");
-                module.targetItem.set("");
-                info("Target cleared.");
+            if (module.requestFullScan()) {
+                info("Full 2^32 scan started. Expect several minutes of CPU use; .encc reset or toggling the module cancels it.");
             }
             return SINGLE_SUCCESS;
         }));
+
+        builder.then(literal("target")
+                .executes(context -> {
+                    EnchCracker module = module();
+                    if (module != null) {
+                        module.setTarget("");
+                        info("Target enchantment cleared.");
+                    }
+                    return SINGLE_SUCCESS;
+                })
+                .then(argument("name", StringArgumentType.greedyString()).executes(context -> {
+                    EnchCracker module = module();
+                    if (module == null) return SINGLE_SUCCESS;
+                    String name = StringArgumentType.getString(context, "name");
+                    module.setTarget(name);
+                    info("Target enchantment set to " + name.trim() + ".");
+                    if (mc.player != null && mc.player.containerMenu instanceof EnchantmentMenu menu) {
+                        ItemStack item = menu.getSlot(0).getItem();
+                        if (!item.isEmpty()) module.reportOffers(item);
+                    }
+                    return SINGLE_SUCCESS;
+                })));
     }
 
     private final String cmdName;
-
-    private int startGet(String enchantment, int level, String item) {
-        EnchCracker module = module();
-        if (module == null) return SINGLE_SUCCESS;
-
-        String spec = item;
-        if (spec == null && !mc.player.getMainHandItem().isEmpty()) {
-            ItemStack held = mc.player.getMainHandItem();
-            if (!held.isEnchantable()) {
-                error("you are holding " + pathOf(held) + " and that cant be enchanted. hold the target or type its name");
-                return SINGLE_SUCCESS;
-            }
-            spec = pathOf(held);
-        }
-        if (spec == null || spec.isEmpty()) spec = module.targetItem.get();
-        if (spec == null || spec.isEmpty()) {
-            error("No target item. Hold your item once while running this, or add an item argument: ."
-                    + cmdName + " get " + enchantment + " " + (level > 0 ? level : 3) + " diamond_sword");
-            return SINGLE_SUCCESS;
-        }
-
-        module.targetEnchantment.set(enchantment.toLowerCase());
-        module.targetLevel.set(Math.max(0, level));
-        module.targetItem.set(spec.toLowerCase());
-        module.startFarm(enchantment.toLowerCase(), level, spec.toLowerCase());
-        return SINGLE_SUCCESS;
-    }
-
-    private static String pathOf(ItemStack stack) {
-        var id = BuiltInRegistries.ITEM.getKey(stack.getItem());
-        return id == null ? "" : id.getPath();
-    }
 
     private EnchCracker module() {
         EnchCracker module = Modules.get().get(EnchCracker.class);
@@ -157,7 +103,10 @@ public class EnchCrackCommand extends Command {
             error("Enchantment Cracker module missing.");
             return null;
         }
-        if (!module.isActive()) module.toggle();
+        if (!module.isActive()) {
+            error("Enable the Enchantment Cracker module first.");
+            return null;
+        }
         return module;
     }
 }

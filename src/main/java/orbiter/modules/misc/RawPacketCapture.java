@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -25,41 +26,41 @@ public class RawPacketCapture {
 
     private static final AtomicInteger pendingByteCount = new AtomicInteger();
 
-    private static int totalBytesQueued;
-    private static int totalChannelsFound;
-    private static int totalRegistrationChannels;
-    private static int totalEmbeddedChannels;
+    private static final AtomicLong totalBytesQueued = new AtomicLong();
+    private static final AtomicLong totalChannelsFound = new AtomicLong();
+    private static final AtomicLong totalRegistrationChannels = new AtomicLong();
+    private static final AtomicLong totalEmbeddedChannels = new AtomicLong();
+
+    private static volatile boolean captureDisabled;
 
     private static boolean shouldCapture() {
-        try {
-            PeakPluginScanner scanner = Modules.get() == null ? null : Modules.get().get(PeakPluginScanner.class);
-            return scanner != null && scanner.isActive() && scanner.shouldCaptureChannels();
-        } catch (Throwable ignored) {
-
-            return false;
-        }
+        PeakPluginScanner scanner = Modules.get() == null ? null : Modules.get().get(PeakPluginScanner.class);
+        return scanner != null && scanner.isActive() && scanner.shouldCaptureChannels();
     }
 
     public static void enqueue(byte[] raw) {
-        if (raw == null || raw.length == 0) return;
+        if (raw == null || raw.length == 0 || captureDisabled) return;
 
         if (!shouldCapture()) return;
 
         int incoming = raw.length;
+        pendingByteCount.addAndGet(incoming);
 
-        if (pendingByteCount.get() + incoming > MAX_PENDING_BYTES) {
+        if (pendingByteCount.get() > MAX_PENDING_BYTES && incoming < MAX_PENDING_BYTES) {
             byte[] eldest;
-            while (pendingByteCount.get() + incoming > MAX_PENDING_BYTES
+            while (pendingByteCount.get() > MAX_PENDING_BYTES
                    && (eldest = PENDING_BYTES.poll()) != null) {
                 pendingByteCount.addAndGet(-eldest.length);
             }
+        }
 
-            if (incoming > MAX_PENDING_BYTES) return;
+        if (pendingByteCount.get() > MAX_PENDING_BYTES) {
+            pendingByteCount.addAndGet(-incoming);
+            return;
         }
 
         PENDING_BYTES.offer(raw);
-        pendingByteCount.addAndGet(incoming);
-        totalBytesQueued += incoming;
+        totalBytesQueued.addAndGet(incoming);
     }
 
     public static List<String> processPending() {
@@ -73,22 +74,22 @@ public class RawPacketCapture {
 
             List<String> registered = extractRegisteredChannels(raw);
             if (!registered.isEmpty()) {
-                totalRegistrationChannels += registered.size();
+                totalRegistrationChannels.addAndGet(registered.size());
                 for (String ch : registered) {
                     if (!isFilteredChannel(ch)) allDetected.add(ch);
                 }
-            }
-
-            List<String> embedded = extractChannelTokens(raw);
-            if (!embedded.isEmpty()) {
-                totalEmbeddedChannels += embedded.size();
-                for (String ch : embedded) {
-                    if (!isFilteredChannel(ch)) allDetected.add(ch);
+            } else {
+                List<String> embedded = extractChannelTokens(raw);
+                if (!embedded.isEmpty()) {
+                    totalEmbeddedChannels.addAndGet(embedded.size());
+                    for (String ch : embedded) {
+                        if (!isFilteredChannel(ch)) allDetected.add(ch);
+                    }
                 }
             }
         }
 
-        totalChannelsFound += allDetected.size();
+        totalChannelsFound.addAndGet(allDetected.size());
         return allDetected;
     }
 
@@ -121,7 +122,8 @@ public class RawPacketCapture {
                     channels.add(normalized);
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         return channels;
     }
@@ -142,7 +144,8 @@ public class RawPacketCapture {
 
                 if (tokens.size() >= 512) break;
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
 
         return tokens;
     }
@@ -159,32 +162,24 @@ public class RawPacketCapture {
             || channel.equals("velocity") || channel.equals("velocity:main");
     }
 
-    public static boolean isRegisterableChannel(String channel) {
-        String normalized = normalizeChannel(channel);
-        if (normalized.isEmpty() || normalized.contains("*")) return false;
-        if (!normalized.contains(":")) return false;
-
-        if (normalized.equals("minecraft:register") || normalized.equals("minecraft:unregister")
-            || normalized.equals("minecraft:brand")) return false;
-
-        int colon = normalized.indexOf(':');
-        if (colon > 0) {
-            String ns = normalized.substring(0, colon);
-            if (PluginDatabase.isNonPluginNamespace(ns)) return false;
-        }
-        return true;
+    public static void setCaptureDisabled(boolean disabled) {
+        captureDisabled = disabled;
     }
 
-    public static int getTotalBytesQueued() { return totalBytesQueued; }
-    public static int getTotalChannelsFound() { return totalChannelsFound; }
-    public static int getTotalRegistrationChannels() { return totalRegistrationChannels; }
-    public static int getTotalEmbeddedChannels() { return totalEmbeddedChannels; }
+    public static boolean isCaptureDisabled() {
+        return captureDisabled;
+    }
+
+    public static long getTotalBytesQueued() { return totalBytesQueued.get(); }
+    public static long getTotalChannelsFound() { return totalChannelsFound.get(); }
+    public static long getTotalRegistrationChannels() { return totalRegistrationChannels.get(); }
+    public static long getTotalEmbeddedChannels() { return totalEmbeddedChannels.get(); }
 
     public static void resetStats() {
-        totalBytesQueued = 0;
-        totalChannelsFound = 0;
-        totalRegistrationChannels = 0;
-        totalEmbeddedChannels = 0;
+        totalBytesQueued.set(0);
+        totalChannelsFound.set(0);
+        totalRegistrationChannels.set(0);
+        totalEmbeddedChannels.set(0);
         PENDING_BYTES.clear();
         pendingByteCount.set(0);
     }

@@ -3,7 +3,6 @@ package orbiter.mixin;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
@@ -73,8 +72,6 @@ public abstract class Camera360Mixin {
             setYRot(getYRot() + g);
             yRotO += g;
         }
-
-
     }
 
     @WrapOperation(
@@ -92,64 +89,28 @@ public abstract class Camera360Mixin {
 @Mixin(LivingEntity.class)
 abstract class Camera360JumpMixin {
 
-    private boolean orbiter$is360Active() {
-        Camera360 mod = (Camera360) Modules.get().get("360-camera");
-        return mod != null && mod.isActive();
-    }
-
-    private float orbiter$normalizedPitch() {
-        return ((((Entity)(Object)this).getXRot() + 180) % 360 + 360) % 360 - 180;
-    }
-
-    private boolean orbiter$shouldInvertMovement() {
-        Camera360 mod = (Camera360) Modules.get().get("360-camera");
-        return mod != null && mod.isActive();
-    }
-
     @Redirect(method = "jumpFromGround", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Mth;sin(D)F"))
     private float orbiter$invertJumpSin(double value) {
         float result = Mth.sin(value);
-        if (orbiter$is360Active() && orbiter$shouldInvertMovement()) {
-            float np = orbiter$normalizedPitch();
-            if (np < -90 || np > 90) return -result;
-        }
+        if (Camera360.isLocalPlayerUpsideDown((Entity)(Object)this)) return -result;
         return result;
     }
 
     @Redirect(method = "jumpFromGround", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Mth;cos(D)F"))
     private float orbiter$invertJumpCos(double value) {
         float result = Mth.cos(value);
-        if (orbiter$is360Active() && orbiter$shouldInvertMovement()) {
-            float np = orbiter$normalizedPitch();
-            if (np < -90 || np > 90) return -result;
-        }
+        if (Camera360.isLocalPlayerUpsideDown((Entity)(Object)this)) return -result;
         return result;
     }
 }
 
-@Mixin(Player.class)
+@Mixin(LivingEntity.class)
 abstract class Camera360TravelMixin {
-
-    private boolean orbiter$is360Active() {
-        Camera360 mod = (Camera360) Modules.get().get("360-camera");
-        return mod != null && mod.isActive();
-    }
-
-    private float orbiter$normalizedPitch() {
-        return ((getXRot() + 180) % 360 + 360) % 360 - 180;
-    }
-
-    private float getXRot() {
-        return ((Entity)(Object)this).getXRot();
-    }
 
     @ModifyVariable(method = "travel", at = @At("HEAD"), argsOnly = true)
     private Vec3 orbiter$invertMovement(Vec3 movementInput) {
-        if (!orbiter$is360Active()) return movementInput;
-        float np = orbiter$normalizedPitch();
-        if (np > 90 || np < -90) {
-            return movementInput.multiply(-1, 1, -1);
-        }
-        return movementInput;
+        if (movementInput == null) return movementInput;
+        if (!Camera360.isLocalPlayerUpsideDown((Entity)(Object)this)) return movementInput;
+        return movementInput.multiply(-1, 1, -1);
     }
 }

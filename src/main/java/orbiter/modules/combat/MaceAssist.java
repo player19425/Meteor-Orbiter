@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.combat;
 
 import orbiter.Orbiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -8,7 +8,6 @@ import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.systems.modules.movement.NoFall;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
-import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -20,6 +19,8 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
+import orbiter.systems.combat.CombatEngine;
+import orbiter.systems.combat.CombatRequest;
 
 import java.util.Set;
 
@@ -29,9 +30,87 @@ public class MaceAssist extends Module {
         Crosshair
     }
 
+    public enum AimMode {
+        Visible,
+        Silent
+    }
+
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgTargeting = settings.createGroup("Targeting");
     private final SettingGroup sgElytra = settings.createGroup("Elytra Swap");
+    private final SettingGroup sgAim = settings.createGroup("Aiming");
+    private final SettingGroup sgHumanize = settings.createGroup("Humanization");
+
+    private final Setting<AimMode> aimMode = sgAim.add(new EnumSetting.Builder<AimMode>()
+        .name("aim-mode")
+        .description("Visible = rotate client view. Silent = server-side only (anticheat risk).")
+        .defaultValue(AimMode.Silent)
+        .build()
+    );
+
+    private final Setting<Integer> priority = sgAim.add(new IntSetting.Builder()
+        .name("priority")
+        .description("Who wins when several combat modules want to aim at once.")
+        .defaultValue(65)
+        .min(0)
+        .max(100)
+        .sliderRange(0, 100)
+        .build()
+    );
+
+    private final Setting<Double> aimSpeed = sgHumanize.add(new DoubleSetting.Builder()
+        .name("aim-speed")
+        .description("Aim responsiveness toward the target.")
+        .defaultValue(0.35)
+        .min(0.05)
+        .sliderRange(0.05, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> aimDamping = sgHumanize.add(new DoubleSetting.Builder()
+        .name("aim-damping")
+        .description("Velocity damping applied to aim movement.")
+        .defaultValue(0.75)
+        .min(0.3)
+        .sliderRange(0.3, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> jitterYaw = sgHumanize.add(new DoubleSetting.Builder()
+        .name("jitter-yaw")
+        .description("Maximum horizontal jitter in degrees.")
+        .defaultValue(0.0)
+        .min(0.0)
+        .sliderRange(0.0, 3.0)
+        .build()
+    );
+
+    private final Setting<Double> jitterPitch = sgHumanize.add(new DoubleSetting.Builder()
+        .name("jitter-pitch")
+        .description("Maximum vertical jitter in degrees.")
+        .defaultValue(0.0)
+        .min(0.0)
+        .sliderRange(0.0, 3.0)
+        .build()
+    );
+
+    private final Setting<Double> overshoot = sgHumanize.add(new DoubleSetting.Builder()
+        .name("overshoot")
+        .description("Overshoot factor applied near the target angle.")
+        .defaultValue(0.1)
+        .min(0.0)
+        .sliderRange(0.0, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> maxDegrees = sgHumanize.add(new DoubleSetting.Builder()
+        .name("max-degrees-per-tick")
+        .description("Maximum degrees the aim can rotate per tick.")
+        .defaultValue(40.0)
+        .min(5.0)
+        .sliderRange(5.0, 90.0)
+        .build()
+    );
 
     private final Setting<Double> range = sgGeneral.add(new DoubleSetting.Builder()
         .name("range")
@@ -150,7 +229,6 @@ public class MaceAssist extends Module {
 
     private LivingEntity target;
     private boolean wasAutoSwapped = false;
-    private int elytraSlot = -1;
     private int chestplateSlot = -1;
     private boolean weToggledNoFall = false;
 
@@ -162,7 +240,6 @@ public class MaceAssist extends Module {
     public void onActivate() {
         target = null;
         wasAutoSwapped = false;
-        elytraSlot = -1;
         chestplateSlot = -1;
         weToggledNoFall = false;
         if (enableNoFall.get()) toggleNoFall(true);
@@ -192,6 +269,7 @@ public class MaceAssist extends Module {
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null) return;
+        if (CombatEngine.get().isFrozen()) return;
 
         if (!isHoldingMace()) {
             if (autoEquip.get()) {
@@ -215,23 +293,33 @@ public class MaceAssist extends Module {
             return;
         }
 
-        double yaw = Rotations.getYaw(target);
-        double pitch = Rotations.getPitch(target);
-        Rotations.rotate(yaw, pitch, 50, false, () -> {});
-
         boolean canCrit = canCriticalHit(target);
 
         handleElytraSwap(target, canCrit);
 
-        boolean canSmash = canSmashAttack();
-        if (smashOnly.get() && !canSmash) return;
+        LivingEntity attackTarget = target;
+        Vec3 aimPoint = attackTarget.getBoundingBox().getCenter();
+        CombatRequest.Mode mode = aimMode.get() == AimMode.Silent ? CombatRequest.Mode.Silent : CombatRequest.Mode.Visible;
+        CombatEngine.get().submit(CombatRequest.rotation(this, priority.get(), aimPoint, mode, buildProfile(), () -> strike(attackTarget)));
+    }
 
-        if (onlyCrits.get() && !canCrit) return;
+    private void strike(LivingEntity attackTarget) {
+        if (!isActive() || CombatEngine.get().isFrozen()) return;
+        if (attackTarget == null || !attackTarget.isAlive() || mc.player == null || mc.gameMode == null) return;
+        if (!isHoldingMace()) return;
+
+        if (smashOnly.get() && !canSmashAttack()) return;
+
+        if (onlyCrits.get() && !canCriticalHit(attackTarget)) return;
         if (!ignoreCooldown.get() && mc.player.getAttackStrengthScale(0.5f) < 1) return;
-        if (mc.player.getEyePosition().distanceToSqr(target.getX(), target.getY(), target.getZ()) > range.get() * range.get()) return;
+        if (mc.player.getEyePosition().distanceToSqr(attackTarget.getBoundingBox().getCenter()) > range.get() * range.get()) return;
 
-        mc.gameMode.attack(mc.player, target);
+        mc.gameMode.attack(mc.player, attackTarget);
         mc.player.swing(InteractionHand.MAIN_HAND);
+    }
+
+    private CombatRequest.Profile buildProfile() {
+        return new CombatRequest.Profile(aimSpeed.get(), aimDamping.get(), jitterYaw.get(), jitterPitch.get(), overshoot.get(), maxDegrees.get());
     }
 
     private boolean isHoldingMace() {

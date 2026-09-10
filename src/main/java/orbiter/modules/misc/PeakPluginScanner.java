@@ -537,6 +537,8 @@ public class PeakPluginScanner extends Module {
 
     private final Queue<Object> pendingPackets = new ConcurrentLinkedQueue<>();
 
+    private final Queue<String> pendingObservedCommands = new ConcurrentLinkedQueue<>();
+
     private boolean scanScheduled;
     private int scanTickCounter;
     private boolean scanned;
@@ -572,6 +574,7 @@ public class PeakPluginScanner extends Module {
     @Override
     public void onActivate() {
         reset();
+        RawPacketCapture.setCaptureDisabled(false);
         if (scanOnJoin.get()) {
             scanScheduled = true;
             scanTickCounter = 0;
@@ -580,6 +583,7 @@ public class PeakPluginScanner extends Module {
 
     @Override
     public void onDeactivate() {
+        RawPacketCapture.setCaptureDisabled(true);
         probing = false;
         waitingForPluginList = false;
         saveCache();
@@ -599,6 +603,7 @@ public class PeakPluginScanner extends Module {
     private void reset() {
         detectedPlugins.clear();
         observedPluginCommands.clear();
+        pendingObservedCommands.clear();
         probeMap.clear();
         probeQueue.clear();
         pendingPackets.clear();
@@ -649,8 +654,7 @@ public class PeakPluginScanner extends Module {
         }
         if (command == null || command.isBlank()) return;
 
-        String token = addObservedPluginCommand(command);
-        if (!token.isEmpty()) inferPluginsFromObservedCommands();
+        pendingObservedCommands.add(command);
     }
 
     @EventHandler
@@ -659,6 +663,12 @@ public class PeakPluginScanner extends Module {
 
         drainPendingPackets();
 
+        boolean addedObserved = false;
+        String queuedCommand;
+        while ((queuedCommand = pendingObservedCommands.poll()) != null) {
+            if (!addObservedPluginCommand(queuedCommand).isEmpty()) addedObserved = true;
+        }
+        if (addedObserved) inferPluginsFromObservedCommands();
         if (scanScheduled) {
             scanTickCounter++;
             if (scanTickCounter >= scanDelay.get()) {
@@ -783,9 +793,11 @@ public class PeakPluginScanner extends Module {
 
     private void inferPluginsFromObservedCommands() {
         for (String command : observedPluginCommands) {
-            String plugin = null;
             String clean = command.toLowerCase(Locale.ROOT);
+            String root = clean.contains(" ") ? clean.substring(0, clean.indexOf(' ')) : clean;
+            if (VANILLA_COMMAND_ROOTS.contains(root)) continue;
 
+            String plugin = null;
             if (isKnownPluginNamespace(clean)) {
                 plugin = clean;
             } else if (ROOT_COMMAND_PLUGIN_ALIASES.containsKey(clean)) {
@@ -1452,18 +1464,6 @@ public class PeakPluginScanner extends Module {
     public int getProtocolVersion() { return protocolVersion; }
     public int getDetectedCount() { return detectedPlugins.size(); }
     public int getTotalProbesSent() { return totalProbesSent; }
-    public int getTotalCommandsScanned() { return totalCommandsScanned; }
-
-    public Collection<DetectedPlugin> getDetectedPlugins() {
-        return Collections.unmodifiableCollection(new ArrayList<>(detectedPlugins.values()));
-    }
-
-    public List<String> getPluginNames() {
-        List<String> names = new ArrayList<>();
-        for (DetectedPlugin dp : new ArrayList<>(detectedPlugins.values())) names.add(dp.name);
-        names.sort(String.CASE_INSENSITIVE_ORDER);
-        return names;
-    }
 
     private List<String> detectAnticheats() {
         List<String> found = new ArrayList<>();
@@ -1475,9 +1475,10 @@ public class PeakPluginScanner extends Module {
         return found;
     }
 
-    public List<String> getDetectedAnticheats() {
-        return detectAnticheats();
+    public Collection<DetectedPlugin> getDetectedPlugins() {
+        return Collections.unmodifiableCollection(new ArrayList<>(detectedPlugins.values()));
     }
+
 
     public void forceScan() {
         reset();

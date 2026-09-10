@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.combat;
 
 import orbiter.Orbiter;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
@@ -9,6 +9,7 @@ import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
+import orbiter.systems.combat.CombatEngine;
 
 public class AntiKnockback extends Module {
     public enum Mode {
@@ -48,13 +49,13 @@ public class AntiKnockback extends Module {
 
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (!isActive() || mc.player == null) return;
+        if (mc.player == null) return;
         var player = mc.player;
 
         if (event.packet instanceof net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket packet) {
             if (packet.id() != player.getId()) return;
             event.cancel();
-
+            if (CombatEngine.get().isFrozen()) return;
             if (mode.get() == Mode.Cancel) {
                 mc.execute(() -> {
                     if (mc.player != player) return;

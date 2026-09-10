@@ -1,6 +1,6 @@
 package orbiter.commands;
 
-import orbiter.modules.WorldEditModule;
+import orbiter.modules.world.WorldEditModule;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;

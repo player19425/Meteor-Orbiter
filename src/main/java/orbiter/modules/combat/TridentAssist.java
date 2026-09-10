@@ -5,7 +5,6 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
 import net.minecraft.core.BlockPos;
@@ -24,6 +23,8 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.ClipContext;
 import orbiter.Orbiter;
+import orbiter.systems.combat.CombatEngine;
+import orbiter.systems.combat.CombatRequest;
 import orbiter.util.ConfigModifier;
 import orbiter.util.ComboTracker;
 
@@ -47,6 +48,7 @@ public class TridentAssist extends Module {
     private final SettingGroup sgEnchant = settings.createGroup("Enchantments");
     private final SettingGroup sgRender = settings.createGroup("Rendering");
     private final SettingGroup sgMelee = settings.createGroup("Melee Mode");
+    private final SettingGroup sgHumanize = settings.createGroup("Humanization");
 
     private final Setting<ThrowMode> throwMode = sgGeneral.add(new EnumSetting.Builder<ThrowMode>()
         .name("throw-mode")
@@ -139,15 +141,71 @@ public class TridentAssist extends Module {
 
     private final Setting<AimMode> aimMode = sgAim.add(new EnumSetting.Builder<AimMode>()
         .name("aim-mode")
-        .defaultValue(AimMode.Visible)
+        .defaultValue(AimMode.Silent)
         .build()
     );
 
-    private final Setting<Double> aimSpeed = sgAim.add(new DoubleSetting.Builder()
+    private final Setting<Integer> priority = sgAim.add(new IntSetting.Builder()
+        .name("priority")
+        .description("Who wins when several combat modules want to aim at once.")
+        .defaultValue(60)
+        .min(0)
+        .max(100)
+        .sliderRange(0, 100)
+        .build()
+    );
+
+    private final Setting<Double> aimSpeed = sgHumanize.add(new DoubleSetting.Builder()
         .name("aim-speed")
-        .defaultValue(0.5)
+        .description("Engine rotation stiffness.")
+        .defaultValue(0.35)
         .min(0.05)
         .sliderRange(0.05, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> aimDamping = sgHumanize.add(new DoubleSetting.Builder()
+        .name("aim-damping")
+        .description("Engine rotation damping.")
+        .defaultValue(0.75)
+        .min(0.3)
+        .sliderRange(0.3, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> jitterYaw = sgHumanize.add(new DoubleSetting.Builder()
+        .name("jitter-yaw")
+        .description("Random horizontal jitter in degrees.")
+        .defaultValue(0.0)
+        .min(0.0)
+        .sliderRange(0.0, 3.0)
+        .build()
+    );
+
+    private final Setting<Double> jitterPitch = sgHumanize.add(new DoubleSetting.Builder()
+        .name("jitter-pitch")
+        .description("Random vertical jitter in degrees.")
+        .defaultValue(0.0)
+        .min(0.0)
+        .sliderRange(0.0, 3.0)
+        .build()
+    );
+
+    private final Setting<Double> overshoot = sgHumanize.add(new DoubleSetting.Builder()
+        .name("overshoot")
+        .description("How much the aim overshoots the target before settling.")
+        .defaultValue(0.1)
+        .min(0.0)
+        .sliderRange(0.0, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> maxDegrees = sgHumanize.add(new DoubleSetting.Builder()
+        .name("max-degrees-per-tick")
+        .description("Maximum degrees the aim can rotate per tick.")
+        .defaultValue(40.0)
+        .min(5.0)
+        .sliderRange(5.0, 90.0)
         .build()
     );
 
@@ -273,7 +331,6 @@ public class TridentAssist extends Module {
     private int attackCooldown = 0;
     private float currentCharge;
     private float lastCalculatedYaw;
-    private float lastCalculatedPitch;
 
     private boolean hasRiptide = false;
     private boolean hasLoyalty = false;
@@ -360,10 +417,6 @@ public class TridentAssist extends Module {
         }
 
         if (!canThrow) {
-
-            if (meleeWhenClose.get() && distToTarget <= meleeRange.get()) {
-                handleMeleeAttack(currentTarget);
-            }
             return;
         }
 
@@ -386,36 +439,20 @@ public class TridentAssist extends Module {
 
         AimSolution solution = solveAim(origin, targetPos);
         lastCalculatedYaw = solution.yaw;
-        lastCalculatedPitch = solution.pitch;
 
-        applyAim(solution.yaw, solution.pitch);
+        Vec3 aimPoint = origin.add(Vec3.directionFromRotation(solution.pitch, solution.yaw).scale(origin.distanceTo(targetPos)));
+
+        submitAim(aimPoint);
 
         if (renderMode.get() != RenderMode.Off) {
             simulateTrajectory(origin, solution.yaw, solution.pitch, trajectoryPoints);
         } else {
             trajectoryPoints.clear();
         }
-
-        if (isDrawing && currentCharge >= minChargePercent.get().floatValue()) {
-            switch (throwMode.get()) {
-                case Auto, AutoMelee -> {
-                    if (currentCharge >= 0.95f) {
-                        float yawDiff = Math.abs(Mth.wrapDegrees(solution.yaw - mc.player.getYRot()));
-                        float pitchDiff = Math.abs(solution.pitch - mc.player.getXRot());
-                        if (yawDiff < 8.0f && pitchDiff < 8.0f) {
-                            mc.player.stopUsingItem();
-                            ComboTracker.registerHit(currentTarget.getUUID());
-                        }
-                    }
-                }
-                case Manual -> {
-
-                }
-            }
-        }
     }
 
     private void handleMeleeAttack(LivingEntity target) {
+        if (CombatEngine.get().isFrozen()) return;
         if (attackCooldown > 0) return;
         if (!ignoreCooldown.get() && mc.player.getAttackStrengthScale(0.5f) < 1.0f) return;
 
@@ -657,20 +694,37 @@ public class TridentAssist extends Module {
         return tridentDrag.get();
     }
 
-    private void applyAim(float targetYaw, float targetPitch) {
-        double speed = aimSpeed.get();
-        if (aimMode.get() == AimMode.Visible) {
-            float currentYaw = mc.player.getYRot();
-            float currentPitch = mc.player.getXRot();
-            float yawDelta = Mth.wrapDegrees(targetYaw - currentYaw);
-            float pitchDelta = targetPitch - currentPitch;
-            float newYaw = currentYaw + (float) (yawDelta * speed);
-            float newPitch = currentPitch + (float) (pitchDelta * speed);
-            mc.player.setYRot(newYaw);
-            mc.player.setXRot(newPitch);
-        } else {
-            Rotations.rotate(targetYaw, targetPitch, (int) (20 / speed), false, () -> {});
-        }
+    private void submitAim(Vec3 aimPoint) {
+        if (CombatEngine.get().isFrozen()) return;
+
+        LivingEntity target = currentTarget;
+        CombatRequest.Mode mode = aimMode.get() == AimMode.Silent ? CombatRequest.Mode.Silent : CombatRequest.Mode.Visible;
+
+        CombatEngine.get().submit(CombatRequest.rotation(this, priority.get(), aimPoint, mode, buildProfile(), () -> {
+            if (!isActive() || CombatEngine.get().isFrozen()) return;
+            if (target == null || !target.isAlive() || !isValidTarget(target) || !isInRange(target)) return;
+            if (!(mc.player.getMainHandItem().getItem() instanceof TridentItem)) return;
+            if (!mc.player.isUsingItem()) return;
+            if (throwMode.get() == ThrowMode.Manual) return;
+            if (respectRiptide.get() && hasRiptide) return;
+
+            ItemStack trident = mc.player.getMainHandItem();
+            if (preventThrowAtLowDurability.get() && trident.getMaxDamage() - trident.getDamageValue() <= 1) return;
+
+            int maxUseTime = trident.getUseDuration(mc.player);
+            float chargeNow = Math.min((maxUseTime - mc.player.getUseItemRemainingTicks()) / 10.0f, 1.0f);
+            if (chargeNow < 0.95f) return;
+
+            double meleeDistNow = mc.player.getEyePosition().distanceTo(target.getBoundingBox().getCenter());
+            if (meleeWhenClose.get() && meleeDistNow <= meleeRange.get()) return;
+
+            mc.gameMode.releaseUsingItem(mc.player);
+            ComboTracker.registerHit(target.getUUID());
+        }));
+    }
+
+    private CombatRequest.Profile buildProfile() {
+        return new CombatRequest.Profile(aimSpeed.get(), aimDamping.get(), jitterYaw.get(), jitterPitch.get(), overshoot.get(), maxDegrees.get());
     }
 
     @EventHandler

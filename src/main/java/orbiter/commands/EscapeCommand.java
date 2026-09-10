@@ -1,6 +1,6 @@
 package orbiter.commands;
 
-import orbiter.modules.ForceInvisibility;
+import orbiter.modules.movement.ForceInvisibility;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;

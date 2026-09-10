@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.combat;
 
 import orbiter.Orbiter;
 import meteordevelopment.meteorclient.events.entity.EntityAddedEvent;
@@ -32,6 +32,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.ClipContext;
+import orbiter.systems.combat.CombatEngine;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -172,6 +173,7 @@ public class PrecisionShot extends Module {
     @EventHandler
     private void onPacketSend(PacketEvent.Send event) {
         if (!silentPacketAim.get() || mc.player == null || mc.getConnection() == null) return;
+        if (CombatEngine.get().isFrozen()) return;
         if (isSending) return;
 
         if (event.packet instanceof ServerboundPlayerActionPacket actionPacket

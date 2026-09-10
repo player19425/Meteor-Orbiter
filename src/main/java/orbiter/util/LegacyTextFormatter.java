@@ -2,6 +2,7 @@ package orbiter.util;
 
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.ChatFormatting;
 
 public final class LegacyTextFormatter {
@@ -11,7 +12,7 @@ public final class LegacyTextFormatter {
         String value = input == null ? "" : input;
         MutableComponent result = Component.empty();
         StringBuilder plain = new StringBuilder();
-        ChatFormatting pending = null;
+        Style style = Style.EMPTY;
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
             if (c == '&' && i + 1 < value.length()) {
@@ -20,18 +21,31 @@ public final class LegacyTextFormatter {
                 ChatFormatting formatting = ChatFormatting.getByCode(code);
                 if (formatting != null) {
                     if (!plain.isEmpty()) {
-                        result.append(Component.literal(plain.toString()).withStyle(pending == null ? ChatFormatting.RESET : pending));
+                        result.append(Component.literal(plain.toString()).withStyle(style));
                         plain.setLength(0);
                     }
-                    pending = formatting;
+                    style = applyCode(style, formatting);
                     i++;
                     continue;
                 }
             }
             plain.append(c);
         }
-        if (!plain.isEmpty()) result.append(Component.literal(plain.toString()).withStyle(pending == null ? ChatFormatting.RESET : pending));
+        if (!plain.isEmpty()) result.append(Component.literal(plain.toString()).withStyle(style));
         return result;
+    }
+
+    private static Style applyCode(Style style, ChatFormatting formatting) {
+        if (formatting == ChatFormatting.RESET) return Style.EMPTY;
+        if (formatting.ordinal() < ChatFormatting.RESET.ordinal()) return Style.EMPTY.withColor(formatting);
+        return switch (formatting) {
+            case BOLD -> style.withBold(true);
+            case ITALIC -> style.withItalic(true);
+            case UNDERLINE -> style.withUnderlined(true);
+            case STRIKETHROUGH -> style.withStrikethrough(true);
+            case OBFUSCATED -> style.withObfuscated(true);
+            default -> style;
+        };
     }
 
     public static String translate(String input) {

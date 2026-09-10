@@ -90,10 +90,10 @@ public class VerifyProtectCommand extends Command {
             total++;
             ItemStack variant = makeVariantTranslateEgg();
             if (orbiter.modules.misc.ServerProtect.isMaliciousItem(variant)) {
-                info("\u00a7a[PASS] \u00a77%2$s translate variant detected");
+                info("\u00a7a[PASS] \u00a77$2 translate variant detected");
                 passed++;
             } else {
-                info("\u00a7c[FAIL] \u00a77%2$s translate variant NOT detected");
+                info("\u00a7c[FAIL] \u00a77$2 translate variant NOT detected");
             }
 
             total++;

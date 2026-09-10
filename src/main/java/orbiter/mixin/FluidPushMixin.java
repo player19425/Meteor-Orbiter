@@ -1,6 +1,6 @@
 package orbiter.mixin;
 
-import orbiter.modules.AntiPush;
+import orbiter.modules.movement.AntiPush;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Entity;

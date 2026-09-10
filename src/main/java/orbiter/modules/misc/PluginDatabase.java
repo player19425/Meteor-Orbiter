@@ -1,6 +1,7 @@
 package orbiter.modules.misc;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -11,6 +12,9 @@ public class PluginDatabase {
     private static final Map<String, PluginEntry> EXACT_DB = new HashMap<>();
     private static final Map<String, PluginEntry> COMMAND_DB = new HashMap<>();
     private static final Map<String, String> NAMESPACE_ALIASES = new HashMap<>();
+    private static final Map<String, PluginEntry> LOOKUP_CACHE = new ConcurrentHashMap<>();
+    private static final PluginEntry MISS = new PluginEntry("", "");
+    private static final int MAX_LOOKUP_CACHE = 8192;
     private static final Set<String> NON_PLUGIN_NAMESPACES = new HashSet<>(Set.of(
         "minecraft", "brand", "brigadier", "bungeecord", "velocity", "fabric",
         "neoforge", "forge", "fml", "quilt", "axiom", "modmenu", "jei",
@@ -3276,27 +3280,37 @@ public class PluginDatabase {
 
     public static PluginEntry lookupChannel(String channel) {
         if (channel == null) return null;
-        String lower = channel.toLowerCase();
+        String lower = channel.toLowerCase(Locale.ROOT);
+
+        PluginEntry cached = LOOKUP_CACHE.get(lower);
+        if (cached != null) return cached == MISS ? null : cached;
 
         PluginEntry entry = EXACT_DB.get(lower);
-        if (entry != null) return entry;
-
-        int colon = lower.indexOf(':');
-        if (colon > 0) {
-            String ns = lower.substring(0, colon);
-            entry = WILDCARD_DB.get(ns + ":*");
-            if (entry != null) return entry;
-        }
-
-        for (var e : WILDCARD_DB.entrySet()) {
-            String pattern = e.getKey();
-            if (pattern.endsWith(":*")) {
-                String prefix = pattern.substring(0, pattern.length() - 2);
-                if (lower.startsWith(prefix + ":") || lower.equals(prefix)) return e.getValue();
+        if (entry == null) {
+            int colon = lower.indexOf(':');
+            if (colon > 0) {
+                entry = WILDCARD_DB.get(lower.substring(0, colon) + ":*");
             }
         }
+        if (entry == null) {
+            for (var e : WILDCARD_DB.entrySet()) {
+                String pattern = e.getKey();
+                if (pattern.endsWith(":*")) {
+                    String prefix = pattern.substring(0, pattern.length() - 2);
+                    if (lower.startsWith(prefix + ":") || lower.equals(prefix)) {
+                        entry = e.getValue();
+                        break;
+                    }
+                }
+            }
+        }
+        if (entry == null) {
+            entry = fuzzyLookup(lower);
+        }
 
-        return fuzzyLookup(lower);
+        if (LOOKUP_CACHE.size() > MAX_LOOKUP_CACHE) LOOKUP_CACHE.clear();
+        LOOKUP_CACHE.put(lower, entry == null ? MISS : entry);
+        return entry;
     }
 
     public static PluginEntry lookupCommand(String command) {

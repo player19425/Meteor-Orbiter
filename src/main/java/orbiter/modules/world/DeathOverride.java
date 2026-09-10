@@ -1,7 +1,7 @@
 package orbiter.modules.world;
 
 import orbiter.Orbiter;
-import orbiter.modules.CreativeSafetyModule;
+import orbiter.modules.world.CreativeSafetyModule;
 import meteordevelopment.meteorclient.events.game.GameJoinedEvent;
 import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.events.game.OpenScreenEvent;

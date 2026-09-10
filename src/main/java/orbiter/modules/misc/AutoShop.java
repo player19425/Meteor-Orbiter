@@ -1,6 +1,7 @@
-package orbiter.modules;
+package orbiter.modules.misc;
 
 import meteordevelopment.meteorclient.events.world.TickEvent;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
@@ -195,6 +196,7 @@ public class AutoShop extends Module {
     private int depositStallTicks;
     private int depositLastCount;
     private BlockPos currentChest;
+    private int shopContainerId = -1;
     private final Set<BlockPos> fullChests = new HashSet<>();
 
     public AutoShop() {
@@ -206,6 +208,12 @@ public class AutoShop extends Module {
         resetRuntime();
         fullChests.clear();
         info("AutoShop [" + mode.get().name() + "] started.");
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        fullChests.clear();
+        resetRuntime();
     }
 
     @Override
@@ -292,7 +300,9 @@ public class AutoShop extends Module {
     }
 
     private void waitForShop() {
-        if (getHandledScreen() != null) {
+        AbstractContainerScreen<?> screen = getHandledScreen();
+        if (screen != null) {
+            shopContainerId = screen.getMenu().containerId;
             state = CLICK_CATEGORY;
             tickWaiter = clickDelay.get();
             return;
@@ -396,7 +406,7 @@ public class AutoShop extends Module {
 
     private AbstractContainerScreen<?> requireShopScreen() {
         AbstractContainerScreen<?> screen = getHandledScreen();
-        if (screen != null) {
+        if (screen != null && screen.getMenu().containerId == shopContainerId) {
             timeout = 40;
             return screen;
         }
@@ -487,8 +497,14 @@ public class AutoShop extends Module {
             mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
         }
         if (--timeout <= 0) {
-
-            markChestFull(currentChest);
+            chestReopenFails++;
+            if (chestReopenFails >= 3) {
+                markChestFull(currentChest);
+                warning("Chest at " + currentChest + " did not open after several attempts; skipping it.");
+                chestReopenFails = 0;
+            } else {
+                warning("Chest did not open; retrying.");
+            }
             state = FIND_CHEST;
             tickWaiter = normalDelay.get();
         }
@@ -714,9 +730,12 @@ public class AutoShop extends Module {
     private void markChestFull(BlockPos pos) {
         if (pos == null) return;
         fullChests.add(pos);
-        for (Direction direction : Direction.Plane.HORIZONTAL) {
-            BlockPos adjacent = pos.relative(direction);
-            if (mc.level != null && isDepositContainer(mc.level.getBlockState(adjacent))) fullChests.add(adjacent);
+        BlockState state = mc.level == null ? null : mc.level.getBlockState(pos);
+        if (state != null && state.is(Blocks.CHEST)) {
+            for (Direction direction : Direction.Plane.HORIZONTAL) {
+                BlockPos adjacent = pos.relative(direction);
+                if (mc.level != null && isDepositContainer(mc.level.getBlockState(adjacent))) fullChests.add(adjacent);
+            }
         }
     }
 

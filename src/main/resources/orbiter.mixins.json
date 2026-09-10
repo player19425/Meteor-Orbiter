@@ -2,7 +2,7 @@
   "required": true,
   "package": "orbiter.mixin",
   "plugin": "orbiter.mixin.OrbiterMixinPlugin",
-  "compatibilityLevel": "JAVA_21",
+  "compatibilityLevel": "JAVA_25",
   "client": [
     "ScreenMixin",
     "HandledScreenAccessor",
@@ -48,6 +48,8 @@
     "ServerProtectDialogPacketMixin",
     "ServerProtectDialogScreenMixin",
     "Camera360Mixin",
+    "Camera360JumpMixin",
+    "Camera360TravelMixin",
     "Camera360RenderPitchMixin",
     "Camera360HandMixin",
     "ServerboundMovePlayerPacketMixin",
@@ -61,7 +63,11 @@
     "CrashFixerTextDisplayMixin",
     "CrashFixerAreaEffectCloudMixin",
     "CrashFixerClientPacketListenerMixin",
-    "ItemDefaultInstanceMixin"
+    "ItemDefaultInstanceMixin",
+    "DialogScreenAccessor",
+    "DialogScreenAutoLoginMixin",
+    "CameraFreezeMixin",
+    "NoclipMoveMixin"
   ],
   "injectors": {
     "defaultRequire": 1

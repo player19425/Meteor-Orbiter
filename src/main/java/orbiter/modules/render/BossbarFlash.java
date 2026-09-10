@@ -1,7 +1,7 @@
 package orbiter.modules.render;
 
 import orbiter.Orbiter;
-import orbiter.modules.CreativeSafetyModule;
+import orbiter.modules.world.CreativeSafetyModule;
 import orbiter.util.CommandUtils;
 import orbiter.util.CommandBatcher;
 import meteordevelopment.meteorclient.events.world.TickEvent;

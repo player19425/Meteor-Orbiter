@@ -5,6 +5,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.util.Mth;
 import orbiter.modules.render.Camera360;
+import orbiter.systems.combat.SilentRotationHandler;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
@@ -19,12 +20,14 @@ public abstract class ServerboundMovePlayerPacketMixin {
 
     @Redirect(method = "write", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/FriendlyByteBuf;writeFloat(F)Lnet/minecraft/network/FriendlyByteBuf;", ordinal = 0))
     private static FriendlyByteBuf orbiter$wrapPacketYaw(FriendlyByteBuf buf, float yaw) {
+        if (SilentRotationHandler.isActive()) return buf.writeFloat(Mth.wrapDegrees(SilentRotationHandler.pendingYaw()));
         if (!orbiter$is360Active()) return buf.writeFloat(yaw);
         return buf.writeFloat(Mth.wrapDegrees(yaw));
     }
 
     @Redirect(method = "write", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/FriendlyByteBuf;writeFloat(F)Lnet/minecraft/network/FriendlyByteBuf;", ordinal = 1))
     private static FriendlyByteBuf orbiter$clampPacketPitch(FriendlyByteBuf buf, float pitch) {
+        if (SilentRotationHandler.isActive()) return buf.writeFloat(Mth.clamp(SilentRotationHandler.pendingPitch(), -90f, 90f));
         if (!orbiter$is360Active()) return buf.writeFloat(pitch);
         return buf.writeFloat(Mth.clamp(pitch, -90f, 90f));
     }

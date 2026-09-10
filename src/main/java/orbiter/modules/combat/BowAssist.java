@@ -5,7 +5,6 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
-import meteordevelopment.meteorclient.utils.player.Rotations;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
 import net.minecraft.world.entity.Entity;
@@ -19,6 +18,8 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.ClipContext;
 import orbiter.Orbiter;
+import orbiter.systems.combat.CombatEngine;
+import orbiter.systems.combat.CombatRequest;
 import orbiter.util.ConfigModifier;
 import orbiter.util.ComboTracker;
 
@@ -40,6 +41,7 @@ public class BowAssist extends Module {
     private final SettingGroup sgPhysics = settings.createGroup("Projectile Physics");
     private final SettingGroup sgRender = settings.createGroup("Rendering");
     private final SettingGroup sgCombo = settings.createGroup("Combo");
+    private final SettingGroup sgHumanize = settings.createGroup("Humanization");
 
     private final Setting<Boolean> autoFire = sgGeneral.add(new BoolSetting.Builder()
         .name("auto-fire")
@@ -141,7 +143,17 @@ public class BowAssist extends Module {
     private final Setting<AimMode> aimMode = sgAim.add(new EnumSetting.Builder<AimMode>()
         .name("aim-mode")
         .description("Visible = rotate client view. Silent = server-side only (anticheat risk).")
-        .defaultValue(AimMode.Visible)
+        .defaultValue(AimMode.Silent)
+        .build()
+    );
+
+    private final Setting<Integer> priority = sgAim.add(new IntSetting.Builder()
+        .name("priority")
+        .description("Who wins when several combat modules want to aim at once.")
+        .defaultValue(60)
+        .min(0)
+        .max(100)
+        .sliderRange(0, 100)
         .build()
     );
 
@@ -152,21 +164,57 @@ public class BowAssist extends Module {
         .build()
     );
 
-    private final Setting<Double> aimSpeed = sgAim.add(new DoubleSetting.Builder()
+    private final Setting<Double> aimSpeed = sgHumanize.add(new DoubleSetting.Builder()
         .name("aim-speed")
-        .description("How fast the aim moves toward the target. 1.0 = instant, 0.1 = very smooth.")
-        .defaultValue(0.5)
+        .description("Engine rotation stiffness.")
+        .defaultValue(0.35)
         .min(0.05)
         .sliderRange(0.05, 1.0)
         .build()
     );
 
-    private final Setting<Double> aimSpeedCharged = sgAim.add(new DoubleSetting.Builder()
-        .name("aim-speed-charged")
-        .description("Aim speed when bow is at critical charge (higher = snap to target faster).")
-        .defaultValue(0.8)
-        .min(0.05)
-        .sliderRange(0.05, 1.0)
+    private final Setting<Double> aimDamping = sgHumanize.add(new DoubleSetting.Builder()
+        .name("aim-damping")
+        .description("Engine rotation damping.")
+        .defaultValue(0.75)
+        .min(0.3)
+        .sliderRange(0.3, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> jitterYaw = sgHumanize.add(new DoubleSetting.Builder()
+        .name("jitter-yaw")
+        .description("Random horizontal jitter in degrees.")
+        .defaultValue(0.0)
+        .min(0.0)
+        .sliderRange(0.0, 3.0)
+        .build()
+    );
+
+    private final Setting<Double> jitterPitch = sgHumanize.add(new DoubleSetting.Builder()
+        .name("jitter-pitch")
+        .description("Random vertical jitter in degrees.")
+        .defaultValue(0.0)
+        .min(0.0)
+        .sliderRange(0.0, 3.0)
+        .build()
+    );
+
+    private final Setting<Double> overshoot = sgHumanize.add(new DoubleSetting.Builder()
+        .name("overshoot")
+        .description("How much the aim overshoots the target before settling.")
+        .defaultValue(0.1)
+        .min(0.0)
+        .sliderRange(0.0, 1.0)
+        .build()
+    );
+
+    private final Setting<Double> maxDegrees = sgHumanize.add(new DoubleSetting.Builder()
+        .name("max-degrees-per-tick")
+        .description("Maximum degrees the aim can rotate per tick.")
+        .defaultValue(40.0)
+        .min(5.0)
+        .sliderRange(5.0, 90.0)
         .build()
     );
 
@@ -274,14 +322,11 @@ public class BowAssist extends Module {
     );
 
     private LivingEntity currentTarget;
-    private LivingEntity lastTarget;
     private long lastTargetSwitchTime;
     private final List<Vec3> trajectoryPoints = new ArrayList<>();
-    private final ComboTracker comboTracker = new ComboTracker();
     private int tickCounter = 0;
 
     private float lastCalculatedYaw;
-    private float lastCalculatedPitch;
     private float currentCharge;
 
     public BowAssist() {
@@ -297,7 +342,6 @@ public class BowAssist extends Module {
             return;
         }
         currentTarget = null;
-        lastTarget = null;
         lastTargetSwitchTime = 0;
         trajectoryPoints.clear();
         ComboTracker.clearAll();
@@ -307,7 +351,6 @@ public class BowAssist extends Module {
     @Override
     public void onDeactivate() {
         currentTarget = null;
-        lastTarget = null;
         trajectoryPoints.clear();
         ComboTracker.clearAll();
     }
@@ -363,23 +406,15 @@ public class BowAssist extends Module {
         AimSolution solution = solveAim(origin, targetPos, currentCharge);
 
         lastCalculatedYaw = solution.yaw;
-        lastCalculatedPitch = solution.pitch;
 
-        applyAim(solution.yaw, solution.pitch, currentCharge);
+        Vec3 aimPoint = origin.add(Vec3.directionFromRotation(solution.pitch, solution.yaw).scale(origin.distanceTo(targetPos)));
+
+        submitAim(aimPoint);
 
         if (renderMode.get() != RenderMode.Off) {
             simulateTrajectory(origin, solution.yaw, solution.pitch, currentCharge, trajectoryPoints);
         } else {
             trajectoryPoints.clear();
-        }
-
-        if (autoFire.get() && isDrawing && currentCharge >= 0.99f) {
-
-            float yawDiff = Math.abs(Mth.wrapDegrees(solution.yaw - mc.player.getYRot()));
-            float pitchDiff = Math.abs(solution.pitch - mc.player.getXRot());
-            if (yawDiff < 5.0f && pitchDiff < 5.0f) {
-                mc.player.stopUsingItem();
-            }
         }
     }
 
@@ -398,7 +433,6 @@ public class BowAssist extends Module {
         }
 
         if (currentTarget != null) {
-            lastTarget = currentTarget;
             currentTarget = null;
             lastTargetSwitchTime = tickCounter;
         }
@@ -699,26 +733,28 @@ public class BowAssist extends Module {
         }
     }
 
-    private void applyAim(float targetYaw, float targetPitch, float charge) {
+    private void submitAim(Vec3 targetPos) {
+        if (CombatEngine.get().isFrozen()) return;
 
-        double speed = charge >= 0.99f ? aimSpeedCharged.get() : aimSpeed.get();
+        LivingEntity target = currentTarget;
+        CombatRequest.Mode mode = aimMode.get() == AimMode.Silent ? CombatRequest.Mode.Silent : CombatRequest.Mode.Visible;
 
-        if (aimMode.get() == AimMode.Visible) {
-            float currentYaw = mc.player.getYRot();
-            float currentPitch = mc.player.getXRot();
+        CombatEngine.get().submit(CombatRequest.rotation(this, priority.get(), targetPos, mode, buildProfile(), () -> {
+            if (!isActive() || CombatEngine.get().isFrozen()) return;
+            if (target == null || !target.isAlive() || !isValidTarget(target) || !isInRange(target)) return;
+            if (!(mc.player.getMainHandItem().getItem() instanceof BowItem)) return;
+            if (!mc.player.isUsingItem()) return;
 
-            float yawDelta = Mth.wrapDegrees(targetYaw - currentYaw);
-            float pitchDelta = targetPitch - currentPitch;
+            int maxUseTime = mc.player.getMainHandItem().getUseDuration(mc.player);
+            float chargeNow = BowItem.getPowerForTime(maxUseTime - mc.player.getUseItemRemainingTicks());
+            if (autoFire.get() && chargeNow >= 0.99f) {
+                mc.gameMode.releaseUsingItem(mc.player);
+            }
+        }));
+    }
 
-            float newYaw = currentYaw + (float) (yawDelta * speed);
-            float newPitch = currentPitch + (float) (pitchDelta * speed);
-
-            mc.player.setYRot(newYaw);
-            mc.player.setXRot(newPitch);
-        } else {
-
-            Rotations.rotate(targetYaw, targetPitch, (int) (20 / speed), false, () -> {});
-        }
+    private CombatRequest.Profile buildProfile() {
+        return new CombatRequest.Profile(aimSpeed.get(), aimDamping.get(), jitterYaw.get(), jitterPitch.get(), overshoot.get(), maxDegrees.get());
     }
 
     private void renderTrajectory(Render3DEvent event) {

@@ -4,7 +4,7 @@
   <p>An addon for <a href="https://meteorclient.com/">Meteor Client</a> that adds 60+ modules, custom commands, and HUD elements for anarchy, griefing, and quality of life.</p>
 
   
-  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.5-orange" alt="Version"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.6-orange" alt="Version"></a>
   <img src="https://img.shields.io/badge/Minecraft-26.2-blue" alt="Minecraft version">
   <img src="https://img.shields.io/badge/Java-25-green" alt="Java version">
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/github/downloads/player19425/Meteor-Orbiter/total" alt="Downloads"></a>
@@ -27,6 +27,8 @@ Everything is organized into five in-game categories:
 - **Orbiter Vanilla** • modules that only use vanilla mechanics
 - **Orbiter Creative/OP** • modules that require Creative mode or operator permissions
 - **Orbiter Stupid** • joke / experimental modules (Enable in Meteor Client settings)
+- **Orbiter W.I.P** • work in progress modules, usable but still rough around the edges
+
 # Requirements
 
 - [Java](https://adoptium.net/temurin/releases) 25 or higher
@@ -48,13 +50,25 @@ Orbiter can also keep itself up to date: when you join a server or world it chec
 
 | Module | Description |
 |---|---|
-| **Aim Assist Plus** | Aim assist with prediction. |
+| **Aim Assist Plus** | Aim assist with prediction. Supports silent aim and projectile-based pitch. |
 | **Anti Knockback** | No knockback. |
+| **Auto Totem+** | Swaps totems inside a real inventory session while you stand still. |
 | **Mace Assist** | Auto-aim and strike with the Mace. |
 | **No Friend Hit** | Don't hit Meteor friends. |
-| **Out Of Reach**
+| **Out Of Reach** | Fights from outside player reach. |
 
 All assists support selecting which entity types to target (players, armor stands, and more).
+
+The following live in the Orbiter W.I.P category:
+
+| Module | Description |
+|---|---|
+| **Bow Assist** (W.I.P) | Auto-aims the bow. |
+| **Crossbow Assist** (W.I.P) | Auto-aims the crossbow. |
+| **Trident Assist** (W.I.P) | Auto-aims and throws the trident. |
+| **Spear Assist** (W.I.P) | Melee assist for close combat. |
+| **Shield Assist** (W.I.P) | Auto-blocks with the shield. |
+| **Precision Shot** (W.I.P) | Silent aim at your crosshair. |
 
 ## Movement:
 
@@ -64,6 +78,7 @@ All assists support selecting which entity types to target (players, armor stand
 | **Auto Clutch** | Auto-clutch to avoid fall damage. |
 | **Force Invisibility** | Server-side invisibility. |
 | **Jump A** | Jumps over walls and reaches blocks. |
+| **Noclip** | Flies through blocks. Lands the server player in open air on the far side of a wall; suppresses corrective teleports with proper ACKs. Dips slightly every few seconds so the vanilla floating kick never fires. In survival, let a falling sand or gravel block land on your head first. |
 | **Slime Jump** | Bounces higher on slime. |
 
 ## Player:
@@ -79,9 +94,10 @@ All assists support selecting which entity types to target (players, armor stand
 | Module | Description |
 |---|---|
 | **Auto Farming** | Auto-farms crops and animals. |
+| **Bed Defender** | Auto-builds a protective ring around beds. |
 | **Command Block Placer** | Places command blocks. Creative + OP. |
 | **Control Player** | Rotates players around you. OP. |
-| **Death Override** | Removes DieScreen incase of kill commandblock. |
+| **Death Override** | Removes the death screen when a kill command block triggers. |
 | **Entity Spammer** | Spawns and animates entities. OP required. |
 | **Item Creator** | Creates custom items. Creative only. |
 | **Item Generator** | Spawns items with random enchants. Creative. |
@@ -114,9 +130,10 @@ All assists support selecting which entity types to target (players, armor stand
 | **Actions** | Reactive triggers and actions. |
 | **Anti Staff** | Detects staff and auto-leaves. |
 | **Auto Find** | Scans for stashes and bases. |
+| **Auto Login** | Auto-answers login and register prompts, chat and dialogs. |
 | **Auto Shop** | Buys from server shops automatically. |
 | **Client Side Things** | Local visual spoofs. |
-| **Enchantment Cracker** | Cracks the hidden enchantment seed from table offers, then places items and clicks for you when your enchant shows up. `.encc get <enchant> [level]` |
+| **Enchantment Cracker** | Cracks the hidden enchantment seed from table offers and reports all three rows exactly. |
 | **Exploit Preventer** | Blocks common server exploits. |
 | **I Sell Wand** | Auto-sells using a sell wand. |
 | **Infini Reach** | Infinite reach. |
@@ -134,10 +151,13 @@ All assists support selecting which entity types to target (players, armor stand
 | Command | Description | Aliases |
 |---|---|---|
 | `.autoshop` | Toggle and control the AutoShop module. | `autoshopdetect` |
+| `.copy` | Copies coordinates, camera position, held item, NBT, look target and more to the clipboard. | |
+| `.copypos` | Copies your camera position to the clipboard (works with Freecam). | `cpos` |
 | `.escape` | Controls ForceInvisibility escape logic. | |
-| `.enchantmentcracker` | Full-auto enchantment farmer: cracks the seed, predicts every row exactly, places items and clicks when your enchant appears. | `enchantcracked`, `encc` |
+| `.enchantmentcracker` | Cracks the enchanting seed, predicts every row exactly, and reports the full offers. Use `status` or `reset` for subcommands. | `enchantcracked`, `encc` |
 | `.exportmodulelist` | Exports all module names to clipboard. | |
 | `.fixdeath` | Stops fake death loops and force-resyncs client/server state. | |
+| `.ghostblock` | Client-side ghost blocks only you can see. | `gb` |
 | `.givepresetitems` | 200+ OP and command-block-only presets. | `gpi` |
 | `.hidekeybind` | Hides Meteor keybinds from the Controls screen. | |
 | `.isellwand` | Control the ISellWand module. | `sellwand` |
@@ -196,7 +216,7 @@ The compiled JAR will be in `build/libs/`.
 - Destructive features require explicit confirmation and should only be tested on disposable local servers with backups.
 - Command-producing modules use capability detection and bounded queues where supported. Command availability does not prove permission.
 - Any damage caused by this Meteor Client Addon is __not__ the fault of the creator of the mod, and responsibility lies solely with the person who performed the action. 
-- The only official way to download this mod from is [from its github.](https://github.com/player19425/Meteor-Orbiter/releases/latest) Downloading this from any other places is __not__ recommended.
+- The only official way to download this mod is [from its github.](https://github.com/player19425/Meteor-Orbiter/releases/latest) Downloading this from any other places is __not__ recommended.
 
 
 # Credits

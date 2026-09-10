@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.combat;
 
 import orbiter.Orbiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -20,6 +20,8 @@ import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.GameType;
+import orbiter.modules.movement.Noclip;
+import orbiter.systems.combat.CombatEngine;
 
 import java.util.UUID;
 
@@ -305,6 +307,11 @@ public class OutOfReach extends Module {
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null) return;
+
+        if (CombatEngine.get().isFrozen() || Noclip.isActiveStatic()) {
+            if (cooldownLeft > 0) cooldownLeft--;
+            return;
+        }
 
         if (targetMode.get() == TargetMode.Selected && autoSelectFromCrosshair.get()) {
             updateSelectionFromCrosshair();

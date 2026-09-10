@@ -18,6 +18,7 @@ public abstract class PacketDecoderMixin<T extends PacketListener> {
     @Inject(method = "decode", at = @At("HEAD"))
     private void orbiter$captureRawBytes(ChannelHandlerContext ctx, ByteBuf buf, List<Object> out, CallbackInfo ci) {
         try {
+            if (RawPacketCapture.isCaptureDisabled()) return;
             int readable = buf.readableBytes();
             if (readable <= 0 || readable > 65536) return;
 
@@ -37,7 +38,6 @@ public abstract class PacketDecoderMixin<T extends PacketListener> {
                 RawPacketCapture.enqueue(raw);
             }
         } catch (Exception ignored) {
-
         }
     }
 }

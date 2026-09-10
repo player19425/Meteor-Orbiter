@@ -98,17 +98,11 @@ public class WeaponCooldownHud extends HudElement {
 
         SettingColor color;
         if (rainbow.get()) {
-            color = rainbowColor();
+            color = BaseServerInfoHud.rainbowColor();
         } else {
             color = (progress >= 0.999f) ? readyColor.get() : textColor.get();
         }
         renderer.text(text, x, y, color, shadow.get(), s);
     }
 
-    private SettingColor rainbowColor() {
-        long millis = System.currentTimeMillis();
-        float hue = (millis % 4000L) / 4000f;
-        int rgb = java.awt.Color.HSBtoRGB(hue, 1f, 1f);
-        return new SettingColor((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, 255);
-    }
 }

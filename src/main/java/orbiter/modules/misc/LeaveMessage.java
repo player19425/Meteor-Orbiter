@@ -1,4 +1,4 @@
-package orbiter.modules;
+package orbiter.modules.misc;
 
 import orbiter.Orbiter;
 import meteordevelopment.meteorclient.settings.BoolSetting;
@@ -30,17 +30,24 @@ public class LeaveMessage extends Module {
 
     private final Setting<Boolean> multiplayerOnly = sgGeneral.add(new BoolSetting.Builder()
         .name("multiplayer-only")
-        .description("Only intercept close while connected to multiplayer.")
+        .description("Only intercept disconnect while connected to multiplayer.")
         .defaultValue(true)
+        .build());
+
+    private final Setting<Boolean> quitAfterDisconnect = sgGeneral.add(new BoolSetting.Builder()
+        .name("quit-after-disconnect")
+        .description("Close the whole game after the delayed disconnect instead of staying in the title screen.")
+        .defaultValue(false)
         .build());
 
     private final Setting<Boolean> notifyInChat = sgGeneral.add(new BoolSetting.Builder()
         .name("notify-in-chat")
+        .description("Show a local alert when the leave sequence starts.")
         .defaultValue(true)
         .build());
 
     private volatile boolean pendingLeave = false;
-    private static volatile boolean allowStop = false;
+    private static volatile boolean quitRequested = false;
 
     public LeaveMessage() {
         super(Orbiter.CATEGORY, "leave-message", "Sends a chat message before leaving.");
@@ -57,7 +64,6 @@ public class LeaveMessage extends Module {
     }
 
     public boolean onPlayerDisconnect() {
-
         return handleLeaveSequence("disconnect");
     }
 
@@ -69,9 +75,9 @@ public class LeaveMessage extends Module {
         return pendingLeave;
     }
 
-    public static boolean consumeAllowStop() {
-        if (!allowStop) return false;
-        allowStop = false;
+    public static boolean shouldQuitAfterLeave() {
+        if (!quitRequested) return false;
+        quitRequested = false;
         return true;
     }
 
@@ -100,26 +106,17 @@ public class LeaveMessage extends Module {
                 Thread.currentThread().interrupt();
             }
 
-            if (mc == null) return;
-            mc.execute(() -> {
-                if (!isActive()) {
-                    pendingLeave = false;
-                    return;
-                }
-                disconnectNow();
-            });
+            mc.execute(this::disconnectNow);
         });
 
         return true;
     }
 
     private void disconnectNow() {
+        pendingLeave = false;
+        quitRequested = quitAfterDisconnect.get();
         if (mc.getConnection() != null) {
             mc.getConnection().getConnection().disconnect(Component.literal("[LeaveMessage] delayed disconnect"));
         }
-
-        pendingLeave = false;
-        allowStop = true;
-        mc.stop();
     }
 }
