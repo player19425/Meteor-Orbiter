@@ -3,16 +3,16 @@
   <h1>Meteor Orbiter</h1>
   <p>An addon for <a href="https://meteorclient.com/">Meteor Client</a> that adds 60+ modules, custom commands, and HUD elements for anarchy, griefing, and quality of life.</p>
 
-  
+    
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.6-orange" alt="Version"></a>
   <img src="https://img.shields.io/badge/Minecraft-26.2-blue" alt="Minecraft version">
   <img src="https://img.shields.io/badge/Java-25-green" alt="Java version">
-  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/github/downloads/player19425/Meteor-Orbiter/total" alt="Downloads"></a>
-  <a href="https://github.com/player19425/Meteor-Orbiter/stargazers"><img src="https://img.shields.io/github/stars/player19425/Meteor-Orbiter" alt="Stars"></a>
-  <a href="https://github.com/player19425/Meteor-Orbiter/commits/26.2"><img src="https://img.shields.io/github/last-commit/player19425/Meteor-Orbiter" alt="Last commit"></a>
-  <img src="https://img.shields.io/github/languages/code-size/player19425/Meteor-Orbiter" alt="Code size">
-  <img src="https://img.shields.io/github/issues/player19425/Meteor-Orbiter" alt="Issues">
-  <img src="https://img.shields.io/github/license/player19425/Meteor-Orbiter" alt="License">
+  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/github/downloads/player19425/Meteor-Orbiter/total?style=flat" alt="Downloads"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/stargazers"><img src="https://img.shields.io/github/stars/player19425/Meteor-Orbiter?style=flat" alt="Stars"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/commits/26.2"><img src="https://img.shields.io/github/last-commit/player19425/Meteor-Orbiter?style=flat" alt="Last commit"></a>
+  <img src="https://img.shields.io/github/languages/code-size/player19425/Meteor-Orbiter?style=flat" alt="Code size">
+  <a href="https://github.com/player19425/Meteor-Orbiter/issues"><img src="https://img.shields.io/github/issues/player19425/Meteor-Orbiter?style=flat" alt="Issues"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/blob/26.2/LICENSE"><img src="https://img.shields.io/github/license/player19425/Meteor-Orbiter?style=flat" alt="License"></a>
 </div>
 
 <hr />
