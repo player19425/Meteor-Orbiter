@@ -78,7 +78,7 @@ The following live in the Orbiter W.I.P category:
 | **Auto Clutch** | Auto-clutch to avoid fall damage. |
 | **Force Invisibility** | Server-side invisibility. |
 | **Jump A** | Jumps over walls and reaches blocks. |
-| **Noclip** | Flies through blocks. Lands the server player in open air on the far side of a wall; suppresses corrective teleports with proper ACKs. Dips slightly every few seconds so the vanilla floating kick never fires. In survival, let a falling sand or gravel block land on your head first. |
+| **Noclip** | Flies through blocks with no collision or gravity. Suppresses the corrective teleports the server sends, so the position sticks once you come out the other side. Dips slightly every few seconds so the vanilla floating kick never fires. |
 | **Slime Jump** | Bounces higher on slime. |
 
 ## Player:
