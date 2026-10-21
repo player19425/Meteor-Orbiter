@@ -42,25 +42,15 @@ Orbiter 是一套为 [Meteor Client](https://meteorclient.com/) 打造的模块�
 
 所有版本都需要 [Fabric Loader](https://fabricmc.net/use/installer/) 0.19.3 或更高。
 
-每个支持的版本各占一个分支，整个工程就放在分支根目录，所以它们都可以单独克隆、编译、打标签或者单独发布。
+每个发布的版本都有自己独立的 tag，整个工程就放在 tag 的根目录，所以它们都可以单独检出、编译。持续更新的只有 `26.3` 分支。
 
 # 编译
 
-`26.3` 分支编译的是 Minecraft 26.3：
-
 ```
 gradlew build
 ```
 
-其他版本在各自的分支里编译：
-
-```
-git clone -b 26.2 https://github.com/player19425/Meteor-Orbiter.git
-cd Meteor-Orbiter
-gradlew build
-```
-
-每个工程都会生成 `build/libs/meteor-orbiter-1.0.6-<mc>.jar`。
+生成的 jar 在 `build/libs/meteor-orbiter-1.0.6-26.3.jar`。
 
 | 命令 | 作用 |
 |---|---|
