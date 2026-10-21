@@ -1,12 +1,11 @@
-// Meteor Orbiter, standalone project.
+// Meteor Orbiter for Minecraft 26.3, standalone project.
 //
-//   gradlew build        -> build the jar for the target in version.properties
+//   gradlew build        -> build the jar
 //   gradlew runClient    -> launch a dev client with the addon loaded
 //   gradlew printTarget  -> show the Minecraft/Meteor pair this project targets
 //
-// The other supported Minecraft versions live in versions/<target>/. Each one of
-// those is a standalone project too, with its own wrapper and its own sources,
-// so any of them can be copied out or checked out on its own.
+// Nothing is shared with the rest of the repository. This folder can be copied
+// out on its own and it still builds.
 
 pluginManagement {
     repositories {
@@ -19,4 +18,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = "orbiter"
+rootProject.name = "orbiter-26.3"

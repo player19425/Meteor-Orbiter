@@ -1,9 +1,11 @@
-// Meteor Orbiter, standalone build.
+// Meteor Orbiter for Minecraft 26.3, standalone project.
 //
-// This project is self-contained: `gradlew build` here produces the jar for the
-// Minecraft version named in version.properties. Every other supported version
-// lives in versions/<target>/ and is its own standalone project with its own
-// wrapper and its own sources.
+//   gradlew build        -> build the jar
+//   gradlew runClient    -> launch a dev client with the addon loaded
+//   gradlew printTarget  -> show the Minecraft/Meteor pair this project targets
+//
+// Nothing is shared with the rest of the repository. This branch can be
+// checked out on its own and it still builds.
 
 import java.util.Properties
 
