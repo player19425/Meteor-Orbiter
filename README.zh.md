@@ -42,20 +42,21 @@ Orbiter 是一套为 [Meteor Client](https://meteorclient.com/) 打造的模块�
 
 所有版本都需要 [Fabric Loader](https://fabricmc.net/use/installer/) 0.19.3 或更高。
 
-每个支持的版本都有自己完整的一套源码和自己的 Gradle 工程，所以它们都可以单独编译、打标签或者单独发布。详见 [docs/multi-version.md](docs/multi-version.md)。
+每个支持的版本各占一个分支，整个工程就放在分支根目录，所以它们都可以单独克隆、编译、打标签或者单独发布。
 
 # 编译
 
-仓库根目录编译的是 Minecraft 26.3：
+`26.3` 分支编译的是 Minecraft 26.3：
 
 ```
 gradlew build
 ```
 
-其他版本在各自的文件夹里编译：
+其他版本在各自的分支里编译：
 
 ```
-cd versions/26.2
+git clone -b 26.2 https://github.com/player19425/Meteor-Orbiter.git
+cd Meteor-Orbiter
 gradlew build
 ```
 
@@ -63,7 +64,7 @@ gradlew build
 
 | 命令 | 作用 |
 |---|---|
-| `gradlew build` | 编译该文件夹 `version.properties` 里指定的 Minecraft 版本的 jar |
+| `gradlew build` | 编译该分支 `version.properties` 里指定的 Minecraft 版本的 jar |
 | `gradlew runClient` | 启动一个加载了本插件的开发客户端 |
 | `gradlew printTarget` | 打印该工程对应的 Minecraft/Meteor 组合 |
 
