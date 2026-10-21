@@ -13,6 +13,9 @@
   <a href="https://github.com/player19425/Meteor-Orbiter/issues"><img src="https://img.shields.io/github/issues/player19425/Meteor-Orbiter?style=flat" alt="Issues"></a>
   <a href="https://github.com/player19425/Meteor-Orbiter/blob/26.2/LICENSE"><img src="https://img.shields.io/github/license/player19425/Meteor-Orbiter?style=flat" alt="License"></a>
 </div>
+<p align="center">
+  <a href="README.md"><b>English</b></a> &nbsp;&middot;&nbsp; <a href="README.es.md">Español</a> &nbsp;&middot;&nbsp; <a href="README.zh.md">中文</a>
+</p>
 
 <hr />
 
