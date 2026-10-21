@@ -3,7 +3,6 @@
   <h1>Meteor Orbiter</h1>
   <p>An addon for <a href="https://meteorclient.com/">Meteor Client</a> that adds 60+ modules, custom commands, and HUD elements for anarchy, griefing, and quality of life.</p>
 
-  
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.6-orange" alt="Version"></a>
   <img src="https://img.shields.io/badge/Minecraft-26.3%20%7C%2026.2%20%7C%2026.1.2%20%7C%201.21.11-blue" alt="Supported Minecraft versions">
   <img src="https://img.shields.io/badge/Java-25%20%7C%2021-green" alt="Java version">
