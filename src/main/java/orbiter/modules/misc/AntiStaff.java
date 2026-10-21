@@ -1,6 +1,7 @@
 package orbiter.modules.misc;
 
 import orbiter.Orbiter;
+import orbiter.compat.ClientCompat;
 import com.mojang.authlib.GameProfile;
 import meteordevelopment.meteorclient.events.game.GameJoinedEvent;
 import meteordevelopment.meteorclient.events.game.ReceiveMessageEvent;
@@ -10,6 +11,7 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
@@ -21,6 +23,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.GameType;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -250,11 +253,15 @@ public class AntiStaff extends Module {
     private final Set<String> tabListNames = new HashSet<>();
 
     private record PacketPlayerUpdate(UUID uuid, String name, String display, boolean removed) {}
-    private final java.util.Queue<PacketPlayerUpdate> pendingPlayerUpdates = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private final Queue<PacketPlayerUpdate> pendingPlayerUpdates = new ConcurrentLinkedQueue<>();
 
     private TriggerAction pendingAction;
     private String pendingTarget;
     private int pendingDelay;
+
+    private final Set<String> vanishCandidates = new HashSet<>();
+    private TokenSet prefixTokenCache = TokenSet.EMPTY;
+    private TokenSet operatorTokenCache = TokenSet.EMPTY;
 
     public AntiStaff() {
         super(Orbiter.CATEGORY, "anti-staff",
@@ -276,6 +283,7 @@ public class AntiStaff extends Module {
         knownPlayers.clear();
         alertedPlayers.clear();
         tabListNames.clear();
+        vanishCandidates.clear();
         pendingPlayerUpdates.clear();
         scanTicker = 0;
         proxTicker = 0;
@@ -290,9 +298,15 @@ public class AntiStaff extends Module {
     private void onGameJoined(GameJoinedEvent event) {
         knownPlayers.clear();
         alertedPlayers.clear();
+        vanishCandidates.clear();
         scanTicker = 0;
         proxTicker = 0;
         if (checkOnJoin.get()) scanTabSnapshot("join");
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        resetAll();
     }
 
     @EventHandler
@@ -351,7 +365,7 @@ public class AntiStaff extends Module {
                 pendingPlayerUpdates.add(new PacketPlayerUpdate(uuid, name, display, false));
             }
         }
-        if (notifyOnLeave.get() && event.packet instanceof net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket packet) {
+        if (notifyOnLeave.get() && event.packet instanceof ClientboundPlayerInfoRemovePacket packet) {
             for (UUID uuid : packet.profileIds()) {
                 pendingPlayerUpdates.add(new PacketPlayerUpdate(uuid, "", "", true));
             }
@@ -465,8 +479,6 @@ public class AntiStaff extends Module {
         }
     }
 
-    private Set<String> vanishCandidatesPrev = new HashSet<>();
-
     private void scanVanished() {
         if (mc.level == null || mc.player == null) return;
         ClientPacketListener handler = mc.getConnection();
@@ -493,7 +505,7 @@ public class AntiStaff extends Module {
 
             current.add(lower);
 
-            if (!vanishCandidatesPrev.contains(lower)) continue;
+            if (!vanishCandidates.contains(lower)) continue;
             String key = "vanish:" + lower;
             if (!alertedPlayers.contains(key)) {
                 alertedPlayers.add(key);
@@ -503,7 +515,8 @@ public class AntiStaff extends Module {
             }
         }
 
-        vanishCandidatesPrev = current;
+        vanishCandidates.clear();
+        vanishCandidates.addAll(current);
     }
 
     private void processPlayerDetected(String name, String display, UUID uuid, String source) {
@@ -541,23 +554,14 @@ public class AntiStaff extends Module {
 
     private void executeAction(TriggerAction action, String target) {
 
-        if (sendChatBeforeAction.get() && mc.player != null && mc.player.connection != null) {
-            String msg = chatMessage.get();
-            if (msg != null && !msg.isBlank()) {
-                if (msg.startsWith("/")) mc.player.connection.sendCommand(msg.substring(1));
-                else mc.player.connection.sendChat(msg);
-            }
-        }
+        boolean chatSent = false;
+        if (sendChatBeforeAction.get() && sendChatMessage()) chatSent = true;
 
         switch (action) {
             case Nothing, Notify -> {}
             case Leave -> forceLeave("Detected: " + (target != null ? target : "unknown"));
             case SendChat -> {
-                String msg = chatMessage.get();
-                if (msg != null && !msg.isBlank()) {
-                    if (msg.startsWith("/")) mc.player.connection.sendCommand(msg.substring(1));
-                    else mc.player.connection.sendChat(msg);
-                }
+                if (!chatSent) sendChatMessage();
             }
             case DisableModules -> toggleModules(modulesToDisable.get(), false);
             case EnableModules -> toggleModules(modulesToEnable.get(), true);
@@ -566,6 +570,17 @@ public class AntiStaff extends Module {
                 forceLeave("Detected: " + (target != null ? target : "unknown"));
             }
         }
+    }
+
+    private boolean sendChatMessage() {
+        if (mc.player == null || mc.player.connection == null) return false;
+
+        String msg = chatMessage.get();
+        if (msg == null || msg.isBlank()) return false;
+
+        if (msg.startsWith("/")) mc.player.connection.sendCommand(msg.substring(1));
+        else mc.player.connection.sendChat(msg);
+        return true;
     }
 
     private void toggleModules(String list, boolean enable) {
@@ -597,8 +612,8 @@ public class AntiStaff extends Module {
             if (high) warning(message);
             else info(message);
         }
-        if (toastNotifications.get() && mc.gui.toastManager() != null) {
-            mc.gui.toastManager().addToast(new SystemToast(
+        if (toastNotifications.get() && ClientCompat.toastManager() != null) {
+            ClientCompat.toastManager().addToast(new SystemToast(
                 SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
                 Component.literal("§c⚠ AntiStaff"),
                 Component.literal(playerName + " detected!")
@@ -626,9 +641,8 @@ public class AntiStaff extends Module {
 
         if (detectRankSymbols.get() && (clean.contains("[+]") || clean.contains("[-]") || clean.contains("[*]"))) return true;
 
-        for (String p : split(watchedPrefixes.get())) {
-            String pat = normalize(stripFormatting(p));
-            if (!p.isBlank() && matchesToken(clean, pat)) return true;
+        for (Pattern prefix : prefixTokens()) {
+            if (prefix.matcher(clean).find()) return true;
         }
         for (String w : split(watchedUsernames.get())) {
             if (!w.isBlank() && clean.contains(normalize(w))) return true;
@@ -695,16 +709,44 @@ public class AntiStaff extends Module {
     private boolean isMatchOperator(String cleanDisplay) {
         if (cleanDisplay == null || cleanDisplay.isBlank()) return false;
         String clean = normalize(cleanDisplay);
-        for (String p : split(operatorPatterns.get())) {
-            String pat = normalize(stripFormatting(p));
-            if (!pat.isBlank() && matchesToken(clean, pat)) return true;
+        for (Pattern operator : operatorTokens()) {
+            if (operator.matcher(clean).find()) return true;
         }
         return false;
     }
 
-    private boolean matchesToken(String text, String token) {
-        int flags = caseSensitive.get() ? 0 : Pattern.CASE_INSENSITIVE;
-        return Pattern.compile("(?<![\\w])" + Pattern.quote(token) + "(?![\\w])", flags).matcher(text).find();
+    private List<Pattern> prefixTokens() {
+        String raw = watchedPrefixes.get();
+        if (prefixTokenCache.matches(raw, caseSensitive.get())) return prefixTokenCache.patterns();
+        prefixTokenCache = compileTokens(raw);
+        return prefixTokenCache.patterns();
+    }
+
+    private List<Pattern> operatorTokens() {
+        String raw = operatorPatterns.get();
+        if (operatorTokenCache.matches(raw, caseSensitive.get())) return operatorTokenCache.patterns();
+        operatorTokenCache = compileTokens(raw);
+        return operatorTokenCache.patterns();
+    }
+
+    private TokenSet compileTokens(String raw) {
+        boolean caseSensitiveNow = caseSensitive.get();
+        List<Pattern> tokens = new ArrayList<>();
+        for (String entry : split(raw)) {
+            String token = normalize(stripFormatting(entry));
+            if (token.isBlank()) continue;
+            int flags = caseSensitiveNow ? 0 : Pattern.CASE_INSENSITIVE;
+            tokens.add(Pattern.compile("(?<![\\w])" + Pattern.quote(token) + "(?![\\w])", flags));
+        }
+        return new TokenSet(raw, caseSensitiveNow, tokens);
+    }
+
+    private record TokenSet(String source, boolean caseSensitiveFlag, List<Pattern> patterns) {
+        private static final TokenSet EMPTY = new TokenSet("", false, List.of());
+
+        boolean matches(String raw, boolean caseSensitiveNow) {
+            return source.equals(raw) && caseSensitiveFlag == caseSensitiveNow;
+        }
     }
 
     private String bestLabel(String name, String display) {

@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Hud.class)
 public abstract class ClientSideBossBarMixin {
-    @Inject(method = "extractBossOverlay(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "extractBossOverlay(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$hideBossBars(GuiGraphicsExtractor extractor, DeltaTracker tracker, CallbackInfo ci) {
         if (ClientSpoofState.module() != null && ClientSpoofState.module().shouldHideAllBossbars()) ci.cancel();
     }

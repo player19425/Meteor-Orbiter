@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(MultiPlayerGameMode.class)
 public abstract class ClientPlayerInteractionManagerSpoofMixin {
-    @Inject(method = "getPlayerMode", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getPlayerMode", at = @At("HEAD"), cancellable = true, require = 1)
     private void orbiter$getCurrentGameMode(CallbackInfoReturnable<GameType> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.visualCreativeEnabled()) return;
@@ -19,12 +19,11 @@ public abstract class ClientPlayerInteractionManagerSpoofMixin {
         cir.setReturnValue(GameType.CREATIVE);
     }
 
-    @Inject(method = "hasExperience", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "hasExperience", at = @At("HEAD"), cancellable = true, require = 1)
     private void orbiter$hasExperienceBar(CallbackInfoReturnable<Boolean> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.visualCreativeEnabled()) return;
 
         cir.setReturnValue(false);
     }
-
 }

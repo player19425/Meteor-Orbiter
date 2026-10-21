@@ -16,12 +16,12 @@ public class CrashFixerParticleManagerMixin {
     @Unique
     private int spawnedThisTick = 0;
 
-    @Inject(method = "tick", at = @At("HEAD"))
+    @Inject(method = "tick", at = @At("HEAD"), require = 0)
     private void orbiter$resetParticleCounter(CallbackInfo ci) {
         this.spawnedThisTick = 0;
     }
 
-    @Inject(method = "add(Lnet/minecraft/client/particle/Particle;)V", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "add(Lnet/minecraft/client/particle/Particle;)V", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$throttleParticles(Particle particle, CallbackInfo ci) {
         ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);
         if (mod == null || !mod.isActive() || !mod.shouldThrottleParticles()) return;

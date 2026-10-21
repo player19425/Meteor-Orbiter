@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Player.class)
 public abstract class PlayerAbsorptionSpoofMixin {
-    @Inject(method = "getAbsorptionAmount", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getAbsorptionAmount", at = @At("HEAD"), cancellable = true, require = 1)
     private void orbiter$getAbsorptionAmount(CallbackInfoReturnable<Float> cir) {
         ClientSideThings module = ClientSpoofState.module();
         Minecraft client = Minecraft.getInstance();

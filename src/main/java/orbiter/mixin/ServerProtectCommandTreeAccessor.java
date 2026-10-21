@@ -9,6 +9,6 @@ import java.util.List;
 @Mixin(ClientboundCommandsPacket.class)
 public interface ServerProtectCommandTreeAccessor {
 
-    @Accessor("entries")
+    @Accessor(value = "entries")
     List<?> orbiter$getEntries();
 }

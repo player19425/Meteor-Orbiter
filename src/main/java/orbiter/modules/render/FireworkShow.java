@@ -1,6 +1,7 @@
 package orbiter.modules.render;
 
 import orbiter.util.CommandUtils;
+import orbiter.util.GlobalSendLimiter;
 import orbiter.modules.world.CreativeSafetyModule;
 import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -31,7 +32,7 @@ public class FireworkShow extends CreativeSafetyModule {
     private static final int MAX_COMMAND_BLOCK_COMMAND_LENGTH = 32700;
     private static final int OMEGA_PLUS_HARD_MAX_EXPLOSIONS = 24;
     private static final int OMEGA_PLUS_HARD_MAX_COLORS = 4;
-    private static final int OMEGA_PLUS_HARD_MAX_CLONES = 1;
+    private static final int OMEGA_PLUS_HARD_MAX_CLONES = 4;
     private static final int OMEGA_PLUS_FALLBACK_BUDGET = 40;
     private static final int OMEGA_PLUS_HARD_MAX_BUDGET = 80;
 
@@ -145,7 +146,7 @@ public class FireworkShow extends CreativeSafetyModule {
 
     private final Setting<OmegaPlusDelivery> omegaPlusDelivery = sgShow.add(new EnumSetting.Builder<OmegaPlusDelivery>()
             .name("omega-plus-delivery")
-            .description("How Omega+ injects long commands.")
+            .description("CommandBlock only uses setblock, the other two also hand you the command block item.")
             .defaultValue(OmegaPlusDelivery.CommandBlock)
             .visible(this::isOmegaPlusMode)
             .build());
@@ -197,7 +198,7 @@ public class FireworkShow extends CreativeSafetyModule {
 
     private final Setting<Integer> omegaPlusMaxLaunchesPerTick = sgShow.add(new IntSetting.Builder()
             .name("omega-plus-max-launches-per-tick")
-            .description("Hard safety cap for Omega+ launches per tick.")
+            .description("Launches per tick for Omega+, capped by commands-per-tick.")
             .defaultValue(1)
             .min(1)
             .sliderRange(1, 4)
@@ -295,6 +296,8 @@ public class FireworkShow extends CreativeSafetyModule {
 
     @Override
     public void onActivate() {
+        safetyActivate();
+
         if (mc.player == null) {
             toggle();
             return;
@@ -372,7 +375,7 @@ public class FireworkShow extends CreativeSafetyModule {
 
         int launchesPerTick = commandsPerTick.get();
         if (isOmegaPlusMode()) {
-            launchesPerTick = Math.min(1, omegaPlusMaxLaunchesPerTick.get());
+            launchesPerTick = Math.min(Math.max(1, omegaPlusMaxLaunchesPerTick.get()), Math.max(1, commandsPerTick.get()));
         } else if (isOmegaMode()) {
             launchesPerTick = Math.min(launchesPerTick + omegaExtraCommands.get(), 80);
         }
@@ -460,6 +463,7 @@ public class FireworkShow extends CreativeSafetyModule {
         }
 
         String cmd = buildFireworkSummonCommand(x, y, z);
+        if (!GlobalSendLimiter.tryAcquireOne()) return false;
         mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
         return true;
     }
@@ -569,11 +573,9 @@ public class FireworkShow extends CreativeSafetyModule {
         boolean sent = false;
 
         OmegaPlusDelivery mode = omegaPlusDelivery.get();
-        boolean creativeGive = omegaPlusUseCreativeGive.get() || mode == OmegaPlusDelivery.CreativeGiveAndPlace || mode == OmegaPlusDelivery.Both;
+        boolean creativeGive = mode != OmegaPlusDelivery.CommandBlock || omegaPlusUseCreativeGive.get();
 
         for (int c = 0; c < clones; c++) {
-            if (!canPlaceOmegaPlusBlockNow()) break;
-
             double angle = (Math.PI * 2.0 * c) / clones + (index * 0.37);
             int ox = (int) Math.round(Math.cos(angle) * spacing);
             int oz = (int) Math.round(Math.sin(angle) * spacing);
@@ -600,7 +602,8 @@ public class FireworkShow extends CreativeSafetyModule {
                 pos.getY(),
                 pos.getZ(),
                 facing.getSerializedName());
-        if (setblock.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.connection.sendCommand(CommandUtils.vanilla(setblock));
+        if (setblock.length() <= MAX_CHAT_COMMAND_LENGTH && GlobalSendLimiter.tryAcquireOne())
+            mc.player.connection.sendCommand(CommandUtils.vanilla(setblock));
 
         mc.player.connection.send(new ServerboundSetCommandBlockPacket(
                 pos,
@@ -615,14 +618,10 @@ public class FireworkShow extends CreativeSafetyModule {
                 powerPos.getX(),
                 powerPos.getY(),
                 powerPos.getZ());
-        if (power.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.connection.sendCommand(CommandUtils.vanilla(power));
+        if (power.length() <= MAX_CHAT_COMMAND_LENGTH && GlobalSendLimiter.tryAcquireOne())
+            mc.player.connection.sendCommand(CommandUtils.vanilla(power));
 
         queueOmegaCleanup(pos, powerPos);
-    }
-
-    private void placeAndProgramCommandBlockViaCreative(BlockPos pos, String command, Direction facing) {
-        giveCommandBlockToHotbar();
-        placeAndProgramCommandBlockViaSetblock(pos, command, facing);
     }
 
     private void giveCommandBlockToHotbar() {
@@ -685,7 +684,8 @@ public class FireworkShow extends CreativeSafetyModule {
                 pos.getX(),
                 pos.getY(),
                 pos.getZ());
-        if (clear.length() <= MAX_CHAT_COMMAND_LENGTH) mc.player.connection.sendCommand(CommandUtils.vanilla(clear));
+        if (clear.length() <= MAX_CHAT_COMMAND_LENGTH && GlobalSendLimiter.tryAcquireOne())
+            mc.player.connection.sendCommand(CommandUtils.vanilla(clear));
     }
 
     private String buildFireworkEntityNBT(int explosionCount, int colorsPerExplosion, boolean includeFadeColors,
@@ -754,6 +754,7 @@ public class FireworkShow extends CreativeSafetyModule {
         omegaRedstoneCleanupTicks.clear();
         omegaCleanupTicks.clear();
         if (launchedCount > 0) info("Show ended. Total launched: " + launchedCount);
+        safetyDeactivate();
     }
 
     public enum FireworkShape {

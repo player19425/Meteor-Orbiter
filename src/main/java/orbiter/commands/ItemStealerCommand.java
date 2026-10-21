@@ -2,6 +2,7 @@ package orbiter.commands;
 
 import orbiter.modules.misc.ItemStealer;
 import orbiter.mixin.HandledScreenAccessor;
+import orbiter.compat.ClientCompat;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -54,7 +55,7 @@ public class ItemStealerCommand extends Command {
     };
 
     public ItemStealerCommand() {
-        super("itemstealer", "Save / load / manage cloned items. Aliases: .is, .steal", "is", "steal");
+        super("itemstealer", "Saves, loads and manages cloned items.", "is", "steal");
     }
 
     @Override
@@ -98,10 +99,9 @@ public class ItemStealerCommand extends Command {
 
         ItemStack toSave = null;
         if (mc.player != null) {
-
             if (!mc.player.getMainHandItem().isEmpty()) toSave = mc.player.getMainHandItem().copy();
 
-            if (toSave == null && mc.gui.screen() instanceof AbstractContainerScreen<?> handled) {
+            if (toSave == null && ClientCompat.screen() instanceof AbstractContainerScreen<?> handled) {
                 Slot slot = ((HandledScreenAccessor) handled).getHoveredSlot();
                 if (slot != null && !slot.getItem().isEmpty()) toSave = slot.getItem().copy();
             }
@@ -122,7 +122,7 @@ public class ItemStealerCommand extends Command {
         }
 
         if (mod.saveItem(id, toSave)) {
-            ChatUtils.info("Saved '" + toSave.getItemName().getString() + "' as '" + id + "'.");
+            ChatUtils.info("Saved '%s' as '%s'.", toSave.getItemName().getString(), id);
             return SINGLE_SUCCESS;
         }
         error("Failed to save item.");
@@ -135,11 +135,11 @@ public class ItemStealerCommand extends Command {
         if (mod == null) { error("ItemStealer not available."); return 0; }
         ItemStack stack = mod.loadItem(id);
         if (stack == null || stack.isEmpty()) {
-            warning("No saved item with id '" + id + "'.");
+            warning("No saved item with id '%s'.", id);
             return 0;
         }
         mod.injectClonedIntoInventory(stack);
-        ChatUtils.info("Loaded '" + id + "': " + stack.getItemName().getString() + " x" + stack.getCount());
+        ChatUtils.info("Loaded '%s': %s x%s", id, stack.getItemName().getString(), stack.getCount());
         return SINGLE_SUCCESS;
     }
 
@@ -148,10 +148,10 @@ public class ItemStealerCommand extends Command {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
         if (mod.deleteItem(id)) {
-            ChatUtils.info("Deleted '" + id + "'.");
+            ChatUtils.info("Deleted '%s'.", id);
             return SINGLE_SUCCESS;
         }
-        warning("Nothing to delete for id '" + id + "'.");
+        warning("Nothing to delete for id '%s'.", id);
         return 0;
     }
 
@@ -162,11 +162,11 @@ public class ItemStealerCommand extends Command {
         if (ids.isEmpty()) {
             ChatUtils.info("No saved items.");
         } else {
-            ChatUtils.info("Saved items (" + ids.size() + "):");
+            ChatUtils.info("Saved items (%s):", ids.size());
             for (String id : ids) {
                 ItemStack stack = mod.peekItem(id);
                 String name = (stack != null && !stack.isEmpty()) ? stack.getItemName().getString() : "(unreadable)";
-                ChatUtils.info("  - " + id + ": " + name);
+                ChatUtils.info("  - %s: %s", id, name);
             }
         }
         return SINGLE_SUCCESS;
@@ -187,7 +187,7 @@ public class ItemStealerCommand extends Command {
 
         int count = mod.stealAllSlots();
         if (count > 0) {
-            ChatUtils.info("Stole " + count + " item(s) from the current GUI.");
+            ChatUtils.info("Stole %s item(s) from the current GUI.", count);
         } else {
             info("No items to steal in the current GUI (or all filtered out).");
         }
@@ -205,7 +205,7 @@ public class ItemStealerCommand extends Command {
         }
 
         if (mod.saveHotbarPreset(name)) {
-            ChatUtils.info("Hotbar preset saved as '" + name + "'.");
+            ChatUtils.info("Hotbar preset saved as '%s'.", name);
         } else {
             error("Failed to save hotbar preset.");
         }
@@ -223,9 +223,9 @@ public class ItemStealerCommand extends Command {
         }
 
         if (mod.loadHotbarPreset(name)) {
-            ChatUtils.info("Hotbar preset '" + name + "' loaded.");
+            ChatUtils.info("Hotbar preset '%s' loaded.", name);
         } else {
-            error("Hotbar preset '" + name + "' not found.");
+            error("Hotbar preset '%s' not found.", name);
         }
         return SINGLE_SUCCESS;
     }
@@ -238,11 +238,11 @@ public class ItemStealerCommand extends Command {
         if (items.isEmpty()) {
             ChatUtils.info("Saved items: (none)");
         } else {
-            ChatUtils.info("Saved items (" + items.size() + "):");
+            ChatUtils.info("Saved items (%s):", items.size());
             for (String id : items) {
                 ItemStack stack = mod.peekItem(id);
                 String name = (stack != null && !stack.isEmpty()) ? stack.getItemName().getString() : "(unreadable)";
-                ChatUtils.info("  - " + id + ": " + name);
+                ChatUtils.info("  - %s: %s", id, name);
             }
         }
 
@@ -250,9 +250,9 @@ public class ItemStealerCommand extends Command {
         if (hotbars.isEmpty()) {
             ChatUtils.info("Hotbar presets: (none)");
         } else {
-            ChatUtils.info("Hotbar presets (" + hotbars.size() + "):");
+            ChatUtils.info("Hotbar presets (%s):", hotbars.size());
             for (String presetName : hotbars) {
-                ChatUtils.info("  - " + presetName);
+                ChatUtils.info("  - %s", presetName);
             }
         }
 
@@ -260,13 +260,13 @@ public class ItemStealerCommand extends Command {
         if (snapshots.isEmpty()) {
             ChatUtils.info("Container snapshots: (none)");
         } else {
-            ChatUtils.info("Container snapshots (" + snapshots.size() + "):");
+            ChatUtils.info("Container snapshots (%s):", snapshots.size());
             for (String snapId : snapshots) {
-                ChatUtils.info("  - " + snapId);
+                ChatUtils.info("  - %s", snapId);
             }
         }
 
-        ChatUtils.info("Creative presets: " + String.join(", ", mod.getPresetNames()));
+        ChatUtils.info("Creative presets: %s", String.join(", ", mod.getPresetNames()));
 
         return SINGLE_SUCCESS;
     }
@@ -282,7 +282,7 @@ public class ItemStealerCommand extends Command {
         }
 
         if (count > 0) {
-            ChatUtils.info("Dumped " + count + " trade result(s).");
+            ChatUtils.info("Dumped %s trade result(s).", count);
         } else {
             info("No trade results to clone (or all filtered out).");
         }
@@ -307,9 +307,9 @@ public class ItemStealerCommand extends Command {
 
         int count = mod.stealSlotRange(start, end);
         if (count > 0) {
-            ChatUtils.info("Stole " + count + " item(s) from slots " + start + "-" + end + ".");
+            ChatUtils.info("Stole %s item(s) from slots %s-%s.", count, start, end);
         } else {
-            info("No items to steal in slot range " + start + "-" + end + ".");
+            info("No items to steal in slot range %s-%s.", start, end);
         }
         return SINGLE_SUCCESS;
     }
@@ -319,8 +319,7 @@ public class ItemStealerCommand extends Command {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
 
-        String description = mod.describeSnapshot(id);
-        ChatUtils.info(description);
+        ChatUtils.info("%s", mod.describeSnapshot(id));
         return SINGLE_SUCCESS;
     }
 
@@ -340,9 +339,9 @@ public class ItemStealerCommand extends Command {
         }
 
         if (mod.givePresetItem(name)) {
-            ChatUtils.info("Gave preset item: " + name);
+            ChatUtils.info("Gave preset item: %s", name);
         } else {
-            error("Unknown preset: " + name + ". Available: " + String.join(", ", mod.getPresetNames()));
+            error("Unknown preset: %s. Available: %s", name, String.join(", ", mod.getPresetNames()));
         }
         return SINGLE_SUCCESS;
     }
@@ -353,9 +352,9 @@ public class ItemStealerCommand extends Command {
         if (mod == null) { error("ItemStealer not available."); return 0; }
 
         if (mod.deleteHotbarPreset(name)) {
-            ChatUtils.info("Deleted hotbar preset '" + name + "'.");
+            ChatUtils.info("Deleted hotbar preset '%s'.", name);
         } else {
-            warning("Hotbar preset '" + name + "' not found.");
+            warning("Hotbar preset '%s' not found.", name);
         }
         return SINGLE_SUCCESS;
     }

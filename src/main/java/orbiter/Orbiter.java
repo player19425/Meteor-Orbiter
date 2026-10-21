@@ -117,19 +117,18 @@ import meteordevelopment.meteorclient.systems.hud.HudElementInfo;
 import meteordevelopment.meteorclient.systems.hud.HudGroup;
 import meteordevelopment.meteorclient.systems.modules.Category;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import meteordevelopment.meteorclient.utils.render.DisplayItemUtils;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import orbiter.util.CategoryIcons;
 import org.slf4j.Logger;
 
 public class Orbiter extends MeteorAddon {
     public static final Logger LOG = LogUtils.getLogger();
 
-    public static final Category CATEGORY = new Category("Orbiter Survival", () -> DisplayItemUtils.toStack(Items.DIAMOND_BLOCK));
-    public static final Category CATEGORY_VANILLA = new Category("Orbiter Vanilla", () -> DisplayItemUtils.toStack(Items.NETHERITE_SWORD));
-    public static final Category CATEGORY_OP = new Category("Orbiter Creative/OP", () -> DisplayItemUtils.toStack(Items.COMMAND_BLOCK));
-    public static final Category CATEGORY_STUPID = new Category("Orbiter Stupid", () -> DisplayItemUtils.toStack(Items.SLIME_BLOCK));
-    public static final Category CATEGORY_WIP = new Category("Orbiter W.I.P", () -> DisplayItemUtils.toStack(Items.WRITABLE_BOOK));
+    public static final Category CATEGORY = CategoryIcons.of("Orbiter Survival", Items.DIAMOND_BLOCK);
+    public static final Category CATEGORY_VANILLA = CategoryIcons.of("Orbiter Vanilla", Items.NETHERITE_SWORD);
+    public static final Category CATEGORY_OP = CategoryIcons.of("Orbiter Creative/OP", Items.COMMAND_BLOCK);
+    public static final Category CATEGORY_STUPID = CategoryIcons.of("Orbiter Stupid", Items.SLIME_BLOCK);
+    public static final Category CATEGORY_WIP = CategoryIcons.of("Orbiter W.I.P", Items.WRITABLE_BOOK);
     public static final HudGroup HUD_GROUP = new HudGroup("Orbiter");
 
     @Override
@@ -144,7 +143,8 @@ public class Orbiter extends MeteorAddon {
         if (modules == null) {
             LOG.warn("Modules system not available, skipping module registration");
             return;
-        }        modules.add(new AutoCraftPlus());
+        }
+        modules.add(new AutoCraftPlus());
         modules.add(new AutoShop());
         modules.add(new AutoLogin());
         modules.add(new AntiStaff());

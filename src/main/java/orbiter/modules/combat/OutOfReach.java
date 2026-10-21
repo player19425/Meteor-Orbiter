@@ -12,6 +12,7 @@ import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.systems.modules.world.Timer;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.world.entity.Entity;
@@ -159,9 +160,16 @@ public class OutOfReach extends Module {
         .defaultValue(false)
         .build());
 
+    private final Setting<Boolean> disableReachOnDeactivate = sgGeneral.add(new BoolSetting.Builder()
+        .name("disable-reach-on-deactivate")
+        .description("Turns Reach back off when this module is disabled, if OutOfReach enabled it.")
+        .defaultValue(true)
+        .visible(autoEnableReach::get)
+        .build());
+
     private final Setting<TargetMode> targetMode = sgTargeting.add(new EnumSetting.Builder<TargetMode>()
         .name("target-mode")
-        .description("Auto picks the most dangerous threat. Selected only protects against your selected player.")
+        .description("Auto picks the closest threat, Selected uses the player you aimed at.")
         .defaultValue(TargetMode.Auto)
         .build());
 
@@ -257,6 +265,7 @@ public class OutOfReach extends Module {
     private String selectedTargetName;
 
     private boolean timerEnabledByOutOfReach;
+    private boolean reachEnabledByOutOfReach;
 
     private static final double[] SAFE_HEADING_OFFSETS = {0.0, 20.0, -20.0, 40.0, -40.0, 65.0, -65.0, 90.0, -90.0};
 
@@ -297,6 +306,10 @@ public class OutOfReach extends Module {
 
         if (useTimerBoost.get() || timerEnabledByOutOfReach) {
             releaseTimerBoost(disableTimerOnDeactivate.get());
+        }
+
+        if (autoEnableReach.get() || reachEnabledByOutOfReach) {
+            releaseReachModule(disableReachOnDeactivate.get());
         }
 
         if (targetMode.get() == TargetMode.Selected && !keepSelectedTarget.get()) {
@@ -688,7 +701,23 @@ public class OutOfReach extends Module {
         Module reach = modules.get("reach");
         if (reach == null) reach = modules.get("Reach");
 
-        if (reach != null && !reach.isActive()) reach.toggle();
+        if (reach != null && !reach.isActive()) {
+            reach.toggle();
+            if (reach.isActive()) reachEnabledByOutOfReach = true;
+        }
+    }
+
+    private void releaseReachModule(boolean disableReachModule) {
+        Modules modules = Modules.get();
+        if (modules == null) return;
+        Module reach = modules.get("reach");
+        if (reach == null) reach = modules.get("Reach");
+
+        if (disableReachModule && reachEnabledByOutOfReach && reach != null && reach.isActive()) {
+            reach.toggle();
+        }
+
+        reachEnabledByOutOfReach = false;
     }
 
     private void ensureTimerBoost() {
@@ -725,5 +754,14 @@ public class OutOfReach extends Module {
         if (lastThreat != null) return lastThreat.getName().getString();
         if (targetMode.get() == TargetMode.Selected && selectedTargetName != null) return "sel:" + selectedTargetName;
         return null;
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        lastThreat = null;
+        cooldownLeft = 0;
+        selectedTargetUuid = null;
+        selectedTargetName = null;
+        releaseTimerBoost(false);
     }
 }

@@ -29,11 +29,11 @@ public class JumpA extends Module {
         .defaultValue(2.0).min(0.42).max(4.0).sliderRange(0.42, 4.0).build());
 
     private final Setting<Integer> maxScanHeight = sg.add(new IntSetting.Builder()
-        .name("max-scan-height").description("Scan upward this many blocks for a platform and jump to the highest non-air block found (0 = off).")
+        .name("max-scan-height").description("Scan this many blocks up for the highest platform to jump to (0 = off).")
         .defaultValue(32).min(0).max(256).sliderRange(0, 128).build());
 
     private final Setting<Boolean> unlimitedHeight = sg.add(new BoolSetting.Builder()
-        .name("unlimited-height").description("Ignore the velocity cap and jump as high as the target requires (like Slime Jump).")
+        .name("unlimited-height").description("Ignore the velocity cap and jump as high as the target needs.")
         .defaultValue(false).build());
 
     private final Setting<Double> lookRange = sg.add(new DoubleSetting.Builder()
@@ -42,15 +42,19 @@ public class JumpA extends Module {
 
     private final Setting<Boolean> debugMode = sg.add(new BoolSetting.Builder()
         .name("debug").description("Report detection details.")
-        .defaultValue(true).build());
+        .defaultValue(false).build());
 
     public JumpA() {
         super(Orbiter.CATEGORY_STUPID, "jump-a",
             "Jumps over walls and reaches blocks.");
     }
 
-    @Override public void onActivate() {
-        if (!ConfigModifier.get().stupidModulesEnabled()) { info("Stupid Modules disabled."); toggle(); }
+    @Override
+    public void onActivate() {
+        if (!ConfigModifier.get().stupidModulesEnabled()) {
+            info("Stupid Modules disabled.");
+            toggle();
+        }
     }
 
     @EventHandler
@@ -81,7 +85,7 @@ public class JumpA extends Module {
         }
 
         double parkourVelocity = calcParkourJump();
-        if (parkourVelocity > 0 && parkourVelocity <= velocityCap.get()) {
+        if (parkourVelocity > 0 && (unlimitedHeight.get() || parkourVelocity <= velocityCap.get())) {
             applyVelocity(parkourVelocity);
             if (debugMode.get()) info("Parkour jump: velocity %.3f", parkourVelocity);
             return;
@@ -181,7 +185,6 @@ public class JumpA extends Module {
 
         BlockPos landing = target.above();
         if (isSolid(landing) || isSolid(landing.above())) {
-
             boolean foundLanding = false;
             for (BlockPos adj : new BlockPos[]{
                 landing.west(), landing.east(), landing.north(), landing.south()
@@ -197,7 +200,7 @@ public class JumpA extends Module {
         double heightDiff = targetY - mc.player.getY();
         if (heightDiff <= 0) return 0;
 
-        return solveVelocity(heightDiff + 0.36);
+        return solveVelocity(heightDiff + 0.36, unlimitedHeight.get());
     }
 
     private boolean isSolid(BlockPos pos) {

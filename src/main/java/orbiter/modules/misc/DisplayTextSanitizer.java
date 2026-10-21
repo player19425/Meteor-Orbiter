@@ -30,7 +30,7 @@ public final class DisplayTextSanitizer {
     }
 
     public static int clampLineWidth(int lineWidth, int maxSafeLineWidth) {
-        return Math.min(lineWidth, Math.max(1, maxSafeLineWidth));
+        return Math.min(Math.max(1, lineWidth), Math.max(1, maxSafeLineWidth));
     }
 
     private static TextCost analyze(Component root, int maxDepth) {

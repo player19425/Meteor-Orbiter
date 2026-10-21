@@ -11,8 +11,6 @@ import net.minecraft.network.protocol.game.ServerboundChatPacket;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class MessageFormatter extends Module {
 
@@ -34,7 +32,7 @@ public class MessageFormatter extends Module {
     private final Setting<Boolean> appendReset           = sgGeneral.add(new BoolSetting.Builder()
         .name("append-reset").description("Append §r at the end of formatted messages.").defaultValue(true).build());
     private final Setting<Boolean> sanitizeSectionCodes  = sgGeneral.add(new BoolSetting.Builder()
-        .name("sanitize-section-codes").description("Converts § formatting codes to & before the message leaves the client. Vanilla servers disconnect you with 'Illegal characters in chat' when a raw section sign is sent in chat or commands.").defaultValue(true).build());
+        .name("sanitize-section-codes").description("Sends § as & so vanilla servers do not kick you.").defaultValue(true).build());
     private final Setting<Boolean> randomMessage         = sgGeneral.add(new BoolSetting.Builder()
         .name("random-message").description("Append random characters to bypass spam filters.").defaultValue(false).build());
     private final Setting<Boolean> previewEnabled        = sgGeneral.add(new BoolSetting.Builder()
@@ -45,9 +43,9 @@ public class MessageFormatter extends Module {
         .name("repeat-count").description("Number of times to repeat the message.").defaultValue(1).min(1).max(10).sliderRange(1, 10).build());
 
     private final Setting<String> prefix                 = sgGeneral.add(new StringSetting.Builder()
-        .name("prefix").description("Text prepended to every formatted message. Kept raw (no formatting). Can contain spaces, e.g. '/team chat ' to send the message into that command.").defaultValue("").build());
+        .name("prefix").description("Prepended raw, so '/team chat ' still sends a command.").defaultValue("").build());
     private final Setting<String> suffix                 = sgGeneral.add(new StringSetting.Builder()
-        .name("suffix").description("Text appended after every formatted message. Kept raw (no formatting).").defaultValue("").build());
+        .name("suffix").description("Appended raw, no formatting applied.").defaultValue("").build());
 
     private final Setting<CodeOutputMode> codeOutputMode = sgCodes.add(new EnumSetting.Builder<CodeOutputMode>()
         .name("code-output-mode").description("Use § or & for color codes.").defaultValue(CodeOutputMode.Section).build());
@@ -169,14 +167,14 @@ public class MessageFormatter extends Module {
         None, SmallCaps, FullWidth, Circle, Script, DoubleStruck, Fraktur, Monospace, Squared, UpsideDown, Custom
     }
 
-    private static final Map<Character, Character> SMALL_CAPS = new HashMap<>();
-    private static final Map<Character, Character> CIRCLE      = new HashMap<>();
-    private static final Map<Character, Character> SCRIPT      = new HashMap<>();
-    private static final Map<Character, Character> DOUBLE_STRUCK = new HashMap<>();
-    private static final Map<Character, Character> FRAKTUR     = new HashMap<>();
-    private static final Map<Character, Character> MONOSPACE   = new HashMap<>();
-    private static final Map<Character, Character> SQUARED    = new HashMap<>();
-    private static final Map<Character, Character> UPSIDE_DOWN = new HashMap<>();
+    private static final Map<Character, String> SMALL_CAPS = new HashMap<>();
+    private static final Map<Character, String> CIRCLE      = new HashMap<>();
+    private static final Map<Character, String> SCRIPT      = new HashMap<>();
+    private static final Map<Character, String> DOUBLE_STRUCK = new HashMap<>();
+    private static final Map<Character, String> FRAKTUR     = new HashMap<>();
+    private static final Map<Character, String> MONOSPACE   = new HashMap<>();
+    private static final Map<Character, String> SQUARED    = new HashMap<>();
+    private static final Map<Character, String> UPSIDE_DOWN = new HashMap<>();
 
     private static final char[] ZALGO_ABOVE = {
         '\u0300', '\u0301', '\u0302', '\u0303', '\u0304', '\u0305', '\u0306', '\u0307',
@@ -226,13 +224,9 @@ public class MessageFormatter extends Module {
 
     private static final class PendingRepeat {
         final String message;
-        final int remaining;
-        final int tickInterval;
         final long targetTick;
-        PendingRepeat(String message, int remaining, int tickInterval, long targetTick) {
+        PendingRepeat(String message, long targetTick) {
             this.message = message;
-            this.remaining = remaining;
-            this.tickInterval = tickInterval;
             this.targetTick = targetTick;
         }
     }
@@ -267,80 +261,56 @@ public class MessageFormatter extends Module {
         }
     }
 
+    private static void fillTable(Map<Character, String> table, String from, String to) {
+        int[] fromPoints = from.codePoints().toArray();
+        int[] toPoints = to.codePoints().toArray();
+        int count = Math.min(fromPoints.length, toPoints.length);
+        for (int i = 0; i < count; i++) {
+            table.put((char) fromPoints[i], new String(toPoints, i, 1));
+        }
+    }
+
+    private static void fillCaseTable(Map<Character, String> table, String to) {
+        fillTable(table, "abcdefghijklmnopqrstuvwxyz", to);
+        fillTable(table, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", to);
+    }
+
     private void initFontTables() {
-
-        String scLower = "abcdefghijklmnopqrstuvwxyz";
+        String lower = "abcdefghijklmnopqrstuvwxyz";
+        String upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         String scUpper = "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢ";
-        for (int i = 0; i < 26; i++) {
-            SMALL_CAPS.put(scLower.charAt(i), scUpper.charAt(i));
-            SMALL_CAPS.put(scUpper.charAt(i), scUpper.charAt(i));
-        }
+        fillTable(SMALL_CAPS, lower, scUpper);
+        fillTable(SMALL_CAPS, scUpper, scUpper);
 
-        for (char c = 'a'; c <= 'z'; c++) {  }
-
-        String circleLower = "abcdefghijklmnopqrstuvwxyz";
         String circleUpper = "ⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞⓟⓠⓡⓢⓣⓤⓥⓦⓧⓨⓩ";
-        for (int i = 0; i < 26; i++) {
-            CIRCLE.put(circleLower.charAt(i), circleUpper.charAt(i));
-            CIRCLE.put(Character.toUpperCase(circleLower.charAt(i)), circleUpper.charAt(i));
-        }
+        fillCaseTable(CIRCLE, circleUpper);
 
-        String scriptLower = "abcdefghijklmnopqrstuvwxyz";
         String scriptLowerMap = "𝒶𝒷𝒸𝒹ℯ𝒻ℊ𝒽𝒾𝒿𝓀𝓁𝓂𝓃ℴ𝓅𝓆𝓇𝓈𝓉𝓊𝓋𝓌𝓍𝓎𝓏";
-        for (int i = 0; i < 26; i++) {
-            SCRIPT.put(scriptLower.charAt(i), scriptLowerMap.charAt(i));
-        }
-        String scriptUpper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        fillTable(SCRIPT, lower, scriptLowerMap);
         String scriptUpperMap = "𝒜ℬ𝒞𝒟ℰℱ𝒢ℋℐ𝒥𝒦ℒℳ𝒩𝒪𝒫𝒬ℛ𝒮𝒯𝒰𝒱𝒲𝒳𝒴𝒵";
-        for (int i = 0; i < 26; i++) {
-            SCRIPT.put(scriptUpper.charAt(i), scriptUpperMap.charAt(i));
-        }
+        fillTable(SCRIPT, upper, scriptUpperMap);
 
-        String dsLower = "abcdefghijklmnopqrstuvwxyz";
         String dsLowerMap = "𝕒𝕓𝕔𝕕𝕖𝕗𝕘𝕙𝕚𝕛𝕜𝕝𝕞𝕟𝕠𝕡𝕢𝕣𝕤𝕥𝕦𝕧𝕨𝕩𝕪𝕫";
-        for (int i = 0; i < 26; i++) {
-            DOUBLE_STRUCK.put(dsLower.charAt(i), dsLowerMap.charAt(i));
-        }
-        String dsUpper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        fillTable(DOUBLE_STRUCK, lower, dsLowerMap);
         String dsUpperMap = "𝔸𝔹ℂ𝔻𝔼𝔽𝔾ℍ𝕀𝕁𝕂𝕃𝕄ℕ𝕆ℙℚℝ𝕊𝕋𝕌𝕍𝕎𝕏𝕐ℤ";
-        for (int i = 0; i < 26; i++) {
-            DOUBLE_STRUCK.put(dsUpper.charAt(i), dsUpperMap.charAt(i));
-        }
+        fillTable(DOUBLE_STRUCK, upper, dsUpperMap);
 
-        String frakturLower = "abcdefghijklmnopqrstuvwxyz";
         String frakturLowerMap = "𝔞𝔟𝔠𝔡𝔢𝔣𝔤𝔥𝔦𝔧𝔨𝔩𝔪𝔫𝔬𝔭𝔮𝔯𝔰𝔱𝔲𝔳𝔴𝔵𝔶𝔷";
-        for (int i = 0; i < 26; i++) {
-            FRAKTUR.put(frakturLower.charAt(i), frakturLowerMap.charAt(i));
-        }
-        String frakturUpper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        fillTable(FRAKTUR, lower, frakturLowerMap);
         String frakturUpperMap = "𝔄𝔅ℭ𝔇𝔈𝔉𝔊ℌℑ𝔍𝔎𝔏𝔐𝔑𝔒𝔓𝔔ℜ𝔖𝔗𝔘𝔙𝔚𝔛𝔜ℨ";
-        for (int i = 0; i < 26; i++) {
-            FRAKTUR.put(frakturUpper.charAt(i), frakturUpperMap.charAt(i));
-        }
+        fillTable(FRAKTUR, upper, frakturUpperMap);
 
-        String monoLower = "abcdefghijklmnopqrstuvwxyz";
         String monoLowerMap = "𝚊𝚋𝚌𝚍𝚎𝚏𝚐𝚑𝚒𝚓𝚔𝚕𝚖𝚗𝚘𝚙𝚚𝚛𝚜𝚝𝚞𝚟𝚠𝚡𝚢𝚣";
-        for (int i = 0; i < 26; i++) {
-            MONOSPACE.put(monoLower.charAt(i), monoLowerMap.charAt(i));
-        }
-        String monoUpper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        fillTable(MONOSPACE, lower, monoLowerMap);
         String monoUpperMap = "𝙰𝙱𝙲𝙳𝙴𝙵𝙶𝙷𝙸𝙹𝙺𝙻𝙼𝙽𝙾𝙿𝚀𝚁𝚂𝚃𝚄𝚅𝚆𝚇𝚈𝚉";
-        for (int i = 0; i < 26; i++) {
-            MONOSPACE.put(monoUpper.charAt(i), monoUpperMap.charAt(i));
-        }
+        fillTable(MONOSPACE, upper, monoUpperMap);
 
-        String sqLower = "abcdefghijklmnopqrstuvwxyz";
         String sqMap = "🄰🄱🄲🄳🄴🄵🄶🄷🄸🄹🄺🄻🄼🄽🄾🄿🅀🅁🅂🅃🅄🅅🅆🅇🅈🅉";
-        for (int i = 0; i < 26; i++) {
-            SQUARED.put(sqLower.charAt(i), sqMap.charAt(i));
-            SQUARED.put(Character.toUpperCase(sqLower.charAt(i)), sqMap.charAt(i));
-        }
+        fillCaseTable(SQUARED, sqMap);
 
         String udFrom = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.!?(),'";
         String udTo   = "ɐqɔpǝɟƃɥᴉɾʞʅɯuodbɹsʇnʌʍxʎzⱯᗺƆᗡƎᖵ⅁HIſꓘ˥WNOԀ῁ɹS⊥∩ΛMX⅄Z0⇂ᄅƐ߈ϛ9ㄥ86˙¡¿)(,'";
-        for (int i = 0; i < Math.min(udFrom.length(), udTo.length()); i++) {
-            UPSIDE_DOWN.put(udFrom.charAt(i), udTo.charAt(i));
-        }
+        fillTable(UPSIDE_DOWN, udFrom, udTo);
     }
 
     @EventHandler
@@ -440,13 +410,12 @@ public class MessageFormatter extends Module {
     private String applyFontPreset(String input) {
         FontPreset preset = fontPreset.get();
         if (preset == FontPreset.None) return input;
+        if (preset == FontPreset.FullWidth) return applyFullWidth(input);
+        if (preset == FontPreset.Custom) return applyCustomAlphabet(input);
 
-        Map<Character, Character> table = null;
-        boolean fullWidth = false;
-
+        Map<Character, String> table;
         switch (preset) {
             case SmallCaps:   table = SMALL_CAPS; break;
-            case FullWidth:   fullWidth = true; break;
             case Circle:      table = CIRCLE; break;
             case Script:      table = SCRIPT; break;
             case DoubleStruck: table = DOUBLE_STRUCK; break;
@@ -454,17 +423,20 @@ public class MessageFormatter extends Module {
             case Monospace:   table = MONOSPACE; break;
             case Squared:     table = SQUARED; break;
             case UpsideDown:  table = UPSIDE_DOWN; break;
-            case Custom:      return applyCustomAlphabet(input);
             default:          return input;
         }
 
-        if (fullWidth) return applyFullWidth(input);
-        if (table == null) return input;
+        return replaceFromTable(input, table);
+    }
 
-        StringBuilder sb = new StringBuilder();
-        for (char c : input.toCharArray()) {
-            Character replacement = table.get(c);
-            sb.append(replacement != null ? replacement : c);
+    private String replaceFromTable(String input, Map<Character, String> table) {
+        StringBuilder sb = new StringBuilder(input.length());
+        for (int i = 0; i < input.length(); ) {
+            int codePoint = input.codePointAt(i);
+            String replacement = codePoint <= Character.MAX_VALUE ? table.get((char) codePoint) : null;
+            if (replacement != null) sb.append(replacement);
+            else sb.appendCodePoint(codePoint);
+            i += Character.charCount(codePoint);
         }
         return sb.toString();
     }
@@ -487,17 +459,13 @@ public class MessageFormatter extends Module {
         String mapping = customAlphabet.get();
         if (mapping == null || mapping.isEmpty()) return input;
 
-        Map<Character, Character> customMap = new HashMap<>();
-        for (int i = 0; i + 1 < mapping.length(); i += 2) {
-            customMap.put(mapping.charAt(i), mapping.charAt(i + 1));
+        int[] points = mapping.codePoints().toArray();
+        Map<Character, String> customMap = new HashMap<>();
+        for (int i = 0; i + 1 < points.length; i += 2) {
+            customMap.put((char) points[i], new String(points, i + 1, 1));
         }
 
-        StringBuilder sb = new StringBuilder();
-        for (char c : input.toCharArray()) {
-            Character replacement = customMap.get(c);
-            sb.append(replacement != null ? replacement : c);
-        }
-        return sb.toString();
+        return replaceFromTable(input, customMap);
     }
 
     private String applyLeetSpeak(String input) {
@@ -529,7 +497,6 @@ public class MessageFormatter extends Module {
     }
 
     private String scrambleWord(String word) {
-
         int first = 0, last = word.length() - 1;
         while (first < word.length() && !Character.isLetter(word.charAt(first))) first++;
         while (last > first && !Character.isLetter(word.charAt(last))) last--;
@@ -736,11 +703,23 @@ public class MessageFormatter extends Module {
 
     private String applyAntiCensor(String input) {
         StringBuilder sb = new StringBuilder();
+        boolean inFormatCode = false;
         int i = 0;
         while (i < input.length()) {
-            int cp = input.codePointAt(i);
-            sb.appendCodePoint(cp);
-            i += Character.charCount(cp);
+            int codePoint = input.codePointAt(i);
+            sb.appendCodePoint(codePoint);
+            i += Character.charCount(codePoint);
+
+            if (inFormatCode) {
+                inFormatCode = false;
+                continue;
+            }
+
+            if (codePoint == '§' || codePoint == '&') {
+                inFormatCode = true;
+                continue;
+            }
+
             if (i < input.length()) {
                 sb.append('\u200B');
             }
@@ -824,7 +803,6 @@ public class MessageFormatter extends Module {
             sb.append(c);
 
             if (c == ' ') {
-
                 if (everyN == 0 && i < input.length() - 1) {
                     sb.append(chars);
                 }
@@ -833,10 +811,7 @@ public class MessageFormatter extends Module {
 
             charCount++;
             if (everyN > 0 && charCount % everyN == 0 && i < input.length() - 1) {
-
-                if (i < input.length() - 1) {
-                    sb.append(chars);
-                }
+                sb.append(chars);
             }
         }
         return sb.toString();
@@ -876,7 +851,7 @@ public class MessageFormatter extends Module {
             for (int i = 1; i < count; i++) {
                 String toSend = msg;
                 if (randomMessage.get()) toSend = msg + " [" + (i + 1) + "]";
-                pendingRepeats.add(new PendingRepeat(sanitizeOutgoing(truncateSafe(toSend, 256)), 1, tickInterval, repeatTickClock + tickInterval * i));
+                pendingRepeats.add(new PendingRepeat(sanitizeOutgoing(truncateSafe(toSend, 256)), repeatTickClock + tickInterval * i));
             }
         }
     }
@@ -988,10 +963,16 @@ public class MessageFormatter extends Module {
             steps[12] = msg;
         } else { steps[12] = msg; }
 
+        if (!prefix.get().isEmpty()) {
+            msg = prefix.get() + msg;
+        }
         if (appendReset.get()) msg += codePrefix() + "r";
+        steps[13] = msg;
+
         if (appendTimestamp.get()) msg += " [" + new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date()) + "]";
         if (randomMessage.get()) msg += " " + generateRandomSuffix();
-        steps[13] = msg;
+        if (!suffix.get().isEmpty()) msg += suffix.get();
+        steps[14] = msg;
 
         return steps;
     }
@@ -1100,7 +1081,6 @@ public class MessageFormatter extends Module {
 
     @Override
     public void onActivate() {
-
         pendingRepeats.clear();
         repeatTickClock = 0;
         List<String> features = getActiveFeatures();
@@ -1113,7 +1093,6 @@ public class MessageFormatter extends Module {
 
     @Override
     public void onDeactivate() {
-
         pendingRepeats.clear();
         info("Message Formatter deactivated.");
     }

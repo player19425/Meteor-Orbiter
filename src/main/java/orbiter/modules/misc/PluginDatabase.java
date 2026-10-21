@@ -9,6 +9,7 @@ public class PluginDatabase {
     public record PluginEntry(String name, String category) {}
 
     private static final Map<String, PluginEntry> WILDCARD_DB = new HashMap<>();
+    private static final Map<String, PluginEntry> WILDCARD_PREFIX_DB = new HashMap<>();
     private static final Map<String, PluginEntry> EXACT_DB = new HashMap<>();
     private static final Map<String, PluginEntry> COMMAND_DB = new HashMap<>();
     private static final Map<String, String> NAMESPACE_ALIASES = new HashMap<>();
@@ -22,8 +23,6 @@ public class PluginDatabase {
     ));
     private static final Pattern CHANNEL_TOKEN = Pattern.compile("(?i)\\b[a-z0-9_.-]{2,64}:[a-z0-9_./-]{1,128}\\b");
 
-    private static void w(String p, String n, String c) { WILDCARD_DB.put(p.toLowerCase(), new PluginEntry(n, c)); }
-    private static void e(String p, String n, String c) { EXACT_DB.put(p.toLowerCase(), new PluginEntry(n, c)); }
     private static void cmd(String c, String n, String cat) { COMMAND_DB.put(commandKey(c), new PluginEntry(n, cat)); }
     private static String commandKey(String c) { String k = c.toLowerCase().trim(); while (k.startsWith("/")) k = k.substring(1); return k; }
     private static void ns(String k, String v) { NAMESPACE_ALIASES.put(k.toLowerCase(), v); }
@@ -273,7 +272,6 @@ public class PluginDatabase {
         cmd("eco", "EssentialsX", "Economy");
         cmd("enchant", "EssentialsX", "General");
         cmd("enderchest", "EssentialsX", "General");
-        cmd("enchant", "EssentialsX", "General");
         cmd("essentials", "EssentialsX", "General");
         cmd("ext", "EssentialsX", "General");
         cmd("feed", "EssentialsX", "General");
@@ -338,7 +336,6 @@ public class PluginDatabase {
         cmd("trade", "EssentialsX", "General");
         cmd("close", "EssentialsX", "General");
         cmd("more", "EssentialsX", "General");
-        cmd("unlimited", "EssentialsX", "General");
         cmd("nuke", "EssentialsX", "General");
         cmd("realname", "EssentialsX", "General");
         cmd("tpsee", "EssentialsX", "Teleport");
@@ -704,13 +701,6 @@ public class PluginDatabase {
         cmd("pv reload", "PlayerVaults", "Storage");
         cmd("pv sort", "PlayerVaults", "Storage");
 
-        cmd("hdb", "HeadDB", "Cosmetic");
-        cmd("heads", "HeadDB", "Cosmetic");
-        cmd("hdb search", "HeadDB", "Cosmetic");
-        cmd("hdb list", "HeadDB", "Cosmetic");
-        cmd("hdb reload", "HeadDB", "Cosmetic");
-        cmd("hdb give", "HeadDB", "Cosmetic");
-
         cmd("cmi", "CMI", "Admin");
         cmd("cmi hello", "CMI", "Admin");
         cmd("cmi user", "CMI", "Admin");
@@ -995,26 +985,14 @@ public class PluginDatabase {
         cmd("sr", "SkinsRestorer", "Cosmetic");
         cmd("skin", "SkinsRestorer", "Cosmetic");
 
-        cmd("msg", "EssentialsX", "Chat");
-        cmd("r", "EssentialsX", "Chat");
-        cmd("reply", "EssentialsX", "Chat");
-        cmd("me", "EssentialsX", "Chat");
-        cmd("msg", "EssentialsX", "Chat");
         cmd("socialspy", "EssentialsX", "Chat");
         cmd("clear", "EssentialsX", "Chat");
-
-        cmd("vault-info", "Vault", "Economy");
-
-        cmd("lp", "LuckPerms", "Permissions");
 
         cmd("pv", "PremiumVanish", "Vanish");
         cmd("premiumvanish", "PremiumVanish", "Vanish");
         cmd("vanish", "PremiumVanish", "Vanish");
         cmd("sv", "PremiumVanish", "Vanish");
         cmd("supervanish", "PremiumVanish", "Vanish");
-
-        cmd("tab reload", "TAB", "UI");
-        cmd("tab debug", "TAB", "UI");
 
         cmd("ncp", "NoCheatPlus", "Anti-Cheat");
         cmd("nocheatplus", "NoCheatPlus", "Anti-Cheat");
@@ -1060,8 +1038,6 @@ public class PluginDatabase {
 
         cmd("betonquest", "BetonQuest", "Quests");
 
-        cmd("jobsadmin", "JobsReborn", "Economy");
-
         cmd("huskclaims", "HuskClaims", "Land Claim");
         cmd("husktowns", "HuskTowns", "Towny");
 
@@ -1102,8 +1078,6 @@ public class PluginDatabase {
 
         cmd("votifier", "Votifier", "Utilities");
         cmd("vote", "VotingPlugin", "Utilities");
-
-        cmd("plan", "Plan", "Admin");
 
         cmd("nbtapi", "NBT-API", "Utilities");
 
@@ -1151,8 +1125,8 @@ public class PluginDatabase {
         cmd("hdb give", "HeadDatabase", "Cosmetic");
         cmd("hdb reload", "HeadDatabase", "Cosmetic");
         ns("head", "HeadDatabase");
-        ns("headatabase", "HeadDatabase");
-        ch("headatabase:*");
+        ns("headdatabase", "HeadDatabase");
+        ch("headdatabase:*");
         ch("head:*");
 
         cmd("wesui", "WorldEditSUI", "Level Editing");
@@ -1180,7 +1154,6 @@ public class PluginDatabase {
 
         cmd("fawe", "FAWE", "Level Editing");
         cmd("fastasyncworldedit", "FAWE", "Level Editing");
-        ns("fawe", "FAWE");
         ch("fawe:*");
 
         cmd("itemedit", "ItemEdit", "Admin");
@@ -1212,7 +1185,6 @@ public class PluginDatabase {
 
         cmd("phoenixcrates", "PhoenixCrates", "Crates");
         cmd("pc", "PhoenixCrates", "Crates");
-        ns("phoenixcrates", "PhoenixCrates");
         ch("phoenixcrates:*");
 
         cmd("pvpmanager", "PvPManager", "Combat");
@@ -1507,7 +1479,6 @@ public class PluginDatabase {
         ch("axsellwands:*");
         ch("axshop:*");
         ch("axshulker:*");
-        ch("axshulkers:*");
         ch("axstorage:*");
         ch("axstorages:*");
         ch("axtab:*");
@@ -1707,7 +1678,6 @@ public class PluginDatabase {
         ch("casinoslots:*");
         ch("casinosystem:*");
         ch("catamine:*");
-        ch("catamines:*");
         ch("cca:*");
         ch("channelguard:*");
         ch("chat:*");
@@ -1800,7 +1770,6 @@ public class PluginDatabase {
         ch("commandpanels:*");
         ch("commandshop:*");
         ch("commandshops:*");
-        ch("commandwhitelist:*");
         ch("communityah:*");
         ch("communityauction:*");
         ch("communityauctionhouse:*");
@@ -1878,7 +1847,6 @@ public class PluginDatabase {
         ch("crazycrate:*");
         ch("crazycrates:*");
         ch("crazycratesplus:*");
-        ch("crazyenchantments:*");
         ch("crazyenvoys:*");
         ch("crazyrewards:*");
         ch("credit:*");
@@ -2135,7 +2103,6 @@ public class PluginDatabase {
         ch("fauction:*");
         ch("fauctionhouse:*");
         ch("fauctions:*");
-        ch("fawe:*");
         ch("featherboard:*");
         ch("flamecord:*");
         ch("flan:*");
@@ -2612,7 +2579,6 @@ public class PluginDatabase {
         ch("phoenix_crates:*");
         ch("phoenix_crates_lite:*");
         ch("phoenixcrate:*");
-        ch("phoenixcrates:*");
         ch("phoenixcrateslite:*");
         ch("phoenixplugins:*");
         ch("placeholder:*");
@@ -2751,7 +2717,6 @@ public class PluginDatabase {
         ch("pv:*");
         ch("pvault:*");
         ch("pvpcontrol:*");
-        ch("pvpmanager:*");
         ch("pvpmanagerlite:*");
         ch("pvpmanagerpremium:*");
         ch("pvptoggle:*");
@@ -3209,7 +3174,6 @@ public class PluginDatabase {
         ch("worldguard:*");
         ch("worldguard_events:*");
         ch("worldguardevents:*");
-        ch("worldguardextraflags:*");
         ch("worldguardflags:*");
         ch("worldguardregions:*");
         ch("worldinfo:world_id");
@@ -3256,14 +3220,19 @@ public class PluginDatabase {
         String name = NAMESPACE_ALIASES.getOrDefault(ns, humanize(ns));
         PluginEntry entry = new PluginEntry(name, "Unknown");
         if (p.endsWith(":*")) {
-            WILDCARD_DB.put(p, entry);
+            putWildcard(p, entry);
         } else if (p.endsWith("*")) {
             p = p.substring(0, p.length() - 1);
             while (p.endsWith("/") || p.endsWith(":")) p = p.substring(0, p.length() - 1);
-            if (!p.isEmpty()) WILDCARD_DB.put(p + ":*", entry);
+            if (!p.isEmpty()) putWildcard(p + ":*", entry);
         } else {
             EXACT_DB.put(p, entry);
         }
+    }
+
+    private static void putWildcard(String key, PluginEntry entry) {
+        WILDCARD_DB.put(key, entry);
+        WILDCARD_PREFIX_DB.put(key.substring(0, key.length() - 2), entry);
     }
 
     private static String humanize(String ns) {
@@ -3288,22 +3257,13 @@ public class PluginDatabase {
         PluginEntry entry = EXACT_DB.get(lower);
         if (entry == null) {
             int colon = lower.indexOf(':');
-            if (colon > 0) {
-                entry = WILDCARD_DB.get(lower.substring(0, colon) + ":*");
+            while (colon > 0) {
+                entry = WILDCARD_PREFIX_DB.get(lower.substring(0, colon));
+                if (entry != null) break;
+                colon = lower.indexOf(':', colon + 1);
             }
         }
-        if (entry == null) {
-            for (var e : WILDCARD_DB.entrySet()) {
-                String pattern = e.getKey();
-                if (pattern.endsWith(":*")) {
-                    String prefix = pattern.substring(0, pattern.length() - 2);
-                    if (lower.startsWith(prefix + ":") || lower.equals(prefix)) {
-                        entry = e.getValue();
-                        break;
-                    }
-                }
-            }
-        }
+        if (entry == null) entry = WILDCARD_PREFIX_DB.get(lower);
         if (entry == null) {
             entry = fuzzyLookup(lower);
         }

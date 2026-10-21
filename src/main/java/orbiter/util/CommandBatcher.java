@@ -25,11 +25,13 @@ public final class CommandBatcher {
         return true;
     }
 
-    public int drain(Consumer<String> sender) {
+    public int drain(Consumer<String> sender, java.util.function.Predicate<String> gate) {
         if (sender == null || delay > 0) { if (delay > 0) delay--; return 0; }
         int sent = 0;
         while (sent < budgetPerTick && !queue.isEmpty()) {
-            Step step = queue.removeFirst();
+            Step step = queue.peekFirst();
+            if (gate != null && !gate.test(step.command())) break;
+            queue.removeFirst();
             if (step.dedupeKey() != null) dedupeKeys.remove(step.dedupeKey());
             sender.accept(step.command());
             sent++;

@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.ModifyConstant;
 
 @Mixin(Minecraft.class)
 public abstract class ClientUseCooldownMixin {
-    @ModifyConstant(method = "startUseItem", constant = @Constant(intValue = 4))
+    @ModifyConstant(method = "startUseItem", constant = @Constant(intValue = 4), require = 1)
     private int orbiter$customItemUseCooldown(int original) {
         ClientSideThings module = ClientSpoofState.module();
         Minecraft client = (Minecraft) (Object) this;

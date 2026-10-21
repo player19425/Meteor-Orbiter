@@ -12,6 +12,7 @@ public class RotationEngine {
     }
 
     private static final int TIMEOUT_TICKS = 60;
+    private static final double GOAL_EPSILON_SQR = 1e-4;
 
     private final Minecraft mc;
 
@@ -44,11 +45,17 @@ public class RotationEngine {
         this.damping = 0.75;
     }
 
+    private static boolean samePoint(Vec3 a, Vec3 b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        return a.distanceToSqr(b) <= GOAL_EPSILON_SQR;
+    }
+
     public void begin(CombatRequest req, float fromYaw, float fromPitch, double yaw, double pitch) {
         boolean sameGoal = request != null
             && request.owner() == req.owner()
             && request.targetPoint() != null
-            && request.targetPoint().equals(req.targetPoint());
+            && samePoint(request.targetPoint(), req.targetPoint());
 
         request = req;
         mode = req.mode();

@@ -6,6 +6,7 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
@@ -32,6 +33,7 @@ public class Camera360 extends Module {
     private float rawPitch = 0f;
     private float rawYaw = 0f;
     private int syncTicks = 0;
+    private boolean restoringPitch = false;
 
     public Camera360() {
         super(Orbiter.CATEGORY_STUPID, "360-camera", "Unlimited camera rotation.");
@@ -53,10 +55,20 @@ public class Camera360 extends Module {
 
     @Override
     public void onDeactivate() {
+        restoringPitch = true;
         if (mc.player != null) {
-
             mc.player.setXRot(Mth.clamp(mc.player.getXRot(), -90f, 90f));
+            rawPitch = mc.player.getXRot();
         }
+        restoringPitch = false;
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        rawPitch = 0f;
+        rawYaw = 0f;
+        syncTicks = 0;
+        restoringPitch = false;
     }
 
     @EventHandler
@@ -90,14 +102,14 @@ public class Camera360 extends Module {
         mc.getConnection().send(new ServerboundMovePlayerPacket.Rot(syncYaw, syncPitch, mc.player.onGround(), mc.player.horizontalCollision));
     }
 
-    public boolean shouldUnlockPitch() { return isActive() && noLimitPitch.get(); }
+    public boolean shouldUnlockPitch() { return isActive() && !restoringPitch && noLimitPitch.get(); }
     public boolean shouldInvertMouse() { return isActive() && invertMouse.get(); }
 
     public static boolean isLocalPlayerUpsideDown(Entity self) {
         if (self != Minecraft.getInstance().player) return false;
         Camera360 mod = Modules.get().get(Camera360.class);
         if (mod == null || !mod.isActive()) return false;
-        float np = ((self.getXRot() + 180) % 360 + 360) % 360 - 180;
-        return np > 90 || np < -90;
+        float normalized = Mth.wrapDegrees(self.getXRot());
+        return normalized > 90f || normalized < -90f;
     }
 }

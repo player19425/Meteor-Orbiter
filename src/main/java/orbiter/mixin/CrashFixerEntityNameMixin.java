@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(Entity.class)
 public class CrashFixerEntityNameMixin {
 
-    @Inject(method = "getName", at = @At("RETURN"), cancellable = true)
+    @Inject(method = "getName", at = @At("RETURN"), cancellable = true, require = 0)
     private void orbiter$simplifyLaggyName(CallbackInfoReturnable<Component> cir) {
         ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);
         if (mod == null || !mod.isActive() || !mod.shouldSanitizeEntityNames()) return;

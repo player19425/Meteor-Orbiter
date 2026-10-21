@@ -63,11 +63,11 @@ public class CopyCommand extends Command {
                 return SINGLE_SUCCESS;
             }
 
-            String nbt = NbtCopyHelper.encodeItemNbt(stack, err -> error("Failed to encode item: " + err));
+            String nbt = NbtCopyHelper.encodeItemNbt(stack, err -> error("Failed to encode item: %s", err));
             if (nbt == null) return SINGLE_SUCCESS;
 
             mc.keyboardHandler.setClipboard(nbt);
-            info("Copied " + stack.getHoverName().getString() + " NBT to clipboard.");
+            info("Copied %s NBT to clipboard.", stack.getHoverName().getString());
             return SINGLE_SUCCESS;
         }));
 
@@ -82,7 +82,7 @@ public class CopyCommand extends Command {
                 ItemStack stack = heldStack();
                 if (stack == null) return SINGLE_SUCCESS;
 
-                String nbt = NbtCopyHelper.encodeItemNbt(stack, err -> error("Failed to encode item: " + err));
+                String nbt = NbtCopyHelper.encodeItemNbt(stack, err -> error("Failed to encode item: %s", err));
                 if (nbt == null) return SINGLE_SUCCESS;
 
                 copy(heldId(stack) + " x" + stack.getCount() + " " + nbt);
@@ -151,7 +151,7 @@ public class CopyCommand extends Command {
 
     private int copy(String value) {
         mc.keyboardHandler.setClipboard(value);
-        info("Copied " + truncate(value));
+        info("Copied %s", truncate(value));
         return SINGLE_SUCCESS;
     }
 

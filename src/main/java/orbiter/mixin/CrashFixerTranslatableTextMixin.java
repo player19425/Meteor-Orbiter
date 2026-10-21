@@ -30,14 +30,14 @@ public class CrashFixerTranslatableTextMixin {
     @Unique
     private static final AtomicBoolean logged = new AtomicBoolean(false);
 
-    @Inject(method = "visit(Lnet/minecraft/network/chat/FormattedText$ContentConsumer;)Ljava/util/Optional;", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "visit(Lnet/minecraft/network/chat/FormattedText$ContentConsumer;)Ljava/util/Optional;", at = @At("HEAD"), cancellable = true, require = 0)
     private <T> void orbiter$guardPayload1(FormattedText.ContentConsumer<T> visitor, CallbackInfoReturnable<Optional<T>> cir) {
         ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);
         if (mod == null || !mod.isActive() || !mod.shouldPayloadGuard() || isPayloadSafe(mod)) return;
         cir.setReturnValue(Optional.empty());
     }
 
-    @Inject(method = "visit(Lnet/minecraft/network/chat/FormattedText$StyledContentConsumer;Lnet/minecraft/network/chat/Style;)Ljava/util/Optional;", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "visit(Lnet/minecraft/network/chat/FormattedText$StyledContentConsumer;Lnet/minecraft/network/chat/Style;)Ljava/util/Optional;", at = @At("HEAD"), cancellable = true, require = 0)
     private <T> void orbiter$guardPayload2(FormattedText.StyledContentConsumer<T> visitor, Style style, CallbackInfoReturnable<Optional<T>> cir) {
         ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);
         if (mod == null || !mod.isActive() || !mod.shouldPayloadGuard() || isPayloadSafe(mod)) return;
@@ -45,6 +45,7 @@ public class CrashFixerTranslatableTextMixin {
     }
 
     @Redirect(method = "visit(Lnet/minecraft/network/chat/FormattedText$ContentConsumer;)Ljava/util/Optional;",
+        require = 0,
               at = @At(value = "INVOKE", target = "Lnet/minecraft/network/chat/FormattedText;visit(Lnet/minecraft/network/chat/FormattedText$ContentConsumer;)Ljava/util/Optional;"))
     private <T> Optional<T> orbiter$redirectVisit1(FormattedText instance, FormattedText.ContentConsumer<T> visitor) {
         ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);
@@ -53,6 +54,7 @@ public class CrashFixerTranslatableTextMixin {
     }
 
     @Redirect(method = "visit(Lnet/minecraft/network/chat/FormattedText$StyledContentConsumer;Lnet/minecraft/network/chat/Style;)Ljava/util/Optional;",
+        require = 0,
               at = @At(value = "INVOKE", target = "Lnet/minecraft/network/chat/FormattedText;visit(Lnet/minecraft/network/chat/FormattedText$StyledContentConsumer;Lnet/minecraft/network/chat/Style;)Ljava/util/Optional;"))
     private <T> Optional<T> orbiter$redirectVisit2(FormattedText instance, FormattedText.StyledContentConsumer<T> visitor, Style style) {
         ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);

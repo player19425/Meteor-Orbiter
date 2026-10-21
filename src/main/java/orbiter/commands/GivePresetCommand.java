@@ -11,9 +11,12 @@ import net.minecraft.world.item.component.*;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.core.Holder;
 import net.minecraft.world.entity.EquipmentSlotGroup;
+import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.attributes.RangedAttribute;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -25,6 +28,7 @@ import net.minecraft.server.network.Filterable;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.Component;
 import net.minecraft.ChatFormatting;
+import orbiter.compat.ItemCompat;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -44,9 +48,10 @@ public class GivePresetCommand extends Command {
             new SimpleCommandExceptionType(Component.literal("You must be in creative mode to use this."));
 
     private final Map<String, PresetFactory> presets = new LinkedHashMap<>();
+    private final List<String> attrNotes = new ArrayList<>();
 
     public GivePresetCommand() {
-        super("orbitergivepreset", "Gives 120+ special preset items with lore.", "ogp");
+        super("orbitergivepreset", "Gives special preset items with lore.", "ogp");
         registerPresets();
     }
 
@@ -136,7 +141,7 @@ public class GivePresetCommand extends Command {
         presets.put("end-stone-64", () -> stackLore(Items.END_STONE, 64, "End Stone", ChatFormatting.YELLOW, "End dimension floor", "64 blocks of the void"));
         presets.put("crying-obsidian-64", () -> stackLore(Items.CRYING_OBSIDIAN, 64, "Crying Obsidian", ChatFormatting.DARK_PURPLE, "Weeps with ancient power", "64 blocks of sorrow"));
         presets.put("ancient-debris-64", () -> stackLore(Items.ANCIENT_DEBRIS, 64, "Ancient Debris", ChatFormatting.DARK_RED, "Rarest ore in the Nether", "64 chunks of netherite"));
-        presets.put("copper-block-64", () -> stackLore(Items.COPPER_BLOCK.weathering().unaffected(), 64, "Copper Block", ChatFormatting.RED, "Oxidizes over time", "64 blocks of copper"));
+        presets.put("copper-block-64", () -> stackLore(ItemCompat.copperBlock(), 64, "Copper Block", ChatFormatting.RED, "Oxidizes over time", "64 blocks of copper"));
         presets.put("amethyst-block-64", () -> stackLore(Items.AMETHYST_BLOCK, 64, "Amethyst Block", ChatFormatting.LIGHT_PURPLE, "Crystal resonance", "64 blocks of amethyst"));
         presets.put("tnt-64", () -> stackLore(Items.TNT, 64, "TNT Stack", ChatFormatting.RED, "Maximum destruction", "64 blocks of boom"));
         presets.put("packed-ice-64", () -> stackLore(Items.PACKED_ICE, 64, "Packed Ice", ChatFormatting.AQUA, "Slippery surface", "64 blocks of ice"));
@@ -185,36 +190,71 @@ public class GivePresetCommand extends Command {
         builder.then(literal("list").executes(c -> { showList(); return SINGLE_SUCCESS; }));
         for (var e : presets.entrySet()) {
             String name = e.getKey();
-            builder.then(literal(name).executes(c -> { ensureCreative(); giveItem(e.getValue().create()); info("Gave: " + name); return SINGLE_SUCCESS; }));
+            builder.then(literal(name).executes(c -> { ensureCreative(); attrNotes.clear(); giveItem(e.getValue().create()); info("Gave: " + name); flushAttrNotes(); return SINGLE_SUCCESS; }));
         }
         builder.then(literal("random").executes(c -> {
             ensureCreative();
+            attrNotes.clear();
             String[] keys = presets.keySet().toArray(new String[0]);
             String k = keys[ThreadLocalRandom.current().nextInt(keys.length)];
             giveItem(presets.get(k).create());
             info("Random: " + k);
+            flushAttrNotes();
             return SINGLE_SUCCESS;
         }));
         builder.then(literal("category").then(argument("name", StringArgumentType.word()).executes(c -> {
             ensureCreative();
+            attrNotes.clear();
             String q = StringArgumentType.getString(c, "name").toLowerCase(Locale.ROOT);
             List<String> m = new ArrayList<>();
             for (String k : presets.keySet()) if (k.contains(q)) m.add(k);
             if (m.isEmpty()) { error("No matches for: " + q); return SINGLE_SUCCESS; }
             for (String k : m) giveItem(presets.get(k).create());
             info("Gave " + m.size() + " items for: " + q);
+            flushAttrNotes();
             return SINGLE_SUCCESS;
         })));
         builder.then(literal("search").then(argument("query", StringArgumentType.greedyString()).executes(c -> {
             ensureCreative();
+            attrNotes.clear();
             String q = StringArgumentType.getString(c, "query").toLowerCase(Locale.ROOT);
             List<String> m = new ArrayList<>();
             for (String k : presets.keySet()) if (k.contains(q)) m.add(k);
             if (m.isEmpty()) { error("No matches for: " + q); return SINGLE_SUCCESS; }
             for (String k : m) giveItem(presets.get(k).create());
             info("Gave " + m.size() + " matches.");
+            flushAttrNotes();
             return SINGLE_SUCCESS;
         })));
+    }
+
+    private static final double MOVE_SPEED_LIMIT = 5.0;
+
+    private double capped(Holder<Attribute> attribute, String label, double requested) {
+        return capped(attribute, label, requested, Double.MAX_VALUE);
+    }
+
+    private double capped(Holder<Attribute> attribute, String label, double requested, double ownLimit) {
+        Attribute attr = attribute.value();
+        double vanillaMax = attr instanceof RangedAttribute r ? r.getMaxValue() : Double.MAX_VALUE;
+        double applied = Math.min(requested, Math.min(vanillaMax, ownLimit));
+        if (applied < requested) {
+            String limit = requested > ownLimit && ownLimit < vanillaMax
+                    ? "orbiter cap " + fmt(ownLimit)
+                    : "vanilla max " + fmt(vanillaMax);
+            attrNotes.add(label + " " + fmt(requested) + " -> " + fmt(applied) + " (" + limit + ")");
+        }
+        return attr.sanitizeValue(applied);
+    }
+
+    private void flushAttrNotes() {
+        if (attrNotes.isEmpty()) return;
+        for (String n : attrNotes) error("Attribute capped: " + n);
+        attrNotes.clear();
+    }
+
+    private static String fmt(double v) {
+        return v == Math.rint(v) ? String.valueOf((long) v) : String.valueOf(v);
     }
 
     private void showList() {
@@ -329,10 +369,10 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.NETHERITE_SWORD);
         s.set(DataComponents.CUSTOM_NAME, name("God Sword", ChatFormatting.RED));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("sharpness:255","smite:255","bane_of_arthropods:255","knockback:255","fire_aspect:255","looting:255","sweeping_edge:255","unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("sharpness:255","knockback:255","fire_aspect:255","looting:255","sweeping_edge:255","unbreaking:255","mending:1").toImmutable());
         ItemAttributeModifiers.Builder a = ItemAttributeModifiers.builder();
-        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","gs_d"), 2048, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
-        a.add(Attributes.ATTACK_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","gs_s"), 1024, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","gs_d"), capped(Attributes.ATTACK_DAMAGE, "God Sword attack damage", 2048), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","gs_s"), capped(Attributes.ATTACK_SPEED, "God Sword attack speed", 1024), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
         s.set(DataComponents.ATTRIBUTE_MODIFIERS, a.build());
         setLore(s, "The ultimate melee weapon", "One strike, one kill");
         return s;
@@ -342,7 +382,7 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.BOW);
         s.set(DataComponents.CUSTOM_NAME, name("God Bow", ChatFormatting.GREEN));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("power:255","punch:255","flame:1","infinity:1","unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("power:255","punch:255","flame:1","infinity:1","unbreaking:255").toImmutable());
         setLore(s, "Never miss, never run out", "Arrows of destruction");
         return s;
     }
@@ -351,11 +391,11 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(item);
         s.set(DataComponents.CUSTOM_NAME, name(n, ChatFormatting.AQUA));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("protection:255","blast_protection:255","fire_protection:255","projectile_protection:255","thorns:255","unbreaking:255","mending:1","respiration:255","aqua_affinity:1","depth_strider:255","soul_speed:255","swift_sneak:255").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("protection:255","thorns:255","unbreaking:255","mending:1","respiration:255","aqua_affinity:1","depth_strider:255","soul_speed:255","swift_sneak:255").toImmutable());
         ItemAttributeModifiers.Builder a = ItemAttributeModifiers.builder();
-        a.add(Attributes.ARMOR, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","ga_a"+idx), 1000, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.ANY);
-        a.add(Attributes.ARMOR_TOUGHNESS, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","ga_t"+idx), 1000, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.ANY);
-        a.add(Attributes.KNOCKBACK_RESISTANCE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","ga_k"+idx), 1.0, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.ANY);
+        a.add(Attributes.ARMOR, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","ga_a"+idx), capped(Attributes.ARMOR, n + " armor", 1000), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.ANY);
+        a.add(Attributes.ARMOR_TOUGHNESS, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","ga_t"+idx), capped(Attributes.ARMOR_TOUGHNESS, n + " armor toughness", 1000), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.ANY);
+        a.add(Attributes.KNOCKBACK_RESISTANCE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","ga_k"+idx), capped(Attributes.KNOCKBACK_RESISTANCE, n + " knockback resistance", 1.0), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.ANY);
         s.set(DataComponents.ATTRIBUTE_MODIFIERS, a.build());
         setLore(s, "Immovable defense", "Walk through fire and explosions");
         return s;
@@ -365,10 +405,10 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.NETHERITE_AXE);
         s.set(DataComponents.CUSTOM_NAME, name("God Axe", ChatFormatting.GOLD));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("sharpness:255","efficiency:255","fortune:255","silk_touch:1","unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("sharpness:255","efficiency:255","fortune:255","unbreaking:255","mending:1").toImmutable());
         ItemAttributeModifiers.Builder a = ItemAttributeModifiers.builder();
-        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","ga_d"), 2048, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
-        a.add(Attributes.ATTACK_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","ga_s"), 1024, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","ga_d"), capped(Attributes.ATTACK_DAMAGE, "God Axe attack damage", 2048), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","ga_s"), capped(Attributes.ATTACK_SPEED, "God Axe attack speed", 1024), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
         s.set(DataComponents.ATTRIBUTE_MODIFIERS, a.build());
         setLore(s, "Chop anything in one hit", "The woodcutter's dream");
         return s;
@@ -378,10 +418,10 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.NETHERITE_PICKAXE);
         s.set(DataComponents.CUSTOM_NAME, name("God Pickaxe", ChatFormatting.AQUA));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("efficiency:255","fortune:255","silk_touch:1","unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("efficiency:255","fortune:255","unbreaking:255","mending:1").toImmutable());
         ItemAttributeModifiers.Builder a = ItemAttributeModifiers.builder();
-        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","gp_d"), 1024, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
-        a.add(Attributes.ATTACK_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","gp_s"), 1024, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","gp_d"), capped(Attributes.ATTACK_DAMAGE, "God Pickaxe attack damage", 1024), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","gp_s"), capped(Attributes.ATTACK_SPEED, "God Pickaxe attack speed", 1024), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
         s.set(DataComponents.ATTRIBUTE_MODIFIERS, a.build());
         setLore(s, "Mine anything instantly", "Fortune and silk touch in one");
         return s;
@@ -391,7 +431,7 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.TRIDENT);
         s.set(DataComponents.CUSTOM_NAME, name("God Trident", ChatFormatting.AQUA));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("loyalty:255","impaling:255","channeling:1","unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("loyalty:255","impaling:255","unbreaking:255","mending:1").toImmutable());
         setLore(s, "Command the seas and storms", "Returns after every throw");
         return s;
     }
@@ -402,7 +442,7 @@ public class GivePresetCommand extends Command {
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
         s.set(DataComponents.ENCHANTMENTS, baseEnchants("density:255","wind_burst:255","unbreaking:255","mending:1").toImmutable());
         ItemAttributeModifiers.Builder a = ItemAttributeModifiers.builder();
-        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","gm_d"), 4096, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","gm_d"), capped(Attributes.ATTACK_DAMAGE, "God Mace attack damage", 4096), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
         s.set(DataComponents.ATTRIBUTE_MODIFIERS, a.build());
         setLore(s, "Smash from the heavens", "Wind burst sends enemies flying");
         return s;
@@ -412,7 +452,7 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.CROSSBOW);
         s.set(DataComponents.CUSTOM_NAME, name("God Crossbow", ChatFormatting.RED));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("quick_charge:255","piercing:255","multishot:1","unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("quick_charge:255","piercing:255","unbreaking:255","mending:1").toImmutable());
         setLore(s, "Instant fire, pierces all", "3 arrows at once");
         return s;
     }
@@ -430,11 +470,11 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.NETHERITE_SWORD);
         s.set(DataComponents.CUSTOM_NAME, name("Excalibur", ChatFormatting.YELLOW));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("sharpness:255","smite:255","knockback:255","fire_aspect:255","sweeping_edge:255","unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("sharpness:255","knockback:255","fire_aspect:255","sweeping_edge:255","unbreaking:255","mending:1").toImmutable());
         ItemAttributeModifiers.Builder a = ItemAttributeModifiers.builder();
-        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","exc_d"), 4096, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
-        a.add(Attributes.ATTACK_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","exc_s"), 2048, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
-        a.add(Attributes.LUCK, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","exc_l"), 100, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","exc_d"), capped(Attributes.ATTACK_DAMAGE, "Excalibur attack damage", 4096), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","exc_s"), capped(Attributes.ATTACK_SPEED, "Excalibur attack speed", 2048), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.LUCK, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","exc_l"), capped(Attributes.LUCK, "Excalibur luck", 100), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
         s.set(DataComponents.ATTRIBUTE_MODIFIERS, a.build());
         setLore(s, "The legendary sword of King Arthur", "Forged in dragon fire", "Only the worthy may wield it");
         return s;
@@ -444,10 +484,10 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.TRIDENT);
         s.set(DataComponents.CUSTOM_NAME, name("Poseidon\u2019s Trident", ChatFormatting.AQUA));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("loyalty:255","impaling:255","channeling:1","unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("loyalty:255","impaling:255","unbreaking:255","mending:1").toImmutable());
         ItemAttributeModifiers.Builder a = ItemAttributeModifiers.builder();
-        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","pos_d"), 4096, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
-        a.add(Attributes.MOVEMENT_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","pos_s"), 1000, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","pos_d"), capped(Attributes.ATTACK_DAMAGE, "Poseidon attack damage", 4096), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.MOVEMENT_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","pos_s"), capped(Attributes.MOVEMENT_SPEED, "Poseidon movement speed", 1000, MOVE_SPEED_LIMIT), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
         s.set(DataComponents.ATTRIBUTE_MODIFIERS, a.build());
         setLore(s, "Weapon of the sea god", "Commands lightning and tide", "Swim faster than dolphins");
         return s;
@@ -457,10 +497,10 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.MACE);
         s.set(DataComponents.CUSTOM_NAME, name("Mjolnir", ChatFormatting.AQUA));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("smite:255","density:255","wind_burst:255","unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("density:255","wind_burst:255","unbreaking:255","mending:1").toImmutable());
         ItemAttributeModifiers.Builder a = ItemAttributeModifiers.builder();
-        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","mjol_d"), 8192, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
-        a.add(Attributes.ATTACK_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","mjol_s"), 4096, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","mjol_d"), capped(Attributes.ATTACK_DAMAGE, "Mjolnir attack damage", 8192), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","mjol_s"), capped(Attributes.ATTACK_SPEED, "Mjolnir attack speed", 4096), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
         s.set(DataComponents.ATTRIBUTE_MODIFIERS, a.build());
         setLore(s, "Thor\u2019s legendary hammer", "Strikes with the power of thunder", "Only the worthy may lift it");
         return s;
@@ -472,8 +512,8 @@ public class GivePresetCommand extends Command {
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
         s.set(DataComponents.ENCHANTMENTS, baseEnchants("smite:255","fire_aspect:255","knockback:255","unbreaking:255","mending:1").toImmutable());
         ItemAttributeModifiers.Builder a = ItemAttributeModifiers.builder();
-        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","anu_d"), 4096, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
-        a.add(Attributes.ATTACK_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","anu_s"), 2048, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","anu_d"), capped(Attributes.ATTACK_DAMAGE, "Anubis attack damage", 4096), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","anu_s"), capped(Attributes.ATTACK_SPEED, "Anubis attack speed", 2048), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
         s.set(DataComponents.ATTRIBUTE_MODIFIERS, a.build());
         setLore(s, "Blade of the Egyptian death god", "Judges the souls of the fallen", "Smite the undead into oblivion");
         return s;
@@ -501,7 +541,7 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.NETHERITE_SWORD);
         s.set(DataComponents.CUSTOM_NAME, name("Infinity Blade", ChatFormatting.LIGHT_PURPLE));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("sharpness:255","smite:255","bane_of_arthropods:255","knockback:255","fire_aspect:255","looting:255","sweeping_edge:255","unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("sharpness:255","knockback:255","fire_aspect:255","looting:255","sweeping_edge:255","unbreaking:255","mending:1").toImmutable());
         setLore(s, "Contains every damage enchantment", "255 levels of pure destruction", "No entity survives this blade");
         return s;
     }
@@ -519,7 +559,7 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.NETHERITE_AXE);
         s.set(DataComponents.CUSTOM_NAME, name("Arthropod Slayer", ChatFormatting.DARK_GREEN));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("bane_of_arthropods:255","sharpness:255","looting:255","unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("sharpness:255","looting:255","unbreaking:255","mending:1").toImmutable());
         setLore(s, "Spider and bug exterminator", "One-shots all arthropods");
         return s;
     }
@@ -555,7 +595,7 @@ public class GivePresetCommand extends Command {
         ItemStack s = new ItemStack(Items.TRIDENT);
         s.set(DataComponents.CUSTOM_NAME, name("Storm Bringer", ChatFormatting.YELLOW));
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
-        s.set(DataComponents.ENCHANTMENTS, baseEnchants("channeling:1","loyalty:255","impaling:255","unbreaking:255","mending:1").toImmutable());
+        s.set(DataComponents.ENCHANTMENTS, baseEnchants("channeling:1","impaling:255","unbreaking:255","mending:1").toImmutable());
         setLore(s, "Summon lightning on every throw", "The sky bows to your will");
         return s;
     }
@@ -593,7 +633,7 @@ public class GivePresetCommand extends Command {
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
         s.set(DataComponents.ENCHANTMENTS, baseEnchants("protection:255","depth_strider:255","unbreaking:255","mending:1").toImmutable());
         ItemAttributeModifiers.Builder a = ItemAttributeModifiers.builder();
-        a.add(Attributes.MOVEMENT_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","sb"), 1000, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.FEET);
+        a.add(Attributes.MOVEMENT_SPEED, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","sb"), capped(Attributes.MOVEMENT_SPEED, "Speed Boots movement speed", 1000, MOVE_SPEED_LIMIT), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.FEET);
         s.set(DataComponents.ATTRIBUTE_MODIFIERS, a.build());
         setLore(s, "Run at lightning speed", "Outrun anything");
         return s;
@@ -614,7 +654,7 @@ public class GivePresetCommand extends Command {
         s.set(DataComponents.UNBREAKABLE, Unit.INSTANCE);
         s.set(DataComponents.ENCHANTMENTS, baseEnchants("looting:255","sharpness:255","fire_aspect:255","unbreaking:255","mending:1").toImmutable());
         ItemAttributeModifiers.Builder a = ItemAttributeModifiers.builder();
-        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","ls_d"), 1024, AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
+        a.add(Attributes.ATTACK_DAMAGE, new AttributeModifier(Identifier.fromNamespaceAndPath("orbiter","ls_d"), capped(Attributes.ATTACK_DAMAGE, "Looting Master attack damage", 1024), AttributeModifier.Operation.ADD_VALUE), EquipmentSlotGroup.MAINHAND);
         s.set(DataComponents.ATTRIBUTE_MODIFIERS, a.build());
         setLore(s, "Maximum loot from every kill", "Looting 255 = infinite drops");
         return s;
@@ -792,7 +832,20 @@ public class GivePresetCommand extends Command {
                 var enchRegistry = mc.level.registryAccess().getOrThrow(Registries.ENCHANTMENT).value();
                 var ids = new ArrayList<>(enchRegistry.keySet());
                 Collections.shuffle(ids);
-                ids.stream().limit(3).forEach(id -> enchRegistry.get(id).ifPresent(r -> b.set(r, 255)));
+                List<Holder<Enchantment>> picked = new ArrayList<>();
+                for (var id : ids) {
+                    if (picked.size() == 3) break;
+                    Optional<Holder.Reference<Enchantment>> opt = enchRegistry.get(id);
+                    if (opt.isEmpty()) continue;
+                    Holder<Enchantment> r = opt.get();
+                    boolean clash = false;
+                    for (Holder<Enchantment> p : picked) {
+                        if (!Enchantment.areCompatible(r, p)) { clash = true; break; }
+                    }
+                    if (clash) continue;
+                    picked.add(r);
+                    b.set(r, 255);
+                }
                 is.set(DataComponents.ENCHANTMENTS, b.toImmutable());
             }
 

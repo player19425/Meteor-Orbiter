@@ -1,12 +1,14 @@
 package orbiter.modules.world;
 
 import orbiter.Orbiter;
+import orbiter.compat.ClientCompat;
 import meteordevelopment.meteorclient.events.entity.player.InteractEntityEvent;
 import meteordevelopment.meteorclient.events.game.GameJoinedEvent;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -55,6 +57,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
+
+import orbiter.compat.PacketCompat;
 
 public class WorldDownloader extends Module {
 
@@ -111,17 +115,27 @@ public class WorldDownloader extends Module {
 
     private final Setting<Boolean> saveOnlyChanged = sgChunks.add(new BoolSetting.Builder()
         .name("only-changed-chunks")
-        .description("Only re-save chunks that actually changed since the last save (skips re-encoding identical chunk NBT every cycle). Massively reduces CPU/IO under steady state.")
+        .description("Re-saves a chunk only when a block update touched it.")
         .defaultValue(true)
         .build()
     );
 
     private final Setting<Integer> chunksPerTickBudget = sgChunks.add(new IntSetting.Builder()
         .name("chunks-per-tick-budget")
-        .description("Maximum chunks to build+save per save cycle. Caps the per-tick work so the saver never causes a frame hitch even with a huge radius.")
+        .description("Chunks encoded per save cycle, so a big radius never hitches a frame.")
         .defaultValue(8)
         .min(1)
         .sliderRange(1, 64)
+        .build()
+    );
+
+    private final Setting<Integer> tickBudgetMs = sgChunks.add(new IntSetting.Builder()
+        .name("tick-budget-ms")
+        .description("Milliseconds per tick spent encoding chunks. More fills the world faster, less keeps the game smooth.")
+        .defaultValue(4)
+        .min(1)
+        .max(50)
+        .sliderRange(1, 25)
         .build()
     );
 
@@ -163,7 +177,7 @@ public class WorldDownloader extends Module {
 
     private final Setting<DetectMode> detectMode = sgDetectAll.add(new EnumSetting.Builder<DetectMode>()
         .name("detect-mode")
-        .description("Manual = capture only what you interact with. DetectAll = open nearby containers automatically.")
+        .description("DetectAll opens nearby containers by itself, Manual waits for you.")
         .defaultValue(DetectMode.Manual)
         .build()
     );
@@ -197,13 +211,20 @@ public class WorldDownloader extends Module {
     private int saveTickCounter = 0;
     private int detectTickCounter = 0;
     private int entityScanCounter = 0;
-    private int fullSweepCounter = 0;
     private int lastContainerOpenTick = 0;
     private final ConcurrentLinkedQueue<Long> queuedChunkSaves = new ConcurrentLinkedQueue<>();
     private long detectScanCursor = 0;
     private BlockPos pendingDetectPos = null;
     private int detectPendingTicks = 0;
     private boolean suppressAutoMark = false;
+
+    private final Set<Long> savedChunks = ConcurrentHashMap.newKeySet();
+    private int chunksSaved = 0;
+    private int entitiesSaved = 0;
+    private int statusCounter = 0;
+    private long startTimeMs = 0L;
+    private Path activeSavePath = null;
+    private long lastEntityScanMs = 0L;
 
     private static final int MAX_QUEUED_CHUNK_SAVES = 512;
     private static final int DETECT_SCAN_BUDGET = 512;
@@ -228,6 +249,9 @@ public class WorldDownloader extends Module {
         saveManager.start(worldName.get().isBlank() ? savePath.getFileName().toString() : worldName.get());
 
         lastClicked = null;
+        lastScreen = null;
+        capturedMerchant = null;
+        lastContainerOpenTick = 0;
         interactedEntities.clear();
         openedContainers.clear();
         dirtyChunks.clear();
@@ -239,20 +263,43 @@ public class WorldDownloader extends Module {
         saveTickCounter = 0;
         detectTickCounter = 0;
         entityScanCounter = 0;
-        fullSweepCounter = 0;
+        savedChunks.clear();
+        chunksSaved = 0;
+        entitiesSaved = 0;
+        startTimeMs = System.currentTimeMillis();
+        activeSavePath = savePath;
 
-        if (statusMessages.get()) info("WorldDownloader started: saving to " + savePath);
+        if (statusMessages.get()) {
+            info("WDL: %s", "saving to " + savePath);
+            info("WDL: %s", "radius " + chunkRadius.get() + " chunks, entities " + (saveEntities.get() ? "on" : "off")
+                + ", full entity data " + (saveAllEntityData.get() ? "on" : "off")
+                + ", containers " + (saveContainers.get() ? "on" : "off"));
+        }
     }
 
     @Override
     public void onDeactivate() {
-        if (saveManager != null) {
-            if (mc.player != null) saveManager.savePlayerInventory(mc.player.getUUID(), mc.player.getInventory());
-            saveManager.drainWriteErrors();
-            saveManager.close();
+        final SwdSaveManager manager = saveManager;
+        final long startedAt = startTimeMs;
+        final Path target = activeSavePath;
+        final long scanMs = lastEntityScanMs;
+
+        if (manager != null) {
+            if (mc.player != null) manager.savePlayerInventory(mc.player.getUUID(), mc.player.getInventory());
+            reportWriteErrors();
+            manager.setFinishHandler((discarded, errors) -> mc.execute(() -> {
+                for (String problem : errors) error("WDL: %s", problem);
+                if (discarded > 0) error("WDL: %s", discarded + " writes were dropped before they reached the disk");
+                if (!statusMessages.get()) return;
+                long elapsed = startedAt > 0 ? (System.currentTimeMillis() - startedAt) / 1000L : 0L;
+                info("WDL: %s", "stopped after " + elapsed + "s");
+                info("WDL: %s", "wrote " + manager.chunksWritten() + " chunks and " + manager.entitiesWritten() + " entities, "
+                    + formatBytes(manager.bytesWritten()) + ", last entity scan " + scanMs + "ms");
+                if (target != null) info("WDL: %s", "world saved at " + target);
+            }));
             saveManager = null;
+            manager.close();
         }
-        if (statusMessages.get()) info("WorldDownloader stopped.");
         interactedEntities.clear();
         openedContainers.clear();
         dirtyChunks.clear();
@@ -292,18 +339,22 @@ public class WorldDownloader extends Module {
     private void onTick(TickEvent.Post event) {
         if (saveManager == null || !saveManager.isSaving || mc.player == null || mc.level == null) return;
 
-        drainQueuedChunkSaves();
+        long deadline = System.nanoTime() + tickBudgetMs.get() * 1_000_000L;
+
+        drainQueuedChunkSaves(deadline);
 
         saveTickCounter++;
         if (saveTickCounter >= saveIntervalTicks.get()) {
             saveTickCounter = 0;
-            saveManager.drainWriteErrors();
-            saveChunksAround();
+            reportWriteErrors();
+            markUnsavedChunksDirty();
         }
+
+        saveChunksAround(deadline);
 
         if (detectMode.get() == DetectMode.DetectAll) {
             if (pendingDetectPos != null) {
-                if (mc.gui.screen() instanceof AbstractContainerScreen<?>) {
+                if (ClientCompat.screen() instanceof AbstractContainerScreen<?>) {
                     openedContainers.add(pendingDetectPos);
                     pendingDetectPos = null;
                     detectPendingTicks = 0;
@@ -332,11 +383,13 @@ public class WorldDownloader extends Module {
                 saveEntitiesAround();
             }
         }
+
+        updateStatus();
     }
 
     private void scanAndOpenNearbyContainers() {
         if (mc.player == null || mc.level == null || mc.gameMode == null) return;
-        if (mc.gui.screen() != null) return;
+        if (ClientCompat.screen() != null) return;
         if (lastContainerOpenTick > 0 && mc.player.tickCount - lastContainerOpenTick < 20) return;
 
         BlockPos center = mc.player.blockPosition();
@@ -396,7 +449,20 @@ public class WorldDownloader extends Module {
             || id.contains("crafter");
     }
 
-    private void saveChunksAround() {
+    private void markUnsavedChunksDirty() {
+        if (mc.player == null || mc.level == null) return;
+        int r = chunkRadius.get();
+        int pcx = net.minecraft.world.level.ChunkPos.containing(mc.player.blockPosition()).x();
+        int pcz = net.minecraft.world.level.ChunkPos.containing(mc.player.blockPosition()).z();
+        for (int dx = -r; dx <= r; dx++) {
+            for (int dz = -r; dz <= r; dz++) {
+                long key = ChunkPos.pack(pcx + dx, pcz + dz);
+                if (!savedChunks.contains(key)) dirtyChunks.add(key);
+            }
+        }
+    }
+
+    private void saveChunksAround(long deadline) {
         if (mc.player == null || mc.level == null || saveManager == null) return;
         int r = chunkRadius.get();
         int pcx = net.minecraft.world.level.ChunkPos.containing(mc.player.blockPosition()).x();
@@ -404,27 +470,18 @@ public class WorldDownloader extends Module {
 
         int budget = Math.max(1, chunksPerTickBudget.get());
 
-        boolean onlyChanged = saveOnlyChanged.get();
-
-        fullSweepCounter++;
-        boolean forceFullSweep = !onlyChanged || (fullSweepCounter % 5 == 0);
-        if (forceFullSweep) {
-            for (int dx = -r; dx <= r; dx++) {
-                for (int dz = -r; dz <= r; dz++) {
-                    dirtyChunks.add(ChunkPos.pack(pcx + dx, pcz + dz));
-                }
-            }
-        }
-
         int processed = 0;
         for (int dx = -r; dx <= r && processed < budget; dx++) {
             for (int dz = -r; dz <= r && processed < budget; dz++) {
                 long key = ChunkPos.pack(pcx + dx, pcz + dz);
                 if (!dirtyChunks.remove(key)) continue;
-                LevelChunk chunk = mc.level.getChunk(pcx + dx, pcz + dz);
+                LevelChunk chunk = mc.level.getChunkSource().getChunk(pcx + dx, pcz + dz, false);
                 if (chunk == null) continue;
                 saveManager.saveChunk(chunk);
+                savedChunks.add(key);
+                chunksSaved++;
                 processed++;
+                if (System.nanoTime() >= deadline) return;
             }
         }
 
@@ -437,40 +494,89 @@ public class WorldDownloader extends Module {
                 if (Math.abs(cx - pcx) > r || Math.abs(cz - pcz) > r) it.remove();
             }
         }
+
+        if (savedChunks.size() > 8192) {
+            Iterator<Long> it = savedChunks.iterator();
+            while (it.hasNext()) {
+                long k = it.next();
+                int cx = ChunkPos.getX(k);
+                int cz = ChunkPos.getZ(k);
+                if (Math.abs(cx - pcx) > r * 2 || Math.abs(cz - pcz) > r * 2) it.remove();
+            }
+        }
     }
 
     private void saveEntitiesAround() {
         if (mc.player == null || mc.level == null || saveManager == null) return;
         if (!saveEntities.get()) return;
+        saveManager.saveFullEntityData = saveAllEntityData.get();
         int r = chunkRadius.get();
         int pcx = net.minecraft.world.level.ChunkPos.containing(mc.player.blockPosition()).x();
         int pcz = net.minecraft.world.level.ChunkPos.containing(mc.player.blockPosition()).z();
 
-        int budget = Math.max(1, chunksPerTickBudget.get());
-        int scanned = 0;
-        int entityCount = 0;
-        outer:
-        for (int dx = -r; dx <= r; dx++) {
-            for (int dz = -r; dz <= r; dz++) {
-                if (scanned >= budget) break outer;
-                LevelChunk chunk = mc.level.getChunk(pcx + dx, pcz + dz);
-                scanned++;
-                if (chunk != null) {
-                    saveManager.saveEntitiesForChunk(chunk);
+        int minY = mc.level.getMinY();
+        int maxY = minY + mc.level.getHeight();
+        int fromX = pcx - r;
+        int toX = pcx + r;
+        int fromZ = pcz - r;
+        int toZ = pcz + r;
 
-                    int minY = mc.level.getMinY();
-                    int maxY = minY + mc.level.getHeight();
-                    BlockPos start = new BlockPos(chunk.getPos().getMinBlockX(), minY, chunk.getPos().getMinBlockZ());
-                    BlockPos end = new BlockPos(chunk.getPos().getMaxBlockX() + 1, maxY, chunk.getPos().getMaxBlockZ() + 1);
-                    entityCount += mc.level.getEntities(EntityTypeTest.forClass(Entity.class), new net.minecraft.world.phys.AABB(start.getX(), start.getY(), start.getZ(),
-                            end.getX(), end.getY(), end.getZ()),
-                        e -> !(e instanceof Player)).size();
-                }
-            }
+        net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(fromX * 16, minY, fromZ * 16,
+            (toX + 1) * 16, maxY, (toZ + 1) * 16);
+
+        long started = System.nanoTime();
+        java.util.List<Entity> found = mc.level.getEntities(EntityTypeTest.forClass(Entity.class), box, e -> !(e instanceof Player));
+        lastEntityScanMs = (System.nanoTime() - started) / 1_000_000L;
+
+        if (found.isEmpty()) return;
+
+        java.util.Map<Long, java.util.List<Entity>> byChunk = new java.util.HashMap<>();
+        for (Entity entity : found) {
+            if (entity == null) continue;
+            int ex = entity.blockPosition().getX() >> 4;
+            int ez = entity.blockPosition().getZ() >> 4;
+            if (ex < fromX || ex > toX || ez < fromZ || ez > toZ) continue;
+            long key = net.minecraft.world.level.ChunkPos.pack(ex, ez);
+            byChunk.computeIfAbsent(key, k -> new java.util.ArrayList<>()).add(entity);
         }
-        if (statusMessages.get() && mc.player != null && entityCount > 0) {
-            mc.player.sendOverlayMessage(Component.literal("§6[WDL] §fSaved §a" + entityCount + "§f entities (scanned " + scanned + "/" + ((2 * r + 1) * (2 * r + 1)) + " chunks)"));
+
+        int written = 0;
+        for (java.util.Map.Entry<Long, java.util.List<Entity>> entry : byChunk.entrySet()) {
+            int ex = net.minecraft.world.level.ChunkPos.getX(entry.getKey());
+            int ez = net.minecraft.world.level.ChunkPos.getZ(entry.getKey());
+            written += saveManager.saveEntities(new net.minecraft.world.level.ChunkPos(ex, ez), entry.getValue());
         }
+        entitiesSaved += written;
+    }
+
+    private void updateStatus() {
+        statusCounter++;
+        if (statusCounter < 20) return;
+        statusCounter = 0;
+        if (!statusMessages.get() || mc.player == null || saveManager == null) return;
+
+        long elapsed = startTimeMs > 0 ? (System.currentTimeMillis() - startTimeMs) / 1000L : 0L;
+        String text = "§6[WDL] §fchunks §a" + chunksSaved
+            + "§f  entities §a" + entitiesSaved
+            + "§f  " + formatBytes(saveManager.bytesWritten())
+            + "§f  queued §a" + queuedChunkSaves.size()
+            + "§f  " + elapsed + "s";
+        mc.player.sendOverlayMessage(Component.literal(text));
+    }
+
+    private void reportWriteErrors() {
+        if (saveManager == null) return;
+        List<String> errors = saveManager.drainWriteErrors();
+        for (String problem : errors) {
+            error("WDL: %s", problem);
+        }
+    }
+
+    private static String formatBytes(long bytes) {
+        if (bytes < 1024L) return bytes + " B";
+        if (bytes < 1024L * 1024L) return (bytes / 1024L) + " KB";
+        long tenths = (bytes * 10L) / (1024L * 1024L);
+        return (tenths / 10L) + "." + (tenths % 10L) + " MB";
     }
 
     private void enqueueChunkSave(int x, int z) {
@@ -479,7 +585,7 @@ public class WorldDownloader extends Module {
         queuedChunkSaves.offer(key);
     }
 
-    private void drainQueuedChunkSaves() {
+    private void drainQueuedChunkSaves(long deadline) {
         if (mc.level == null || saveManager == null) {
             queuedChunkSaves.clear();
             return;
@@ -489,8 +595,10 @@ public class WorldDownloader extends Module {
             LevelChunk chunk = mc.level.getChunkSource().getChunk(ChunkPos.getX(key), ChunkPos.getZ(key), false);
             if (chunk != null) {
                 saveManager.saveChunk(chunk);
-                dirtyChunks.add(chunk.getPos().pack());
+                savedChunks.add(key);
+                chunksSaved++;
             }
+            if (System.nanoTime() >= deadline) break;
         }
     }
 
@@ -499,7 +607,7 @@ public class WorldDownloader extends Module {
         if (saveManager == null || !saveManager.isSaving) return;
         if (event.packet instanceof ClientboundLevelChunkWithLightPacket packet) {
 
-            enqueueChunkSave(packet.getX(), packet.getZ());
+            enqueueChunkSave(PacketCompat.chunkX(packet), PacketCompat.chunkZ(packet));
         } else if (event.packet instanceof ClientboundBlockUpdatePacket packet) {
 
             if (mc.level != null && saveOnlyChanged.get()) {
@@ -531,7 +639,7 @@ public class WorldDownloader extends Module {
     private void onSendPacket(PacketEvent.Send event) {
         if (saveManager == null || mc.player == null) return;
         if (event.packet instanceof ServerboundUseItemOnPacket blockPacket) {
-            BlockPos pos = blockPacket.getHitResult().getBlockPos();
+            BlockPos pos = PacketCompat.useItemOnHitResult(blockPacket).getBlockPos();
             lastClicked = pos;
             saveManager.lastClicked = pos;
             if (!suppressAutoMark) openedContainers.add(pos);
@@ -541,7 +649,7 @@ public class WorldDownloader extends Module {
     @EventHandler
     private void onTickCheckScreen(TickEvent.Pre event) {
         if (saveManager == null || !saveManager.isSaving) return;
-        Screen current = mc.gui.screen();
+        Screen current = ClientCompat.screen();
 
         if (current instanceof MerchantScreen && saveShopkeeperTrades.get()) {
             if (mc.player.containerMenu instanceof MerchantMenu merchant) {
@@ -561,6 +669,7 @@ public class WorldDownloader extends Module {
 
         if (closed instanceof MerchantScreen && saveShopkeeperTrades.get()) {
             if (lastClicked instanceof Entity entity && capturedMerchant != null) {
+                saveManager.saveFullEntityData = saveAllEntityData.get();
                 CompoundTag overlay = new CompoundTag();
                 MerchantOffers offers = capturedMerchant.getOffers();
                 if (!offers.isEmpty()) {
@@ -602,5 +711,24 @@ public class WorldDownloader extends Module {
                 if (statusMessages.get()) info("Saved entity inventory for " + entity.getName().getString());
             }
         }
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        if (saveManager != null) {
+            saveManager.drainWriteErrors();
+            saveManager.close();
+            saveManager = null;
+        }
+        interactedEntities.clear();
+        openedContainers.clear();
+        dirtyChunks.clear();
+        queuedChunkSaves.clear();
+        pendingDetectPos = null;
+        capturedMerchant = null;
+        lastScreen = null;
+        lastClicked = null;
+        detectPendingTicks = 0;
+        suppressAutoMark = false;
     }
 }

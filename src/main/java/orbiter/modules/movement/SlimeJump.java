@@ -3,6 +3,7 @@ package orbiter.modules.movement;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import orbiter.Orbiter;
 import orbiter.systems.combat.CombatEngine;
@@ -17,7 +18,7 @@ public class SlimeJump extends Module {
 
     private final Setting<Double> bounceMultiplier = sgGeneral.add(new DoubleSetting.Builder()
         .name("bounce-multiplier")
-        .description("Height multiplier per consecutive bounce (e.g., 1.5 = 50% higher each bounce).")
+        .description("Height multiplier applied on every consecutive bounce.")
         .defaultValue(1.5)
         .min(1.0)
         .max(5.0)
@@ -27,7 +28,7 @@ public class SlimeJump extends Module {
 
     private final Setting<Double> maxVelocity = sgGeneral.add(new DoubleSetting.Builder()
         .name("max-velocity")
-        .description("Maximum upward velocity cap. Raise it to bounce super high.")
+        .description("Maximum upward velocity allowed per bounce.")
         .defaultValue(10.0)
         .min(0.5)
         .max(50.0)
@@ -55,7 +56,6 @@ public class SlimeJump extends Module {
     private int bounceCount = 0;
     private int offSlimeTicks = 0;
     private boolean wasFalling = false;
-    private boolean wasOnSlime = false;
 
     public SlimeJump() {
         super(Orbiter.CATEGORY_STUPID, "slime-jump", "Bounces higher on slime.");
@@ -71,7 +71,6 @@ public class SlimeJump extends Module {
         bounceCount = 0;
         offSlimeTicks = 0;
         wasFalling = false;
-        wasOnSlime = false;
     }
 
     @Override
@@ -90,10 +89,7 @@ public class SlimeJump extends Module {
         }
 
         if (CombatEngine.get().isFrozen()) {
-            boolean frozenOnSlime = isOnSlime();
-            double frozenYVel = mc.player.getDeltaMovement().y;
-            wasFalling = frozenYVel < -0.1;
-            wasOnSlime = frozenOnSlime;
+            wasFalling = mc.player.getDeltaMovement().y < -0.1;
             return;
         }
 
@@ -114,16 +110,12 @@ public class SlimeJump extends Module {
         boolean falling = yVel < -0.1;
 
         if (wasFalling && onSlime && !falling) {
-
             performBounce(yVel);
-        }
-
-        if (autoBounce.get() && onSlime && mc.player.onGround() && yVel == 0) {
+        } else if (autoBounce.get() && onSlime && mc.player.onGround() && Math.abs(yVel) < 0.05) {
             performBounce(-0.5);
         }
 
         wasFalling = falling;
-        wasOnSlime = onSlime;
     }
 
     private void performBounce(double impactVelocity) {
@@ -151,5 +143,12 @@ public class SlimeJump extends Module {
     @Override
     public String getInfoString() {
         return "Bounces: " + bounceCount;
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        bounceCount = 0;
+        offSlimeTicks = 0;
+        wasFalling = false;
     }
 }

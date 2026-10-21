@@ -11,7 +11,7 @@ import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 
 public class TNTRainCommand extends Command {
     public TNTRainCommand() {
-        super("tntrain", "Triggers TNT rain with specified parameters. Usage: .tntrain [amount] [radius] [height]");
+        super("tntrain", "Triggers TNT rain with the given amount, radius and height.");
     }
 
     @Override
@@ -59,7 +59,7 @@ public class TNTRainCommand extends Command {
             return;
         }
 
-        info("Starting TNT Rain: " + amount + " TNT, radius " + radius + ", height " + height);
+        info("Starting TNT Rain: %s TNT, radius %s, height %s", amount, radius, height);
         module.startWithParams(amount, radius, height);
     }
 }

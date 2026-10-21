@@ -16,7 +16,7 @@ import java.util.List;
 
 @Mixin(ItemStack.class)
 public class ItemInfoMixin {
-    @Inject(method = "getTooltipLines", at = @At("RETURN"))
+    @Inject(method = "getTooltipLines", at = @At("RETURN"), require = 0, order = 900)
     private void orbiter$appendItemInfo(Item.TooltipContext context, Player player, TooltipFlag type, CallbackInfoReturnable<List<Component>> cir) {
         List<Component> original = cir.getReturnValue();
         if (original == null) return;

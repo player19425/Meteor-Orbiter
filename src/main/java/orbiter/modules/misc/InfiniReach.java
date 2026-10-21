@@ -4,6 +4,7 @@ import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
@@ -41,7 +42,7 @@ public class InfiniReach extends Module {
         .defaultValue(true).build());
 
     private final Setting<Boolean> readCurrentValues = sg.add(new BoolSetting.Builder()
-        .name("read-current-values").description("Query the current reach values before applying and restore exactly those on disable. Falls back to vanilla defaults if the read fails.")
+        .name("read-current-values").description("Restore the values you already had instead of the vanilla defaults.")
         .defaultValue(true).build());
 
     private final Setting<Boolean> debug = sg.add(new BoolSetting.Builder()
@@ -52,6 +53,7 @@ public class InfiniReach extends Module {
     private static final double VANILLA_ENTITY_REACH = 3.0;
     private static final Pattern VALUE_PATTERN = Pattern.compile("(?:base value|is) ([0-9.]+)");
     private static final int APPLY_RETRY_DELAY = 40;
+    private static final int READ_TIMEOUT_TICKS = 40;
 
     private ItemStack savedOffhand = ItemStack.EMPTY;
     private boolean hasSaved = false;
@@ -79,8 +81,13 @@ public class InfiniReach extends Module {
 
     @Override
     public void onDeactivate() {
-        if (lastMethod == Method.OpAttributes) restoreAttributes();
+        if (attributeApplied) restoreAttributes();
         restoreOffhand();
+        reset();
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
         reset();
     }
 
@@ -88,6 +95,7 @@ public class InfiniReach extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null || !isActive()) return;
         if (!ConfigModifier.get().stupidModulesEnabled()) { toggle(); return; }
+        if (pendingReads > 0) readWaitTicks++;
         if (applyCooldown > 0) {
             applyCooldown--;
             return;
@@ -97,6 +105,7 @@ public class InfiniReach extends Module {
         double currentReach = reach.get();
 
         if (selected == lastMethod && currentReach == lastReach) return;
+        if (selected != lastMethod && attributeApplied) restoreAttributes();
 
         boolean applied = selected == Method.OpAttributes ? applyOpAttributes() : applyCreativeItem();
         if (!applied) {
@@ -134,16 +143,12 @@ public class InfiniReach extends Module {
             savedEntityReach = VANILLA_ENTITY_REACH;
         }
 
-        if (pendingReads > 0 && readWaitTicks < 40) {
-            readWaitTicks++;
-            if (readWaitTicks == 40) {
-                if (debug.get()) info("Could not read current attribute values, restoring vanilla defaults on disable.");
-                savedBlockReach = VANILLA_BLOCK_REACH;
-                savedEntityReach = VANILLA_ENTITY_REACH;
-                pendingReads = 0;
-            } else {
-                return false;
-            }
+        if (pendingReads > 0) {
+            if (readWaitTicks < READ_TIMEOUT_TICKS) return false;
+            if (debug.get()) info("Could not read current attribute values, restoring vanilla defaults on disable.");
+            savedBlockReach = VANILLA_BLOCK_REACH;
+            savedEntityReach = VANILLA_ENTITY_REACH;
+            pendingReads = 0;
         }
 
         mc.player.connection.sendCommand(root + " @s minecraft:block_interaction_range base set " + fmt(reach.get()));

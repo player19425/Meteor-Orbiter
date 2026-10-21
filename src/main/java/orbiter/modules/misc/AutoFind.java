@@ -1,6 +1,7 @@
 package orbiter.modules.misc;
 
 import orbiter.Orbiter;
+import orbiter.compat.ClientCompat;
 import orbiter.util.CommandUtils;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -9,8 +10,10 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.meteorclient.utils.render.color.Color;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -20,8 +23,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -64,8 +67,8 @@ public class AutoFind extends Module {
         }
 
         public String toDisplayString() {
-            return String.format("[%s] %s at %d, %d, %d (%d blocks) • %s",
-                category, criteria, pos.getX(), pos.getY(), pos.getZ(), blockCount, criteria);
+            return String.format("[%s] %s at %d, %d, %d (%d blocks)",
+                category, criteria, pos.getX(), pos.getY(), pos.getZ(), blockCount);
         }
     }
 
@@ -168,9 +171,10 @@ public class AutoFind extends Module {
 
     private final Setting<Integer> scanBudgetMs = sgFlight.add(new IntSetting.Builder()
         .name("scan-budget-ms")
-        .description("Maximum milliseconds per tick spent scanning. Lowers this if the game stutters during sweeps.")
+        .description("Milliseconds per tick the sweep may spend scanning.")
         .defaultValue(10)
         .min(1).sliderRange(1, 50)
+        .visible(() -> scanMode.get() == ScanMode.WorldSweep)
         .build());
 
     private final Setting<Boolean> worldWrap = sgFlight.add(new BoolSetting.Builder()
@@ -182,7 +186,7 @@ public class AutoFind extends Module {
 
     private final Setting<Boolean> autoTp = sgFlight.add(new BoolSetting.Builder()
         .name("auto-tp")
-        .description("Automatically send /tp to move the player during world sweep (requires OP/creative).")
+        .description("Send /tp to move you during the sweep. Needs OP or creative.")
         .defaultValue(true)
         .visible(() -> scanMode.get() == ScanMode.WorldSweep)
         .build());
@@ -252,7 +256,7 @@ public class AutoFind extends Module {
 
     private final Setting<Boolean> findBases = sgBase.add(new BoolSetting.Builder()
         .name("find-bases")
-        .description("Detect player-made bases by looking for redstone, crafting, and other non-natural blocks.")
+        .description("Detect player builds from placed blocks like redstone and furnaces.")
         .defaultValue(true)
         .build());
 
@@ -308,7 +312,7 @@ public class AutoFind extends Module {
         .visible(() -> findBases.get()).build());
     private final Setting<Boolean> excludeStructures = sgBase.add(new BoolSetting.Builder()
         .name("exclude-structures")
-        .description("Attempt to filter out naturally generated structures by checking for structure blocks nearby.")
+        .description("Skip chunks that hold natural structure blocks.")
         .defaultValue(true)
         .visible(() -> findBases.get())
         .build());
@@ -373,14 +377,15 @@ public class AutoFind extends Module {
     private static final int MAX_RESULTS = 2000;
     private static final int MAX_RENDER_STORAGE = 5000;
     private static final int MAX_SCANNED_CHUNKS = 100000;
+    private static final int MAX_SWEEP_CHUNKS = 500000;
 
     private final List<FindResult> results = new ArrayList<>();
     private final Set<ChunkPos> scannedChunks = new LinkedHashSet<>();
-    private final List<BlockPos> renderStoragePositions = new ArrayList<>();
+    private final Set<BlockPos> renderStoragePositions = new LinkedHashSet<>();
     private final Map<BlockPos, Color> renderStorageColors = new HashMap<>();
     private int tickCounter = 0;
-    private boolean paused = false;
     private ClientLevel lastLevel = null;
+    private boolean logFailureNotified = false;
 
     private double flightX, flightZ;
     private boolean sweepInitialized = false;
@@ -388,13 +393,10 @@ public class AutoFind extends Module {
     private long totalSweepChunksScanned = 0;
     private int lastTpTick = 0;
 
-    private int snakeRow = 0;
     private boolean snakeForward = true;
 
-    private int spiralArmLength = 1;
     private int spiralStepsInArm = 0;
     private int spiralDirection = 0;
-    private int spiralTurnCount = 0;
 
     private int radialCurrentSector = 0;
     private double radialDistance = 0;
@@ -420,10 +422,10 @@ public class AutoFind extends Module {
         renderStoragePositions.clear();
         renderStorageColors.clear();
         tickCounter = 0;
-        paused = false;
         sweepInitialized = false;
         sweepComplete = false;
         totalSweepChunksScanned = 0;
+        logFailureNotified = false;
         scanEnvironment();
     }
 
@@ -467,8 +469,6 @@ public class AutoFind extends Module {
             renderStorageColors.clear();
         }
 
-        if (paused) return;
-
         tickCounter++;
         if (tickCounter % scanInterval.get() != 0) return;
 
@@ -477,6 +477,19 @@ public class AutoFind extends Module {
         } else {
             tickWorldSweep();
         }
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        results.clear();
+        scannedChunks.clear();
+        renderStoragePositions.clear();
+        renderStorageColors.clear();
+        lastLevel = null;
+        tickCounter = 0;
+        sweepInitialized = false;
+        sweepComplete = false;
+        totalSweepChunksScanned = 0;
     }
 
     private void scanLoadedChunks() {
@@ -498,24 +511,31 @@ public class AutoFind extends Module {
                 ChunkPos cp = new ChunkPos(cx, cz);
                 if (scannedChunks.contains(cp)) continue;
 
-                LevelChunk chunk = mc.level.getChunk(cx, cz);
+                LevelChunk chunk = loadedChunk(cx, cz);
                 if (chunk == null) continue;
 
                 scannedChunks.add(cp);
                 scanChunk(chunk, cp);
                 budget--;
-
-                if (scannedChunks.size() > MAX_SCANNED_CHUNKS) {
-                    int removeCount = scannedChunks.size() - MAX_SCANNED_CHUNKS / 2;
-                    Iterator<ChunkPos> iterator = scannedChunks.iterator();
-                    for (int i = 0; i < removeCount && iterator.hasNext(); i++) {
-                        iterator.next();
-                        iterator.remove();
-                    }
-                    info("Scanned-chunks cache trimmed, keeping the most recent entries (>100K). Continuing scan.");
-                }
+                trimScannedChunks();
             }
         }
+    }
+
+    private LevelChunk loadedChunk(int cx, int cz) {
+        return mc.level.getChunkSource().getChunk(cx, cz, ChunkStatus.FULL, false);
+    }
+
+    private void trimScannedChunks() {
+        if (scannedChunks.size() <= MAX_SCANNED_CHUNKS) return;
+
+        int removeCount = scannedChunks.size() - MAX_SCANNED_CHUNKS / 2;
+        Iterator<ChunkPos> iterator = scannedChunks.iterator();
+        for (int i = 0; i < removeCount && iterator.hasNext(); i++) {
+            iterator.next();
+            iterator.remove();
+        }
+        info("Scanned-chunks cache trimmed, keeping the " + (MAX_SCANNED_CHUNKS / 2) + " most recent entries. Continuing scan.");
     }
 
     private void initWorldSweep() {
@@ -527,12 +547,9 @@ public class AutoFind extends Module {
             flightZ = startZ.get();
         }
 
-        snakeRow = (int) flightX >> 4;
         snakeForward = true;
-        spiralArmLength = 1;
         spiralStepsInArm = 0;
         spiralDirection = 0;
-        spiralTurnCount = 0;
         radialCurrentSector = 0;
         radialDistance = 0;
         radialAngle = 0;
@@ -559,24 +576,21 @@ public class AutoFind extends Module {
 
             ChunkPos cp = new ChunkPos(cx, cz);
             if (!scannedChunks.contains(cp)) {
+                LevelChunk chunk = loadedChunk(cx, cz);
+                if (chunk == null) break;
 
-                LevelChunk chunk = mc.level.getChunk(cx, cz);
-                if (chunk != null) {
-                    scannedChunks.add(cp);
-                    scanChunk(chunk, cp);
-                    totalSweepChunksScanned++;
-                    scannedThisTick++;
-                } else {
-
-                    break;
-                }
+                scannedChunks.add(cp);
+                scanChunk(chunk, cp);
+                totalSweepChunksScanned++;
+                scannedThisTick++;
+                trimScannedChunks();
             }
 
             advanceFlightPosition();
 
             if (System.nanoTime() >= deadline) break;
 
-            if (totalSweepChunksScanned > 500_000) {
+            if (totalSweepChunksScanned > MAX_SWEEP_CHUNKS) {
                 sweepComplete = true;
                 info("Level sweep completed. §a" + totalSweepChunksScanned + "§r chunks scanned, §e" + results.size() + "§r findings.");
                 break;
@@ -586,8 +600,8 @@ public class AutoFind extends Module {
         if (autoTp.get() && mc.player != null && mc.getConnection() != null && !sweepComplete
             && mc.player.getAbilities().instabuild
             && (tickCounter - lastTpTick) >= tpInterval.get()) {
-            int bx = wrapBlockX((int) flightX);
-            int bz = wrapBlockZ((int) flightZ);
+            int bx = wrapBlock(flightX);
+            int bz = wrapBlock(flightZ);
             mc.getConnection().sendCommand(CommandUtils.vanilla("tp " + bx + " " + flightY.get() + " " + bz));
             lastTpTick = tickCounter;
         }
@@ -648,18 +662,13 @@ public class AutoFind extends Module {
             case 3 -> flightZ -= stepBlocks;
         }
 
-        flightX = wrapBlockX(flightX);
-        flightZ = wrapBlockZ(flightZ);
+        flightX = wrapBlock(flightX);
+        flightZ = wrapBlock(flightZ);
 
         int armChunkLen = spiralStep.get();
         if (spiralStepsInArm >= armChunkLen) {
             spiralStepsInArm = 0;
             spiralDirection = (spiralDirection + 1) % 4;
-            spiralTurnCount++;
-
-            if (spiralTurnCount % 2 == 0) {
-                spiralArmLength++;
-            }
         }
     }
 
@@ -673,33 +682,21 @@ public class AutoFind extends Module {
         flightX = radialDistance * Math.cos(radialAngle);
         flightZ = radialDistance * Math.sin(radialAngle);
 
-        flightX = wrapBlockX(flightX);
-        flightZ = wrapBlockZ(flightZ);
+        flightX = wrapBlock(flightX);
+        flightZ = wrapBlock(flightZ);
 
         double maxDist = Math.sqrt(2.0) * WORLD_BOUNDARY;
         if (radialDistance > maxDist) {
             radialDistance = 0;
             radialCurrentSector = (radialCurrentSector + 1) % radialSectors.get();
-
-            if (radialCurrentSector == 0) {
-                radialDistance = 0;
-            }
         }
     }
 
-    private int wrapBlockX(double x) {
-        if (!worldWrap.get()) return (int) Math.max(-WORLD_BOUNDARY, Math.min(WORLD_BOUNDARY, x));
+    private int wrapBlock(double value) {
+        if (!worldWrap.get()) return (int) Math.max(-WORLD_BOUNDARY, Math.min(WORLD_BOUNDARY, value));
 
         double range = 2.0 * WORLD_BOUNDARY;
-        double shifted = x + WORLD_BOUNDARY;
-        double wrapped = ((shifted % range) + range) % range - WORLD_BOUNDARY;
-        return (int) wrapped;
-    }
-
-    private int wrapBlockZ(double z) {
-        if (!worldWrap.get()) return (int) Math.max(-WORLD_BOUNDARY, Math.min(WORLD_BOUNDARY, z));
-        double range = 2.0 * WORLD_BOUNDARY;
-        double shifted = z + WORLD_BOUNDARY;
+        double shifted = value + WORLD_BOUNDARY;
         double wrapped = ((shifted % range) + range) % range - WORLD_BOUNDARY;
         return (int) wrapped;
     }
@@ -778,15 +775,13 @@ public class AutoFind extends Module {
 
         boolean scanEnderChests = stashEnderChests.get() || (findStorage.get() && storageEnderChests.get());
 
-        if (isExcluded(centerOfChunk)) return;
-
         if (findBases.get() || scanEnderChests) {
             int minY = mc.level.getMinY();
             int maxY = mc.level.getMaxY();
 
             for (int x = startX; x < startX + 16; x++) {
                 for (int z = startZ; z < startZ + 16; z++) {
-                    for (int y = minY; y <= maxY; y++) {
+                    for (int y = minY; y < maxY; y++) {
                         BlockPos.MutableBlockPos mpos = new BlockPos.MutableBlockPos(x, y, z);
                         if (isExcluded(mpos)) continue;
                         BlockState state = chunk.getBlockState(mpos);
@@ -858,16 +853,15 @@ public class AutoFind extends Module {
 
     private boolean isExcluded(BlockPos pos) {
         if (!enableExclusion.get()) return false;
-        int dx = pos.getX() - exclusionX.get();
-        int dz = pos.getZ() - exclusionZ.get();
+        double radius = exclusionRadius.get();
+        double radiusSq = radius * radius;
+        double dx = pos.getX() - exclusionX.get();
+        double dz = pos.getZ() - exclusionZ.get();
         if (exclusionY.get() >= 0) {
-            int dy = pos.getY() - exclusionY.get();
-            double dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            return dist <= exclusionRadius.get();
-        } else {
-            double dist = Math.sqrt(dx * dx + dz * dz);
-            return dist <= exclusionRadius.get();
+            double dy = pos.getY() - exclusionY.get();
+            return dx * dx + dy * dy + dz * dz <= radiusSq;
         }
+        return dx * dx + dz * dz <= radiusSq;
     }
 
     private boolean translationKeyContains(Block block, String substring) {
@@ -900,10 +894,10 @@ public class AutoFind extends Module {
 
         switch (notifyMode.get()) {
             case Chat -> ChatUtils.sendMsg(Component.literal(msg));
-            case ActionBar -> { if (mc.player != null) mc.player.sendOverlayMessage(Component.literal(msg)); }
-            case Both -> { ChatUtils.sendMsg(Component.literal(msg)); if (mc.player != null) mc.player.sendOverlayMessage(Component.literal(msg)); }
-            case Toast -> { if (mc.gui.toastManager() != null) mc.gui.toastManager().addToast(new net.minecraft.client.gui.components.toasts.SystemToast(net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION, Component.literal("§6AutoFind " + result.category), Component.literal(result.criteria))); }
-            case All -> { ChatUtils.sendMsg(Component.literal(msg)); if (mc.player != null) mc.player.sendOverlayMessage(Component.literal(msg)); if (mc.gui.toastManager() != null) mc.gui.toastManager().addToast(new net.minecraft.client.gui.components.toasts.SystemToast(net.minecraft.client.gui.components.toasts.SystemToast.SystemToastId.PERIODIC_NOTIFICATION, Component.literal("§6AutoFind " + result.category), Component.literal(result.criteria))); }
+            case ActionBar -> showOverlay(msg);
+            case Both -> { ChatUtils.sendMsg(Component.literal(msg)); showOverlay(msg); }
+            case Toast -> showToast(result);
+            case All -> { ChatUtils.sendMsg(Component.literal(msg)); showOverlay(msg); showToast(result); }
             case None -> {}
         }
 
@@ -922,6 +916,19 @@ public class AutoFind extends Module {
         if (logResults.get()) saveResultToFile(result);
     }
 
+    private void showOverlay(String msg) {
+        if (mc.player != null) mc.player.sendOverlayMessage(Component.literal(msg));
+    }
+
+    private void showToast(FindResult result) {
+        if (ClientCompat.toastManager() == null) return;
+
+        ClientCompat.toastManager().addToast(new SystemToast(
+            SystemToast.SystemToastId.PERIODIC_NOTIFICATION,
+            Component.literal("§6AutoFind " + result.category),
+            Component.literal(result.criteria)));
+    }
+
     private void saveResultToFile(FindResult result) {
         try {
             File logFile = new File("orbiter_autofind.txt");
@@ -931,18 +938,22 @@ public class AutoFind extends Module {
                 String time = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(result.timestamp));
                 writer.write(String.format("[%s] %s\n", time, result.toDisplayString()));
             }
-        } catch (IOException e) { e.printStackTrace(); }
+        } catch (IOException e) {
+            if (logFailureNotified) return;
+            logFailureNotified = true;
+            error("AutoFind could not write its log file: " + e.getMessage());
+        }
     }
 
     private void addRenderStorage(BlockPos pos, Color color) {
         BlockPos immutable = pos.immutable();
-        if (!renderStoragePositions.contains(immutable)) {
-            renderStoragePositions.add(immutable);
-            renderStorageColors.put(immutable, new Color(color.r, color.g, color.b, lineOpacity.get()));
-            if (renderStoragePositions.size() > MAX_RENDER_STORAGE) {
-                BlockPos oldest = renderStoragePositions.remove(0);
-                renderStorageColors.remove(oldest);
-            }
+        if (!renderStoragePositions.add(immutable)) return;
+
+        renderStorageColors.put(immutable, new Color(color.r, color.g, color.b, lineOpacity.get()));
+        if (renderStoragePositions.size() > MAX_RENDER_STORAGE) {
+            BlockPos oldest = renderStoragePositions.iterator().next();
+            renderStoragePositions.remove(oldest);
+            renderStorageColors.remove(oldest);
         }
     }
 
@@ -1008,5 +1019,4 @@ public class AutoFind extends Module {
         event.renderer.line(cx, cy, cz, cx, cy + dy, cz, color);
         event.renderer.line(cx, cy, cz, cx, cy, cz + dz, color);
     }
-
 }

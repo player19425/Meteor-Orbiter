@@ -19,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class HandledScreenMixin {
     @Shadow protected Slot hoveredSlot;
 
-    @Inject(method = "mouseScrolled(DDDD)Z", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "mouseScrolled(DDDD)Z", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$onMouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount, CallbackInfoReturnable<Boolean> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.isFakeCountEnabled()) return;
@@ -40,7 +40,7 @@ public abstract class HandledScreenMixin {
         cir.setReturnValue(true);
     }
 
-    @Inject(method = "mouseClicked(Lnet/minecraft/client/input/MouseButtonEvent;Z)Z", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "mouseClicked(Lnet/minecraft/client/input/MouseButtonEvent;Z)Z", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$onMouseClicked(MouseButtonEvent click, boolean doubled, CallbackInfoReturnable<Boolean> cir) {
         if (hoveredSlot == null || !hoveredSlot.hasItem()) return;
 
@@ -49,34 +49,17 @@ public abstract class HandledScreenMixin {
             return;
         }
 
-        if (click.button() == 0) {
+        int button = click.button();
+        if (button == 0) {
             Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null && mc.options.keyShift.isDown()) {
-
-                if (hoveredSlot != null) {
-                    int slotIndex = hoveredSlot.index;
-                    boolean shouldCancel = ItemStealer.onShiftClickSlot(
-                        slotIndex, 0, ContainerInput.QUICK_MOVE
-                    );
-                    if (shouldCancel) {
-                        cir.setReturnValue(true);
-                        return;
-                    }
-                }
+            if (mc.player != null && mc.options.keyShift.isDown() && ItemStealer.onShiftClickSlot(hoveredSlot.index, 0, ContainerInput.QUICK_MOVE)) {
+                cir.setReturnValue(true);
+                return;
             }
         }
 
-        if (click.button() != 2) {
-
-            if (click.button() == 1 && ItemStealer.isRightClickCloneEnabled()) {
-                if (ItemStealer.cloneGuiSlot(hoveredSlot)) {
-                    cir.setReturnValue(true);
-                    return;
-                }
-            }
-
-            if (click.button() != 2) return;
-        }
+        boolean cloneAllowed = button == 2 || button == 1 && ItemStealer.isRightClickCloneEnabled();
+        if (!cloneAllowed) return;
 
         if (ItemStealer.cloneGuiSlot(hoveredSlot)) {
             cir.setReturnValue(true);

@@ -20,7 +20,7 @@ import java.util.List;
 @Mixin(ItemStack.class)
 public abstract class ServerProtectItemLoreMixin {
 
-    @Inject(method = "getTooltipLines", at = @At("RETURN"), cancellable = true)
+    @Inject(method = "getTooltipLines", at = @At("RETURN"), cancellable = true, require = 0, order = 1100)
     private void orbiter$sanitizeLore(Item.TooltipContext context, Player player, TooltipFlag type, CallbackInfoReturnable<List<Component>> cir) {
         ServerProtect module = ServerProtect.get();
 

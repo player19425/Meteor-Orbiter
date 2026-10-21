@@ -12,6 +12,7 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.systems.modules.combat.AutoTotem;
 import meteordevelopment.meteorclient.utils.player.PlayerUtils;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
 import net.minecraft.client.KeyMapping;
@@ -21,13 +22,14 @@ import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
-import net.minecraft.network.protocol.game.ServerboundSwingPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.item.Items;
 import orbiter.Orbiter;
+import orbiter.compat.PacketCompat;
+import orbiter.compat.ClientCompat;
 import orbiter.systems.combat.CombatEngine;
 
 public class AutoTotemPlus extends Module {
@@ -51,14 +53,14 @@ public class AutoTotemPlus extends Module {
 
     private final Setting<Boolean> emergencyOnly = sgGeneral.add(new BoolSetting.Builder()
         .name("emergency-only")
-        .description("Only swap when your effective health drops to the threshold. Off keeps a totem ready at all times.")
+        .description("Off keeps a totem ready at all times.")
         .defaultValue(false)
         .build()
     );
 
     private final Setting<Double> healthThreshold = sgGeneral.add(new DoubleSetting.Builder()
         .name("health-threshold")
-        .description("Swap to a totem when effective health drops to this value. Used on its own or with emergency-only.")
+        .description("Swap once your effective health drops to this value.")
         .defaultValue(10.0)
         .min(1.0)
         .max(20.0)
@@ -68,7 +70,7 @@ public class AutoTotemPlus extends Module {
 
     private final Setting<Boolean> smartHealth = sgGeneral.add(new BoolSetting.Builder()
         .name("smart-health")
-        .description("Include incoming damage like crystals, falls and explosions when checking the threshold.")
+        .description("Count crystals, falls and explosions as incoming damage.")
         .defaultValue(false)
         .build()
     );
@@ -82,7 +84,7 @@ public class AutoTotemPlus extends Module {
 
     private final Setting<Boolean> sendClosePacket = sgTiming.add(new BoolSetting.Builder()
         .name("send-close-packet")
-        .description("Send a container close packet at the end of the session, like closing your inventory by hand.")
+        .description("Send a container close packet when the session ends.")
         .defaultValue(true)
         .build()
     );
@@ -150,7 +152,7 @@ public class AutoTotemPlus extends Module {
     private long lastSessionEnd;
 
     public AutoTotemPlus() {
-        super(Orbiter.CATEGORY_WIP, "auto-totem-plus", "Keeps a totem in your offhand using a real inventory session while you stand completely still.");
+        super(Orbiter.CATEGORY_WIP, "auto-totem-plus", "Keeps a totem in your offhand with a real inventory session.");
     }
 
     @Override
@@ -192,7 +194,7 @@ public class AutoTotemPlus extends Module {
         }
 
         if (phase != Phase.Idle) {
-            if (mc.gui.screen() != null && !(mc.gui.screen() instanceof ChatScreen)) {
+            if (ClientCompat.screen() != null && !(ClientCompat.screen() instanceof ChatScreen)) {
                 abortSession(true);
                 return;
             }
@@ -268,7 +270,7 @@ public class AutoTotemPlus extends Module {
     }
 
     private boolean shouldSwap() {
-        if (mc.gui.screen() != null && !(mc.gui.screen() instanceof ChatScreen)) return false;
+        if (ClientCompat.screen() != null && !(ClientCompat.screen() instanceof ChatScreen)) return false;
         if (mc.player.containerMenu != mc.player.inventoryMenu) return false;
         if (offhandTotem()) return false;
 
@@ -358,7 +360,7 @@ public class AutoTotemPlus extends Module {
     }
 
     private void releaseFreeze() {
-        if (CombatEngine.get().isFrozen()) CombatEngine.get().unfreeze(this);
+        CombatEngine.get().unfreeze(this);
         freezer.restore();
     }
 
@@ -369,14 +371,14 @@ public class AutoTotemPlus extends Module {
 
     @EventHandler(priority = EventPriority.HIGHEST)
     private void onPacketSend(PacketEvent.Send event) {
-        if (!CombatEngine.get().isFrozen()) return;
+        if (!CombatEngine.get().mayAct(this)) return;
         if (event.packet instanceof ServerboundContainerClickPacket || event.packet instanceof ServerboundContainerClosePacket) return;
 
         if (event.packet instanceof ServerboundInteractPacket
             || event.packet instanceof ServerboundUseItemPacket
             || event.packet instanceof ServerboundUseItemOnPacket
             || event.packet instanceof ServerboundPlayerActionPacket
-            || event.packet instanceof ServerboundSwingPacket) {
+            || PacketCompat.isSwingPacket(event.packet)) {
             event.cancel();
         }
     }
@@ -419,5 +421,16 @@ public class AutoTotemPlus extends Module {
             }
             holding = false;
         }
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        phase = Phase.Idle;
+        phaseTicks = 0;
+        totemSlot = -1;
+        retries = 0;
+        lastSessionEnd = 0;
+        freezer.restore();
+        CombatEngine.get().unfreeze(this);
     }
 }

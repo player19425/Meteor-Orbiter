@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(Entity.class)
 public abstract class PlayerEntityMixin {
 
-    @Inject(method = "push", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "push", at = @At("HEAD"), cancellable = true, require = 1)
     private void onPushAwayFrom(Entity entity, CallbackInfo info) {
         if (Modules.get() == null) return;
 

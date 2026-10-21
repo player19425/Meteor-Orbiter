@@ -8,6 +8,7 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.Color;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.block.Block;
@@ -18,12 +19,10 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 
 import java.util.*;
-import java.util.concurrent.LinkedBlockingQueue;
 
 public class ViewBlocks extends Module {
     public enum RenderMode { Full, Corners, Wireframe, Sides }
     public enum BlockPreset { None, Utility, Ores, Dungeons, Caves, All }
-    public enum ScanMode { ChunkBased, Incremental }
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgBlocks = settings.createGroup("Block Selection");
@@ -81,7 +80,7 @@ public class ViewBlocks extends Module {
     private final Setting<Boolean> useCustomBlockList = sgBlocks.add(new BoolSetting.Builder()
         .name("custom-block-list").description("Use custom block list.").defaultValue(false).build());
     @SuppressWarnings("unchecked")
-    private final Setting<List<Block>> customBlocks = sgBlocks.add((Setting<List<Block>>) (Setting<?>) new meteordevelopment.meteorclient.settings.BlockListSetting.Builder()
+    private final Setting<List<Block>> customBlocks = sgBlocks.add((Setting<List<Block>>) (Setting<?>) new BlockListSetting.Builder()
         .name("custom-blocks").description("Custom blocks to highlight.")
         .visible(useCustomBlockList::get).build());
     private final Setting<SettingColor> customBlockColor = sgBlocks.add(new ColorSetting.Builder()
@@ -121,22 +120,27 @@ public class ViewBlocks extends Module {
         BlockPos pos;
         Color fill, line;
         double distSq;
-        long tick;
-        FoundBlock(BlockPos p, Color f, Color l, double d, long t) {
-            pos = p; fill = f; line = l; distSq = d; tick = t;
+        FoundBlock(BlockPos p, Color f, Color l, double d) {
+            pos = p; fill = f; line = l; distSq = d;
         }
     }
 
-    private static final int POOL_MAX = 8192;
-    private final LinkedBlockingQueue<FoundBlock> pool = new LinkedBlockingQueue<>();
+    private record ChunkScan(int scanned, int matched, int cursor) {
+        boolean complete() { return cursor < 0; }
+    }
+
+    private static final int BLOCKS_PER_SECTION = 16 * 16 * 16;
+    private static final int SECTION_SHIFT = 12;
+    private static final int RESCAN_INTERVAL = 20;
+
     private final List<FoundBlock> activeBlocks = new ArrayList<>();
     private final Map<Long, FoundBlock> posMap = new HashMap<>();
     private final Set<Long> scannedChunks = new HashSet<>();
 
-    private BlockPos scanCenter = null;
-    private int scanChunkX = 0, scanChunkZ = 0;
-    private int scanMaxChunkX = 0, scanMaxChunkZ = 0;
-    private boolean scanActive = false;
+    private int scanTickCounter = 0;
+    private long globalScanTick = 0;
+    private long scanChunkLong = Long.MIN_VALUE;
+    private int scanChunkIndex = 0;
     private ClientLevel lastLevel = null;
 
     private int lastScanChunks = 0;
@@ -168,12 +172,16 @@ public class ViewBlocks extends Module {
         activeBlocks.clear();
         posMap.clear();
         scannedChunks.clear();
-        scanCenter = null;
-        scanActive = false;
+        clearScanCursor();
         lastScanChunks = 0;
         lastScanMatched = 0;
         lastScanMs = 0;
         lastRendered = 0;
+    }
+
+    private void clearScanCursor() {
+        scanChunkLong = Long.MIN_VALUE;
+        scanChunkIndex = 0;
     }
 
     private void applyPreset(BlockPreset p) {
@@ -215,99 +223,115 @@ public class ViewBlocks extends Module {
         int playerY = mc.player.blockPosition().getY();
         int playerZ = mc.player.blockPosition().getZ();
         int rSq = r * r;
-        int fOp = fillOpacity.get();
-        int lOp = lineOpacity.get();
 
-        Iterator<FoundBlock> it = activeBlocks.iterator();
-        while (it.hasNext()) {
-            FoundBlock fb = it.next();
-            int dx = fb.pos.getX() - playerX, dy = fb.pos.getY() - playerY, dz = fb.pos.getZ() - playerZ;
-            if (dx * dx + dy * dy + dz * dz > rSq) {
-                posMap.remove(packPos(fb.pos));
-                it.remove();
-                if (pool.size() < POOL_MAX) pool.offer(fb);
-            }
-        }
+        dropOutOfRange(playerX, playerY, playerZ, rSq);
 
+        boolean pending = false;
+        chunkLoop:
         for (int cx = -chunkRadius; cx <= chunkRadius; cx++) {
             for (int cz = -chunkRadius; cz <= chunkRadius; cz++) {
                 int chunkX = center.x() + cx;
                 int chunkZ = center.z() + cz;
                 long chunkLong = ChunkPos.pack(chunkX, chunkZ);
+                boolean resuming = scanChunkLong == chunkLong;
 
-                if (!mc.level.hasChunk(chunkX, chunkZ)) continue;
-                if (scannedChunks.contains(chunkLong)) {
-
-                    if (globalScanTick % 20 != 0) continue;
+                if (!mc.level.hasChunk(chunkX, chunkZ)) {
+                    if (resuming) clearScanCursor();
+                    continue;
                 }
+                if (!resuming && scannedChunks.contains(chunkLong) && globalScanTick % RESCAN_INTERVAL != 0) continue;
 
-                ChunkAccess chunk = mc.level.getChunk(chunkX, chunkZ);
-                LevelChunkSection[] sections = chunk.getSections();
-                int baseY = chunk.getMinY();
+                ChunkScan result = scanChunk(chunkX, chunkZ, resuming ? scanChunkIndex : 0,
+                    budget, playerX, playerY, playerZ, rSq);
+                scanned += result.scanned();
+                matched += result.matched();
 
-                for (int si = 0; si < sections.length; si++) {
-                    LevelChunkSection section = sections[si];
-                    if (section == null || section.hasOnlyAir()) continue;
-
-                    int sectionY = baseY + (si << 4);
-
-                    for (int lx = 0; lx < 16; lx++) {
-                        for (int ly = 0; ly < 16; ly++) {
-                            for (int lz = 0; lz < 16; lz++) {
-                                if (scanned >= budget) break;
-
-                                int wx = (chunkX << 4) + lx;
-                                int wy = sectionY + ly;
-                                int wz = (chunkZ << 4) + lz;
-
-                                int dx = wx - playerX, dy = wy - playerY, dz = wz - playerZ;
-                                if (dx * dx + dy * dy + dz * dz > rSq) continue;
-
-                                Block block = section.getBlockState(lx, ly, lz).getBlock();
-                                Color[] colors = getBlockColors(block, fOp, lOp);
-                                if (colors != null) {
-                                    long packed = packCoords(wx, wy, wz);
-                                    FoundBlock existing = posMap.get(packed);
-                                    if (existing != null) {
-                                        existing.fill = colors[0];
-                                        existing.line = colors[1];
-                                        existing.distSq = dx * dx + dy * dy + dz * dz;
-                                        existing.tick = globalScanTick;
-                                    } else {
-                                        BlockPos pos = new BlockPos(wx, wy, wz);
-                                        FoundBlock fb = new FoundBlock(pos, colors[0], colors[1], dx * dx + dy * dy + dz * dz, globalScanTick);
-                                        if (activeBlocks.size() < maxBlocks.get()) {
-                                            activeBlocks.add(fb);
-                                            posMap.put(packed, fb);
-                                            matched++;
-                                        }
-                                    }
-                                }
-                                scanned++;
-                            }
-                            if (scanned >= budget) break;
-                        }
-                        if (scanned >= budget) break;
-                    }
-                    if (scanned >= budget) break;
-                }
-                if (scanned < budget) {
+                if (result.complete()) {
                     scannedChunks.add(chunkLong);
                     chunkCount++;
+                    continue;
                 }
-                if (scanned >= budget) break;
+
+                scanChunkLong = chunkLong;
+                scanChunkIndex = result.cursor();
+                pending = true;
+                break chunkLoop;
             }
-            if (scanned >= budget) break;
         }
 
+        if (!pending) clearScanCursor();
         globalScanTick++;
         lastScanChunks = chunkCount;
         lastScanMatched = matched;
         lastScanMs = System.currentTimeMillis() - start;
     }
 
-    private int scanTickCounter = 0;
-    private long globalScanTick = 0;
+    private void dropOutOfRange(int playerX, int playerY, int playerZ, int rSq) {
+        Iterator<FoundBlock> it = activeBlocks.iterator();
+        while (it.hasNext()) {
+            FoundBlock found = it.next();
+            int dx = found.pos.getX() - playerX;
+            int dy = found.pos.getY() - playerY;
+            int dz = found.pos.getZ() - playerZ;
+            if (dx * dx + dy * dy + dz * dz <= rSq) continue;
+            posMap.remove(packPos(found.pos));
+            it.remove();
+        }
+    }
+
+    private ChunkScan scanChunk(int chunkX, int chunkZ, int startIndex, int budget,
+                                int playerX, int playerY, int playerZ, int rSq) {
+        ChunkAccess chunk = mc.level.getChunk(chunkX, chunkZ);
+        LevelChunkSection[] sections = chunk.getSections();
+        int baseY = chunk.getMinY();
+        int fOp = fillOpacity.get();
+        int lOp = lineOpacity.get();
+        int total = sections.length * BLOCKS_PER_SECTION;
+        int scanned = 0;
+        int matched = 0;
+
+        for (int index = startIndex; index < total; index++) {
+            if (scanned >= budget) return new ChunkScan(scanned, matched, index);
+
+            int sectionIndex = index >> SECTION_SHIFT;
+            LevelChunkSection section = sections[sectionIndex];
+            if (section == null || section.hasOnlyAir()) continue;
+
+            int within = index & (BLOCKS_PER_SECTION - 1);
+            int lx = within >> 8;
+            int ly = (within >> 4) & 15;
+            int lz = within & 15;
+
+            int wx = (chunkX << 4) + lx;
+            int wy = baseY + (sectionIndex << 4) + ly;
+            int wz = (chunkZ << 4) + lz;
+
+            int dx = wx - playerX, dy = wy - playerY, dz = wz - playerZ;
+            int distSq = dx * dx + dy * dy + dz * dz;
+            if (distSq > rSq) continue;
+            scanned++;
+
+            Color[] colors = getBlockColors(section.getBlockState(lx, ly, lz).getBlock(), fOp, lOp);
+            if (colors == null) continue;
+
+            long packed = packCoords(wx, wy, wz);
+            FoundBlock existing = posMap.get(packed);
+            if (existing != null) {
+                existing.fill = colors[0];
+                existing.line = colors[1];
+                existing.distSq = distSq;
+                continue;
+            }
+            if (activeBlocks.size() >= maxBlocks.get()) continue;
+
+            FoundBlock found = new FoundBlock(new BlockPos(wx, wy, wz), colors[0], colors[1], distSq);
+            activeBlocks.add(found);
+            posMap.put(packed, found);
+            matched++;
+        }
+
+        return new ChunkScan(scanned, matched, -1);
+    }
 
     @EventHandler
     private void onRender3D(Render3DEvent event) {
@@ -408,6 +432,17 @@ public class ViewBlocks extends Module {
     @Override
     public String getInfoString() {
         if (!showStats.get()) return null;
-        return activeBlocks.size() + " tracked | rendered=" + lastRendered + " | chunks=" + lastScanChunks + (lastScanMs > 0 ? " | " + lastScanMs + "ms" : "");
+        return activeBlocks.size() + " tracked | rendered=" + lastRendered
+            + " | found=" + lastScanMatched
+            + " | chunks=" + lastScanChunks
+            + (lastScanMs > 0 ? " | " + lastScanMs + "ms" : "");
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        reset();
+        lastLevel = null;
+        globalScanTick = 0;
+        scanTickCounter = 0;
     }
 }

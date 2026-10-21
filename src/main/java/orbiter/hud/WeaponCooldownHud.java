@@ -23,7 +23,7 @@ public class WeaponCooldownHud extends HudElement {
 
     private final Setting<String> cooldownFormat = sgGeneral.add(new StringSetting.Builder()
         .name("cooldown-format")
-        .description("Format string for cooldown. Use %s for seconds.")
+        .description("Format for the remaining seconds. Takes one decimal.")
         .defaultValue("%.2fs")
         .build()
     );
@@ -72,7 +72,10 @@ public class WeaponCooldownHud extends HudElement {
     @Override
     public void render(HudRenderer renderer) {
         Player player = Minecraft.getInstance().player;
-        if (player == null) return;
+        if (player == null) {
+            setSize(0, 0);
+            return;
+        }
 
         float progress = player.getAttackStrengthScale(0.5f);
         float ticksRemaining = (1.0f - progress) * player.getCurrentItemAttackStrengthDelay();

@@ -21,6 +21,7 @@ import net.minecraft.server.dialog.Dialog;
 import net.minecraft.server.dialog.body.DialogBody;
 import net.minecraft.server.dialog.body.PlainMessage;
 import orbiter.mixin.DialogScreenAccessor;
+import orbiter.compat.ClientCompat;
 import orbiter.util.FastSend;
 
 import java.util.ArrayList;
@@ -63,7 +64,7 @@ public class AutoLogin extends Module {
 
     private final Setting<Boolean> hidePassword = sgGeneral.add(new BoolSetting.Builder()
         .name("hide-password")
-        .description("Shows asterisks in the password field and strips any chat line containing the password from your chat.")
+        .description("Masks the field and hides chat lines that contain the password.")
         .defaultValue(true)
         .onChanged(this::onHidePasswordToggled)
         .build()
@@ -78,7 +79,7 @@ public class AutoLogin extends Module {
 
     private final Setting<List<String>> loginPatterns = sgPatterns.add(new StringListSetting.Builder()
         .name("login-patterns")
-        .description("Patterns that trigger the login command. Prefix with regex: for regex, otherwise * and ? wildcards.")
+        .description("Login patterns. Prefix with regex: for regex, rest are * and ? wildcards.")
         .defaultValue(List.of(
             "*please login with /login <password>*",
             "*/login <password>*",
@@ -91,7 +92,7 @@ public class AutoLogin extends Module {
 
     private final Setting<List<String>> registerPatterns = sgPatterns.add(new StringListSetting.Builder()
         .name("register-patterns")
-        .description("Patterns that trigger the register command. Prefix with regex: for regex, otherwise * and ? wildcards.")
+        .description("Register patterns. Prefix with regex: for regex, rest are * and ? wildcards.")
         .defaultValue(List.of(
             "*you must register*",
             "*/register <password>*",
@@ -110,14 +111,14 @@ public class AutoLogin extends Module {
 
     private final Setting<String> loginCommand = sgCommands.add(new StringSetting.Builder()
         .name("login-command")
-        .description("Command sent when a login prompt is detected. {pass} is replaced with the password.")
+        .description("Login command. {pass} is replaced with the password.")
         .defaultValue("/login {pass}")
         .build()
     );
 
     private final Setting<String> registerCommand = sgCommands.add(new StringSetting.Builder()
         .name("register-command")
-        .description("Command sent when a register prompt is detected. {pass} is replaced with the password.")
+        .description("Register command. {pass} is replaced with the password.")
         .defaultValue("/register {pass} {pass}")
         .build()
     );
@@ -188,7 +189,7 @@ public class AutoLogin extends Module {
 
     private final Setting<String> submitButtonText = sgDialogs.add(new StringSetting.Builder()
         .name("submit-button-text")
-        .description("Text pattern used to find the submit button. Prefix with regex: for regex, otherwise * and ? wildcards.")
+        .description("Submit button pattern. Prefix with regex: for regex, rest are * and ? wildcards.")
         .defaultValue("regex:(?i)(sign in|submit|login|continue|confirm)")
         .build()
     );
@@ -216,10 +217,10 @@ public class AutoLogin extends Module {
     private DialogScreen<?> dialogScreen;
     private int dialogSubmitTick = -1;
 
-    private static Screen capturedScreen;
-    private static HeaderAndFooterLayout capturedLayout;
-    private static List<EditBox> dialogBoxes;
-    private static Button submitButton;
+    private Screen capturedScreen;
+    private HeaderAndFooterLayout capturedLayout;
+    private List<EditBox> dialogBoxes;
+    private Button submitButton;
 
     public AutoLogin() {
         super(Orbiter.CATEGORY, "auto-login", "Auto-answers login and register prompts.");
@@ -301,6 +302,7 @@ public class AutoLogin extends Module {
         submitButton = null;
         capturedScreen = null;
         capturedLayout = null;
+        REGEX_CACHE.clear();
     }
 
     @EventHandler
@@ -424,7 +426,7 @@ public class AutoLogin extends Module {
         submitButton = null;
 
         if (screen == null || boxes == null || button == null) return;
-        if (mc.gui.screen() != screen) return;
+        if (ClientCompat.screen() != screen) return;
 
         String pass = effectivePassword();
         if (pass.isEmpty()) {
@@ -449,8 +451,8 @@ public class AutoLogin extends Module {
         if (module == null || !module.isActive() || !module.dialogEnabled.get() || module.stopped) return;
         if (module.oncePerSession.get() && module.latched) return;
 
-        capturedScreen = screen;
-        capturedLayout = ((DialogScreenAccessor) screen).orbiter$getLayout();
+        module.capturedScreen = screen;
+        module.capturedLayout = ((DialogScreenAccessor) screen).orbiter$getLayout();
         module.tryCollectControls(screen);
     }
 

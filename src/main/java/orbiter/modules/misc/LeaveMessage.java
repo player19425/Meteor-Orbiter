@@ -47,6 +47,8 @@ public class LeaveMessage extends Module {
         .build());
 
     private volatile boolean pendingLeave = false;
+    private volatile CompletableFuture<Void> pendingTask;
+    private volatile int leaveGeneration = 0;
     private static volatile boolean quitRequested = false;
 
     public LeaveMessage() {
@@ -55,12 +57,21 @@ public class LeaveMessage extends Module {
 
     @Override
     public void onActivate() {
-        pendingLeave = false;
+        cancelPending();
     }
 
     @Override
     public void onDeactivate() {
+        cancelPending();
+    }
+
+    private void cancelPending() {
+        CompletableFuture<Void> task = pendingTask;
+        pendingTask = null;
         pendingLeave = false;
+        leaveGeneration++;
+
+        if (task != null) task.cancel(true);
     }
 
     public boolean onPlayerDisconnect() {
@@ -88,6 +99,7 @@ public class LeaveMessage extends Module {
         if (multiplayerOnly.get() && (mc.hasSingleplayerServer() || mc.getCurrentServer() == null)) return false;
 
         pendingLeave = true;
+        final int generation = ++leaveGeneration;
 
         String msg = leaveMessage.get();
         if (msg != null && !msg.isBlank()) {
@@ -99,22 +111,30 @@ public class LeaveMessage extends Module {
             info("[LeaveMessage] Intercepted " + source + ", disconnecting in " + delayMs.get() + "ms...");
         }
 
-        CompletableFuture.runAsync(() -> {
+        pendingTask = CompletableFuture.runAsync(() -> {
             try {
                 Thread.sleep(delayMs.get());
-            } catch (InterruptedException ignored) {
+            } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
+                return;
             }
 
-            mc.execute(this::disconnectNow);
+            mc.execute(() -> {
+                if (generation != leaveGeneration) return;
+                disconnectNow();
+            });
         });
 
         return true;
     }
 
     private void disconnectNow() {
+        if (!pendingLeave) return;
+
         pendingLeave = false;
+        pendingTask = null;
         quitRequested = quitAfterDisconnect.get();
+
         if (mc.getConnection() != null) {
             mc.getConnection().getConnection().disconnect(Component.literal("[LeaveMessage] delayed disconnect"));
         }

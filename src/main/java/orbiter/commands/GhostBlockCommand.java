@@ -82,7 +82,7 @@ public class GhostBlockCommand extends Command {
             .then(literal("all")
                 .executes(ctx -> {
                     int removed = GhostBlockManager.deleteAll();
-                    if (removed > 0) info("Removed " + removed + " ghost blocks.");
+                    if (removed > 0) info("Removed %s ghost blocks.", removed);
                     else info("No ghost blocks.");
                     return SINGLE_SUCCESS;
                 }))
@@ -105,8 +105,8 @@ public class GhostBlockCommand extends Command {
                     return SINGLE_SUCCESS;
                 }
 
-                info("Ghost blocks (" + total + "):");
-                for (String line : GhostBlockManager.summary(20)) info(line);
+                info("Ghost blocks (%s):", total);
+                for (String line : GhostBlockManager.summary(20)) info("%s", line);
                 return SINGLE_SUCCESS;
             }));
     }
@@ -119,17 +119,18 @@ public class GhostBlockCommand extends Command {
 
         if (!GhostBlockManager.create(pos, block)) {
             GhostBlockManager.BlockSpec spec = GhostBlockManager.parse(block);
-            error(spec.ok() ? "Failed to place the ghost block." : spec.error());
+            if (spec.ok()) error("Failed to place the ghost block.");
+            else error("%s", spec.error());
             return;
         }
 
-        info("Placed ghost block at " + pos.getX() + " " + pos.getY() + " " + pos.getZ()
-            + " (vanishes when the server updates the chunk).");
+        info("Placed ghost block at %s %s %s (vanishes when the server updates the chunk).",
+            pos.getX(), pos.getY(), pos.getZ());
     }
 
     private void remove(BlockPos pos) {
         if (GhostBlockManager.delete(pos)) {
-            info("Removed ghost block at " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + ".");
+            info("Removed ghost block at %s %s %s.", pos.getX(), pos.getY(), pos.getZ());
         } else {
             error("No ghost block there.");
         }

@@ -1,32 +1,27 @@
 package orbiter.systems.combat;
 
 public final class SilentRotationHandler {
-    private static volatile float pendingYaw;
-    private static volatile float pendingPitch;
-    private static volatile boolean active;
+    private static volatile float yaw;
+    private static volatile float pitch;
 
     private SilentRotationHandler() {
     }
 
     public static void set(float yaw, float pitch) {
-        pendingYaw = yaw;
-        pendingPitch = pitch;
-        active = true;
+        SilentRotationHandler.yaw = yaw;
+        SilentRotationHandler.pitch = pitch;
     }
 
     public static void clear() {
-        active = false;
-    }
-
-    public static boolean isActive() {
-        return active;
+        yaw = 0.0f;
+        pitch = 0.0f;
     }
 
     public static float pendingYaw() {
-        return pendingYaw;
+        return yaw;
     }
 
     public static float pendingPitch() {
-        return pendingPitch;
+        return pitch;
     }
 }

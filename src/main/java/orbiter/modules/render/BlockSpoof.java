@@ -1,12 +1,15 @@
 package orbiter.modules.render;
 
 import orbiter.Orbiter;
+import orbiter.compat.EntityCompat;
+import orbiter.compat.ClientCompat;
 import meteordevelopment.meteorclient.MeteorClient;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.level.block.Block;
@@ -81,16 +84,15 @@ public class BlockSpoof extends Module {
 
     private final Setting<Integer> toggleKeyCode = sgGeneral.add(new IntSetting.Builder()
         .name("toggle-key-code")
-        .description("GL key code for the quick toggle key. Default B = 48.")
-        .defaultValue(48)
+        .description("SDL scancode of the quick toggle key, same numbering as InputConstants.KEY_*.")
+        .defaultValue(5)
         .min(0).max(350)
         .visible(toggleKeyEnabled::get)
         .build());
 
     private final Setting<String> blockMap = sgMap.add(new StringSetting.Builder()
         .name("block-map")
-        .description("Custom replacement map. Format: minecraft:blockA=minecraft:blockB. "
-            + "Separate multiple entries with ';', ',', spaces or newlines (e.g. stone=cobblestone, dirt=grass).")
+        .description("source=target pairs, one per entry, split by ; , space or newline.")
         .defaultValue("")
         .visible(() -> preset.get() == SpoofPreset.Custom)
         .onChanged(s -> onBlockMapChanged())
@@ -394,8 +396,7 @@ public class BlockSpoof extends Module {
             if (!module.toggleKeyEnabled.get()) return;
 
             try {
-                int keyCode = module.toggleKeyCode.get();
-                boolean isDown = org.lwjgl.glfw.GLFW.glfwGetKey(module.mc.getWindow().handle(), keyCode) == 1;
+                boolean isDown = EntityCompat.isKeyDown(module.toggleKeyCode.get());
                 if (isDown && !wasDown) module.toggle();
                 wasDown = isDown;
             } catch (Exception ignored) {
@@ -730,7 +731,7 @@ public class BlockSpoof extends Module {
 
             switch (oreHighlight.get()) {
                 case Outline, PulseOutline -> renderOreOutline(event, ore, finalAlpha, scale);
-                case Glow -> renderOreGlow(event, ore, opacity, scale);
+                case Glow -> renderOreGlow(event, ore, opacity);
             }
         }
     }
@@ -738,15 +739,10 @@ public class BlockSpoof extends Module {
     private void renderOreOutline(Render3DEvent event, HighlightedOre ore,
                                     float alpha, double scale) {
         SettingColor c = ore.color;
-        int r = c.r, g = c.g, b = c.b;
 
         meteordevelopment.meteorclient.utils.render.color.Color lineColor =
-            new meteordevelopment.meteorclient.utils.render.color.Color(r, g, b,
+            new meteordevelopment.meteorclient.utils.render.color.Color(c.r, c.g, c.b,
                 (int) (255 * alpha));
-
-        meteordevelopment.meteorclient.utils.render.color.Color fillColor =
-            new meteordevelopment.meteorclient.utils.render.color.Color(r, g, b,
-                (int) (80 * alpha));
 
         double offset = (scale - 1.0) / 2.0;
         BlockPos pos = ore.pos;
@@ -761,17 +757,15 @@ public class BlockSpoof extends Module {
         drawBoxLines(event, x1, y1, z1, x2, y2, z2, lineColor);
     }
 
-    private void renderOreGlow(Render3DEvent event, HighlightedOre ore,
-                                 float alpha, double scale) {
+    private void renderOreGlow(Render3DEvent event, HighlightedOre ore, float alpha) {
         SettingColor c = ore.color;
-        int r = c.r, g = c.g, b = c.b;
 
         meteordevelopment.meteorclient.utils.render.color.Color lineColor =
-            new meteordevelopment.meteorclient.utils.render.color.Color(r, g, b,
+            new meteordevelopment.meteorclient.utils.render.color.Color(c.r, c.g, c.b,
                 (int) (255 * alpha));
 
         meteordevelopment.meteorclient.utils.render.color.Color fillColor =
-            new meteordevelopment.meteorclient.utils.render.color.Color(r, g, b,
+            new meteordevelopment.meteorclient.utils.render.color.Color(c.r, c.g, c.b,
                 (int) (40 * alpha));
 
         event.renderer.box(ore.pos, fillColor, lineColor,
@@ -801,7 +795,7 @@ public class BlockSpoof extends Module {
     private void requestWorldRendererRefresh() {
         if (mc.levelRenderer == null || mc.level == null || mc.player == null) return;
         try {
-            mc.levelRenderer.invalidateCompiledGeometry(mc.level, mc.options, mc.gameRenderer.mainCamera(), mc.getBlockColors());
+            ClientCompat.invalidateCompiledGeometry();
 
             if (debugPositions.get()) {
                 info("Scheduled world renderer terrain update.");
@@ -851,5 +845,11 @@ public class BlockSpoof extends Module {
             info += " | " + highlightCount + " ores";
         }
         return info;
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        onDeactivate();
+        lastLevel = null;
     }
 }

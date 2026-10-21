@@ -21,30 +21,30 @@ public abstract class CreativeSafetyModule extends Module {
 
     protected final Setting<Boolean> disableOnLeave = sgSafety.add(new BoolSetting.Builder()
             .name("disable-on-leave")
-            .description("Disable this module automatically when you leave the server/world.")
             .defaultValue(true)
             .build());
 
     protected final Setting<Integer> sharedSendLimit = sgSafety.add(new IntSetting.Builder()
-            .name("shared-send-limit")
-            .description("Combined emergency cap of commands ALL Orbiter spam modules may send per tick. High enough by default to never throttle normal use; lower only to stop runaway configs.")
-            .defaultValue(32768)
-            .min(64)
-            .sliderRange(64, 65536)
-            .onChanged(GlobalSendLimiter::setPerTick)
+            .name("global-commands-per-second")
+            .description("Shared by every module, the last one you touch wins. 20 is the vanilla kick rate.")
+            .defaultValue(20)
+            .min(1)
+            .sliderRange(1, 100)
+            .onChanged(v -> GlobalSendLimiter.setPermitsPerSecond(v))
             .build());
 
     protected final Setting<Integer> frameTimeBudgetMs = sgSafety.add(new IntSetting.Builder()
             .name("frame-time-budget-ms")
-            .description("Maximum milliseconds per tick this module may spend building and sending commands. Spreads huge batches across ticks so a single frame doesn't freeze, without reducing total throughput.")
+            .description("Work is sliced across ticks, total throughput unchanged.")
             .defaultValue(4)
             .min(1)
             .sliderRange(1, 20)
+            .visible(this::supportsFrameBudget)
             .build());
 
     protected final Setting<Boolean> suppressCommandFeedback = sgSafety.add(new BoolSetting.Builder()
             .name("suppress-command-feedback")
-            .description("Set send_command_feedback to false while active so command result messages (Filled blocks, Summoned, etc) don't flood your chat and lag the client. Restored to true when the last module stops. Off by default because some servers reject gamerule changes.")
+            .description("Some servers reject it. Restored to true, not to its previous value.")
             .defaultValue(false)
             .build());
 
@@ -64,13 +64,17 @@ public abstract class CreativeSafetyModule extends Module {
         toggle();
     }
 
+    protected boolean supportsFrameBudget() {
+        return false;
+    }
+
     protected long sliceDeadline() {
         return System.nanoTime() + frameTimeBudgetMs.get() * 1_000_000L;
     }
 
     protected void safetyActivate() {
         NetworkOptimizer.ensureInstalled();
-        GlobalSendLimiter.setPerTick(sharedSendLimit.get());
+        GlobalSendLimiter.setPermitsPerSecond(sharedSendLimit.get());
 
         if (suppressCommandFeedback.get() && hasGameruleCommand()) {
             feedbackSuppressedByMe = true;
@@ -79,7 +83,6 @@ public abstract class CreativeSafetyModule extends Module {
     }
 
     protected void safetyDeactivate() {
-        GlobalSendLimiter.setPerTick(sharedSendLimit.get());
         releaseFeedback(true);
     }
 
@@ -97,6 +100,7 @@ public abstract class CreativeSafetyModule extends Module {
     }
 
     private void sendFeedbackGamerule(boolean enabled) {
+        if (mc.player == null || mc.player.connection == null) return;
         mc.player.connection.sendCommand(
                 CommandUtils.vanilla("gamerule send_command_feedback " + (enabled ? "true" : "false")));
     }

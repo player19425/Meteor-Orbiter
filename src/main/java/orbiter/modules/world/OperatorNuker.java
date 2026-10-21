@@ -2,9 +2,11 @@ package orbiter.modules.world;
 
 import orbiter.Orbiter;
 import orbiter.util.CommandUtils;
+import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -100,6 +102,8 @@ public class OperatorNuker extends CreativeSafetyModule {
 
     @Override
     public void onActivate() {
+        safetyActivate();
+
         if (mc.player == null) {
             toggle();
             return;
@@ -139,7 +143,9 @@ public class OperatorNuker extends CreativeSafetyModule {
             tickCounter = 0;
 
             int sent = 0;
-            while (cmdIndex < pendingCommands.size() && sent < commandsPerTick.get()) {
+            while (cmdIndex < pendingCommands.size()
+                && sent < commandsPerTick.get()
+                && GlobalSendLimiter.tryAcquireOne()) {
                 mc.player.connection.sendCommand(CommandUtils.vanilla(pendingCommands.get(cmdIndex)));
                 cmdIndex++;
                 sent++;
@@ -225,7 +231,14 @@ public class OperatorNuker extends CreativeSafetyModule {
                 }
             }
         } else {
-            Identifier targetId = target == null ? null : Identifier.tryParse(target);
+            Identifier targetId = null;
+            if (target != null) {
+                targetId = Identifier.tryParse(target);
+                if (targetId == null) {
+                    warning("Target block is not a valid block id: " + target);
+                    return commands;
+                }
+            }
             BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
 
             for (int x = minX; x <= maxX; x++) {
@@ -243,7 +256,7 @@ public class OperatorNuker extends CreativeSafetyModule {
                             if (!targetId.equals(stateId)) continue;
                         }
 
-                        commands.add(String.format("setblock %d %d %d %s", x, y, z, replaceBlock));
+                        commands.add(CommandUtils.formatCommand("setblock %d %d %d %s", x, y, z, replaceBlock));
                     }
                 }
             }
@@ -281,9 +294,11 @@ public class OperatorNuker extends CreativeSafetyModule {
 
     private void addFillCommand(List<String> commands, int x1, int y, int z, int x2, String replacement, String target) {
         if (target != null) {
-            commands.add(String.format("fill %d %d %d %d %d %d %s replace %s", x1, y, z, x2, y, z, replacement, target));
+            commands.add(CommandUtils.formatCommand("fill %d %d %d %d %d %d %s replace %s",
+                    x1, y, z, x2, y, z, replacement, target));
         } else {
-            commands.add(String.format("fill %d %d %d %d %d %d %s", x1, y, z, x2, y, z, replacement));
+            commands.add(CommandUtils.formatCommand("fill %d %d %d %d %d %d %s",
+                    x1, y, z, x2, y, z, replacement));
         }
     }
 
@@ -312,6 +327,7 @@ public class OperatorNuker extends CreativeSafetyModule {
 
     @Override
     public void onDeactivate() {
+        safetyDeactivate();
         pendingCommands = null;
     }
 
@@ -330,5 +346,12 @@ public class OperatorNuker extends CreativeSafetyModule {
         Around,
         Forward,
         Flat
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        pendingCommands = null;
+        cmdIndex = 0;
+        continuousTicks = 0;
     }
 }

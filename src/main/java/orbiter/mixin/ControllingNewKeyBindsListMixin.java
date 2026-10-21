@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 @Mixin(targets = "com.blamejared.controlling.client.NewKeyBindsList")
 public abstract class ControllingNewKeyBindsListMixin {
     @Redirect(
+        require = 0,
         method = "<init>",
         at = @At(
             value = "FIELD",

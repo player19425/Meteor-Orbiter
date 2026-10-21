@@ -2,7 +2,7 @@
   "required": true,
   "package": "orbiter.mixin",
   "plugin": "orbiter.mixin.OrbiterMixinPlugin",
-  "compatibilityLevel": "JAVA_25",
+  "compatibilityLevel": "JAVA_${jdk_maj}",
   "client": [
     "ScreenMixin",
     "HandledScreenAccessor",
@@ -25,6 +25,7 @@
     "EntityFireSpoofMixin",
     "ClientSideHudMixin",
     "ClientSideOverlayMixin",
+    "LevelExtractorMixin",
     "ClientSideBossBarMixin",
     "ClientWorldBiomeSpoofMixin",
     "ClientTickRateMixin",

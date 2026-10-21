@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(net.minecraft.world.level.Level.class)
 public abstract class WorldWeatherMixin {
-    @Inject(method = "getRainLevel", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getRainLevel", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$getRainGradient(float tickDelta, CallbackInfoReturnable<Float> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null) return;
@@ -18,7 +18,7 @@ public abstract class WorldWeatherMixin {
         if (value >= 0.0f) cir.setReturnValue(value);
     }
 
-    @Inject(method = "getThunderLevel", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getThunderLevel", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$getThunderGradient(float tickDelta, CallbackInfoReturnable<Float> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null) return;
@@ -27,7 +27,7 @@ public abstract class WorldWeatherMixin {
         if (value >= 0.0f) cir.setReturnValue(value);
     }
 
-    @Inject(method = "isRaining", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "isRaining", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$isRaining(CallbackInfoReturnable<Boolean> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null) return;
@@ -37,7 +37,7 @@ public abstract class WorldWeatherMixin {
         else if (mode == ClientSideThings.WeatherMode.Rain || mode == ClientSideThings.WeatherMode.Snow) cir.setReturnValue(true);
     }
 
-    @Inject(method = "getOverworldClockTime", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getOverworldClockTime", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$getTimeOfDay(CallbackInfoReturnable<Long> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldFakeTime()) return;

@@ -17,7 +17,7 @@ import java.util.List;
 
 @Mixin(ItemStack.class)
 public abstract class ItemStackSpoofMixin {
-    @Inject(method = "getHoverName", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getHoverName", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$getName(CallbackInfoReturnable<Component> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null) return;
@@ -28,7 +28,7 @@ public abstract class ItemStackSpoofMixin {
         }
     }
 
-    @Inject(method = "getTooltipLines", at = @At("RETURN"), cancellable = true)
+    @Inject(method = "getTooltipLines", at = @At("RETURN"), cancellable = true, require = 0, order = 950)
     private void orbiter$getTooltipLines(Item.TooltipContext context, Player player, TooltipFlag type, CallbackInfoReturnable<List<Component>> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null) return;

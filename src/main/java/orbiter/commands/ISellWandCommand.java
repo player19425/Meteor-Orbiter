@@ -18,8 +18,8 @@ public class ISellWandCommand extends Command {
             if (modules == null) { error("Modules not initialized."); return SINGLE_SUCCESS; }
             ISellWand module = modules.get(ISellWand.class);
             if (module == null) { error("ISellWand module not found!"); return SINGLE_SUCCESS; }
-            info("ISellWand is " + (module.isActive() ? "§aON" : "§cOFF")
-                + " | recorded chests: " + module.recordedChestCount());
+            info("ISellWand is %s | recorded chests: %s",
+                module.isActive() ? "§aON" : "§cOFF", module.recordedChestCount());
             return SINGLE_SUCCESS;
         });
 
@@ -50,8 +50,8 @@ public class ISellWandCommand extends Command {
             if (list.isEmpty()) {
                 info("No recorded chests.");
             } else {
-                info("Recorded chests (" + list.size() + "):");
-                for (String s : list) info("  " + s);
+                info("Recorded chests (%s):", list.size());
+                for (String s : list) info("  %s", s);
             }
             return SINGLE_SUCCESS;
         }));

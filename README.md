@@ -5,8 +5,8 @@
 
   
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.6-orange" alt="Version"></a>
-  <img src="https://img.shields.io/badge/Minecraft-26.2-blue" alt="Minecraft version">
-  <img src="https://img.shields.io/badge/Java-25-green" alt="Java version">
+  <img src="https://img.shields.io/badge/Minecraft-26.3%20%7C%2026.2%20%7C%2026.1.2%20%7C%201.21.11-blue" alt="Supported Minecraft versions">
+  <img src="https://img.shields.io/badge/Java-25%20%7C%2021-green" alt="Java version">
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/github/downloads/player19425/Meteor-Orbiter/total" alt="Downloads"></a>
   <a href="https://github.com/player19425/Meteor-Orbiter/stargazers"><img src="https://img.shields.io/github/stars/player19425/Meteor-Orbiter" alt="Stars"></a>
   <a href="https://github.com/player19425/Meteor-Orbiter/commits/26.2"><img src="https://img.shields.io/github/last-commit/player19425/Meteor-Orbiter" alt="Last commit"></a>
@@ -31,13 +31,43 @@ Everything is organized into five in-game categories:
 
 # Requirements
 
-- [Java](https://adoptium.net/temurin/releases) 25 or higher
-- [Fabric Loader](https://fabricmc.net/use/installer/) 0.19.3+
-- [Meteor Client](https://meteorclient.com/) for 26.2
+| Minecraft | Meteor | Java | Loom plugin |
+|---|---|---|---|
+| 26.3 | 26.3 | 25+ | `net.fabricmc.fabric-loom` |
+| 26.2 | 26.2 | 25+ | `net.fabricmc.fabric-loom` |
+| 26.1.2 | 26.1.2 | 25+ | `net.fabricmc.fabric-loom` |
+| 1.21.11 | 1.21.11 | 21+ | `net.fabricmc.fabric-loom` |
+
+[Fabric Loader](https://fabricmc.net/use/installer/) 0.19.3+ is required on every version.
+
+Each supported version has its own complete source and its own Gradle project, so any of them can be built, tagged or released on its own. See [docs/multi-version.md](docs/multi-version.md).
+
+# Building
+
+The repository root builds Minecraft 26.3:
+
+```
+gradlew build
+```
+
+Every other version builds from its own folder:
+
+```
+cd versions/26.2
+gradlew build
+```
+
+Each project produces `build/libs/meteor-orbiter-1.0.6-<mc>.jar`.
+
+| Command | What it does |
+|---|---|
+| `gradlew build` | builds the jar for the Minecraft version in that folder's `version.properties` |
+| `gradlew runClient` | launches a dev client with the addon loaded |
+| `gradlew printTarget` | prints the Minecraft/Meteor pair the project targets |
 
 # Installation
 
-1. Download the latest [release](https://github.com/player19425/Meteor-Orbiter/releases) of the mod.
+1. Download the [release](https://github.com/player19425/Meteor-Orbiter/releases) that matches your Minecraft version.
 2. Put the `.jar` in your `.minecraft/mods` folder. (varies depending on launcher)
 3. Launch the game with Fabric and Meteor Client installed.
 4. It should be properly installed by now.
@@ -78,7 +108,7 @@ The following live in the Orbiter W.I.P category:
 | **Auto Clutch** | Auto-clutch to avoid fall damage. |
 | **Force Invisibility** | Server-side invisibility. |
 | **Jump A** | Jumps over walls and reaches blocks. |
-| **Noclip** | Flies through blocks. Lands the server player in open air on the far side of a wall; suppresses corrective teleports with proper ACKs. Dips slightly every few seconds so the vanilla floating kick never fires. In survival, let a falling sand or gravel block land on your head first. |
+| **Noclip** | Flies through blocks with no collision or gravity. Suppresses the corrective teleports the server sends, so the position sticks once you come out the other side. Dips slightly every few seconds so the vanilla floating kick never fires. |
 | **Slime Jump** | Bounces higher on slime. |
 
 ## Player:

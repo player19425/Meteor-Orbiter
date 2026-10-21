@@ -7,6 +7,7 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.BedBlock;
@@ -68,7 +69,7 @@ public class AutoClutch extends Module {
 
     private final Setting<PlaceMode> placeMode = sgGeneral.add(new EnumSetting.Builder<PlaceMode>()
         .name("place-mode")
-        .description("LookVector places where camera is looking, BelowFeet places directly down at player block.")
+        .description("LookVector uses the block you aim at, BelowFeet uses the one under you.")
         .defaultValue(PlaceMode.BelowFeet)
         .build());
 
@@ -137,30 +138,32 @@ public class AutoClutch extends Module {
         prevSlot = -1;
     }
 
+    @Override
+    public void onDeactivate() {
+        abortClutch();
+    }
+
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null || mc.gameMode == null) return;
         if (CombatEngine.get().isFrozen()) return;
 
         if (survivalOnly.get() && (mc.player.isCreative() || mc.player.isSpectator())) {
-            restoreSlot();
-            clutched = false;
+            abortClutch();
             return;
         }
 
         if (onlyWhenFalling.get() && mc.player.getDeltaMovement().y >= 0) {
-            restoreSlot();
-            clutched = false;
+            abortClutch();
+            return;
+        }
+
+        if (mc.player.onGround()) {
+            abortClutch();
             return;
         }
 
         if (mc.player.fallDistance < minFallDistance.get()) return;
-
-        if (mc.player.onGround()) {
-            restoreSlot();
-            clutched = false;
-            return;
-        }
 
         double groundDist = distanceToGround();
         if (groundDist > activationHeight.get()) return;
@@ -174,11 +177,20 @@ public class AutoClutch extends Module {
         }
     }
 
+    private void abortClutch() {
+        restoreSlot();
+        clutched = false;
+    }
+
     private void restoreSlot() {
-        if (prevSlot >= 0) {
-            InvUtils.swap(prevSlot, false);
-            prevSlot = -1;
-        }
+        if (prevSlot < 0 || mc.player == null) return;
+
+        InvUtils.swap(prevSlot, false);
+        prevSlot = -1;
+    }
+
+    private void rememberSlot() {
+        if (prevSlot < 0) prevSlot = mc.player.getInventory().getSelectedSlot();
     }
 
     private boolean attemptClutch() {
@@ -198,7 +210,6 @@ public class AutoClutch extends Module {
         }
 
         if (m == ClutchMode.AnyCanceler || m == ClutchMode.All) {
-
             if (tryPlaceSpecificBlock(Items.SLIME_BLOCK)) return true;
             if (tryPlaceSpecificBlock(Items.HAY_BLOCK)) return true;
             if (tryPlaceSpecificBlock(Items.HONEY_BLOCK)) return true;
@@ -208,39 +219,26 @@ public class AutoClutch extends Module {
     }
 
     private boolean findAndSwitch(Item item) {
-        if (mc.player == null) return false;
-
         if (mc.player.getMainHandItem().getItem() == item) return true;
+        if (!autoSwitch.get()) return false;
 
         FindItemResult hotbarResult = InvUtils.findInHotbar(item);
         if (hotbarResult.found()) {
-            if (autoSwitch.get()) {
-                prevSlot = mc.player.getInventory().getSelectedSlot();
-                InvUtils.swap(hotbarResult.slot(), false);
-                return true;
-            }
-            return false;
-        }
-
-        FindItemResult invResult = InvUtils.find(item);
-        if (invResult.found() && autoSwitch.get()) {
-
-            FindItemResult emptySlot = InvUtils.find(ItemStack::isEmpty, 0, 8);
-            int targetSlot;
-            if (emptySlot.found()) {
-                targetSlot = emptySlot.slot();
-            } else {
-
-                targetSlot = mc.player.getInventory().getSelectedSlot();
-            }
-
-            prevSlot = mc.player.getInventory().getSelectedSlot();
-            InvUtils.move().from(invResult.slot()).toHotbar(targetSlot);
-            InvUtils.swap(targetSlot, false);
+            rememberSlot();
+            InvUtils.swap(hotbarResult.slot(), false);
             return true;
         }
 
-        return false;
+        FindItemResult invResult = InvUtils.find(item);
+        if (!invResult.found()) return false;
+
+        FindItemResult emptySlot = InvUtils.find(ItemStack::isEmpty, 0, 8);
+        int targetSlot = emptySlot.found() ? emptySlot.slot() : mc.player.getInventory().getSelectedSlot();
+
+        rememberSlot();
+        InvUtils.move().from(invResult.slot()).toHotbar(targetSlot);
+        InvUtils.swap(targetSlot, false);
+        return true;
     }
 
     private boolean tryWaterBucket(Item bucketItem) {
@@ -248,8 +246,7 @@ public class AutoClutch extends Module {
 
         if (rotate.get()) mc.player.setXRot(90.0f);
 
-        mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
-        return true;
+        return mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND).consumesAction();
     }
 
     private boolean tryPlaceBoat() {
@@ -264,8 +261,7 @@ public class AutoClutch extends Module {
 
             if (rotate.get()) mc.player.setXRot(90.0f);
 
-            mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
-            return true;
+            if (mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND).consumesAction()) return true;
         }
         return false;
     }
@@ -276,46 +272,41 @@ public class AutoClutch extends Module {
     }
 
     private boolean tryPlaceBlock() {
-
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = mc.player.getInventory().getItem(i);
-            if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem blockItem)) continue;
+            if (!isUsableBlock(mc.player.getInventory().getItem(i))) continue;
 
-            Block block = blockItem.getBlock();
-            if (!isBlockAllowed(block)) continue;
-            if (isDangerousBlock(block)) continue;
+            if (i != mc.player.getInventory().getSelectedSlot()) {
+                if (!autoSwitch.get()) continue;
 
-            if (autoSwitch.get()) {
-                prevSlot = mc.player.getInventory().getSelectedSlot();
+                rememberSlot();
                 InvUtils.swap(i, false);
             }
 
             if (placeBlockBelow()) return true;
         }
 
+        if (!autoSwitch.get()) return false;
+
         for (int i = 9; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getItem(i);
-            if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem blockItem)) continue;
+            if (!isUsableBlock(mc.player.getInventory().getItem(i))) continue;
 
-            Block block = blockItem.getBlock();
-            if (!isBlockAllowed(block)) continue;
-            if (isDangerousBlock(block)) continue;
+            FindItemResult emptySlot = InvUtils.find(ItemStack::isEmpty, 0, 8);
+            int targetSlot = emptySlot.found() ? emptySlot.slot() : mc.player.getInventory().getSelectedSlot();
 
-            if (autoSwitch.get()) {
-
-                FindItemResult emptySlot = InvUtils.find(ItemStack::isEmpty, 0, 8);
-                int targetSlot = emptySlot.found() ? emptySlot.slot() : mc.player.getInventory().getSelectedSlot();
-
-                prevSlot = mc.player.getInventory().getSelectedSlot();
-                InvUtils.move().from(i).toHotbar(targetSlot);
-                InvUtils.swap(targetSlot, false);
-            } else {
-                continue;
-            }
+            rememberSlot();
+            InvUtils.move().from(i).toHotbar(targetSlot);
+            InvUtils.swap(targetSlot, false);
 
             if (placeBlockBelow()) return true;
         }
         return false;
+    }
+
+    private boolean isUsableBlock(ItemStack stack) {
+        if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem blockItem)) return false;
+
+        Block block = blockItem.getBlock();
+        return isBlockAllowed(block) && !isDangerousBlock(block);
     }
 
     private boolean placeBlockBelow() {
@@ -388,5 +379,11 @@ public class AutoClutch extends Module {
             }
         }
         return Double.MAX_VALUE;
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        clutched = false;
+        prevSlot = -1;
     }
 }

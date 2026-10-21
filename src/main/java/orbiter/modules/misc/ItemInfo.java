@@ -18,6 +18,7 @@ import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.Holder;
 import net.minecraft.network.chat.Component;
@@ -134,7 +135,7 @@ public class ItemInfo extends Module {
         if (m.showComponents.get()) {
             additions.add(lore("Components:"));
             boolean any = false;
-            for (net.minecraft.core.component.TypedDataComponent<?> component : stack.getComponents()) {
+            for (TypedDataComponent<?> component : stack.getComponents()) {
                 any = true;
                 DataComponentType<?> type = component.type();
                 Object value = component.value();
@@ -147,7 +148,7 @@ public class ItemInfo extends Module {
             additions.add(lore("Full NBT:"));
             Minecraft mc = Minecraft.getInstance();
             if (mc.level != null) {
-                RegistryOps<net.minecraft.nbt.Tag> ops = RegistryOps.create(NbtOps.INSTANCE, mc.level.registryAccess());
+                RegistryOps<Tag> ops = RegistryOps.create(NbtOps.INSTANCE, mc.level.registryAccess());
                 ItemStack.CODEC.encodeStart(ops, stack)
                     .result()
                     .ifPresentOrElse(
@@ -161,38 +162,32 @@ public class ItemInfo extends Module {
 
         if (!additions.isEmpty()) {
             try {
-            lines.add(Component.empty());
-            lines.add(lore("=== Item Info ==="));
+                lines.add(Component.empty());
+                lines.add(lore("=== Item Info ==="));
                 lines.addAll(additions);
-            } catch (UnsupportedOperationException ignored) {
-
-            }
+            } catch (UnsupportedOperationException ignored) {}
         }
     }
 
     private static void appendPluginEnchantments(ItemStack stack, List<Component> additions) {
         CustomData custom = stack.get(DataComponents.CUSTOM_DATA);
         if (custom == null) return;
-        CompoundTag tag = custom.copyTag();
-        if (tag == null || !tag.contains("PublicBukkitValues")) return;
 
-        CompoundTag pbv = tag.getCompound("PublicBukkitValues").orElse(null);
+        CompoundTag pbv = custom.copyTag().getCompound("PublicBukkitValues").orElse(null);
         if (pbv == null) return;
 
         String ceJson = pbv.getString("crazyenchantments:crazyenchants").orElse("");
-        if (!ceJson.isEmpty()) {
-            try {
-                JsonObject root = JsonParser.parseString(ceJson).getAsJsonObject();
-                JsonObject enchants = root.getAsJsonObject("enchants");
-                if (enchants != null && !enchants.entrySet().isEmpty()) {
-                    additions.add(lore("CrazyEnchantments:"));
-                    for (Map.Entry<String, JsonElement> e : enchants.entrySet()) {
-                        int lvl = e.getValue().getAsInt();
-                        additions.add(lore("  " + formatEnchantName(e.getKey()) + " " + roman(lvl)));
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
+        if (ceJson.isEmpty()) return;
+
+        try {
+            JsonObject root = JsonParser.parseString(ceJson).getAsJsonObject();
+            JsonObject enchants = root.getAsJsonObject("enchants");
+            if (enchants == null || enchants.isEmpty()) return;
+            additions.add(lore("CrazyEnchantments:"));
+            for (Map.Entry<String, JsonElement> entry : enchants.entrySet()) {
+                additions.add(lore("  " + formatEnchantName(entry.getKey()) + " " + roman(entry.getValue().getAsInt())));
+            }
+        } catch (Exception ignored) {}
     }
 
     private static String roman(int num) {

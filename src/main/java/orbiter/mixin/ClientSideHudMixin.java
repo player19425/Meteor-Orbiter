@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Hud.class)
 public abstract class ClientSideHudMixin {
-    @Inject(method = "extractCrosshair(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "extractCrosshair(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$renderCrosshair(GuiGraphicsExtractor context, DeltaTracker tickCounter, CallbackInfo ci) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.isCrosshairOverrideActive()) return;
@@ -55,7 +55,7 @@ public abstract class ClientSideHudMixin {
         ci.cancel();
     }
 
-    @WrapMethod(method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V")
+    @WrapMethod(method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", require = 0)
     private void orbiter$hudRenderScope(GuiGraphicsExtractor context, DeltaTracker tickCounter, Operation<Void> original) {
         ClientSpoofState.pushHudRenderScope();
         try {
@@ -65,7 +65,7 @@ public abstract class ClientSideHudMixin {
         }
     }
 
-    @Inject(method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("RETURN"))
+    @Inject(method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("RETURN"), require = 0)
     private void orbiter$renderFakeDeath(GuiGraphicsExtractor context, DeltaTracker tickCounter, CallbackInfo ci) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.isShowingFakeDeath()) return;

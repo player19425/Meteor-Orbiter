@@ -124,7 +124,7 @@ public class ItemGenerator extends Module {
 
     private final Setting<Integer> safeMaxStackCount = sgSafety.add(new IntSetting.Builder()
             .name("safe-max-stack-count")
-            .description("Maximum stack count while safe mode is enabled (protocol-safe upper bound is 99).")
+            .description("Hard cap on stack size while safe mode is enabled.")
             .defaultValue(64)
             .min(1)
             .max(99)
@@ -228,6 +228,7 @@ public class ItemGenerator extends Module {
     private final Random random = new Random();
     private int tickCounter = 0;
     private List<Item> itemCache = null;
+    private List<Holder.Reference<Enchantment>> enchantCache = null;
     private boolean warnedBurstClamp = false;
     private boolean warnedRateThrottle = false;
     private long lastCreativePacketAtMs = 0L;
@@ -267,6 +268,7 @@ public class ItemGenerator extends Module {
     @Override
     public void onDeactivate() {
         itemCache = null;
+        enchantCache = null;
         warnedBurstClamp = false;
         warnedRateThrottle = false;
         lastCreativePacketAtMs = 0L;
@@ -374,11 +376,19 @@ public class ItemGenerator extends Module {
     }
 
     private void applyRandomEnchants(ItemStack stack) {
-        if (mc.level == null)
-            return;
+        List<Holder.Reference<Enchantment>> allEnchants = enchantCache;
+        if (allEnchants == null) {
+            if (mc.level == null)
+                return;
 
-        var registry = mc.level.registryAccess().getOrThrow(Registries.ENCHANTMENT).value();
-        List<Holder.Reference<Enchantment>> allEnchants = registry.keySet().stream().map(id -> registry.get(id)).filter(java.util.Optional::isPresent).map(java.util.Optional::get).toList();
+            var registry = mc.level.registryAccess().getOrThrow(Registries.ENCHANTMENT).value();
+            allEnchants = registry.keySet().stream()
+                    .map(id -> registry.get(id))
+                    .filter(java.util.Optional::isPresent)
+                    .map(java.util.Optional::get)
+                    .toList();
+            enchantCache = allEnchants;
+        }
 
         if (allEnchants.isEmpty())
             return;

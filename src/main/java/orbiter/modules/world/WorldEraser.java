@@ -9,6 +9,7 @@ import orbiter.util.SafeRegionMath;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
@@ -139,19 +140,6 @@ public class WorldEraser extends CreativeSafetyModule {
                     || erasePattern.get() == ErasePattern.InvertBlock)
             .build());
 
-    private static final String[] ORE_BLOCKS = {
-            "minecraft:coal_ore", "minecraft:deepslate_coal_ore",
-            "minecraft:iron_ore", "minecraft:deepslate_iron_ore",
-            "minecraft:gold_ore", "minecraft:deepslate_gold_ore",
-            "minecraft:diamond_ore", "minecraft:deepslate_diamond_ore",
-            "minecraft:emerald_ore", "minecraft:deepslate_emerald_ore",
-            "minecraft:lapis_ore", "minecraft:deepslate_lapis_ore",
-            "minecraft:redstone_ore", "minecraft:deepslate_redstone_ore",
-            "minecraft:copper_ore", "minecraft:deepslate_copper_ore",
-            "minecraft:nether_gold_ore", "minecraft:nether_quartz_ore",
-            "minecraft:ancient_debris"
-    };
-
     private final Setting<Integer> commandsPerTick = sgTiming.add(new IntSetting.Builder()
             .name("commands-per-tick")
             .description("Number of /fill commands sent per tick. Lower = safer.")
@@ -176,7 +164,7 @@ public class WorldEraser extends CreativeSafetyModule {
 
     private final Setting<Boolean> onlyLoadedChunks = sgTiming.add(new BoolSetting.Builder()
             .name("only-loaded-chunks")
-            .description("Skip fill commands that would land in unloaded chunks. The server answers those with 'No blocks were filled', so sending them wastes time and floods your chat.")
+            .description("The server answers fills in unloaded chunks with No blocks were filled.")
             .defaultValue(true)
             .build());
 
@@ -198,6 +186,7 @@ public class WorldEraser extends CreativeSafetyModule {
     private List<String> pendingCommands;
     private int commandIndex;
     private int tickDelay;
+    private int lastProgressStep = 0;
 
     private boolean lazyMode = false;
     private int lazyMinX, lazyMaxX, lazyMinY, lazyMaxY, lazyMinZ, lazyMaxZ;
@@ -209,6 +198,11 @@ public class WorldEraser extends CreativeSafetyModule {
     public WorldEraser() {
         super("world-eraser",
                 "Erases blocks in a radius. Toggle twice to trigger. OP.");
+    }
+
+    @Override
+    protected boolean supportsFrameBudget() {
+        return true;
     }
 
     @Override
@@ -287,7 +281,6 @@ public class WorldEraser extends CreativeSafetyModule {
             int sent = 0;
             while (sent < commandsPerTick.get() && lazyGeneratedCount < maxGeneratedCommands.get()) {
                 if ((sent & 7) == 7 && System.nanoTime() >= deadline) break;
-                if (!GlobalSendLimiter.tryAcquireOne()) break;
                 if (lazyIterator == null || !lazyIterator.hasNext()) {
                     lazyMode = false;
                     long skipped = lazyIterator instanceof FillCommandIterator f ? f.skippedUnloaded : 0;
@@ -296,6 +289,7 @@ public class WorldEraser extends CreativeSafetyModule {
                     toggle();
                     return;
                 }
+                if (!GlobalSendLimiter.tryAcquireOne()) break;
                 FastSend.command(CommandUtils.vanilla(lazyIterator.next()));
                 lazyGeneratedCount++;
                 sent++;
@@ -329,6 +323,7 @@ public class WorldEraser extends CreativeSafetyModule {
 
         int sent = 0;
         while (commandIndex < pendingCommands.size() && sent < commandsPerTick.get()) {
+            if (!GlobalSendLimiter.tryAcquireOne()) break;
             FastSend.command(CommandUtils.vanilla(pendingCommands.get(commandIndex)));
             commandIndex++;
             sent++;
@@ -336,7 +331,9 @@ public class WorldEraser extends CreativeSafetyModule {
 
         if (progressMessages.get() && pendingCommands.size() > 10) {
             int percent = (int) ((commandIndex / (double) pendingCommands.size()) * 100);
-            if (percent % 25 == 0 && percent > 0) {
+            int step = Math.min(percent / 25, 3);
+            if (step > lastProgressStep) {
+                lastProgressStep = step;
                 info("Progress: %d%% (%d/%d)", percent, commandIndex, pendingCommands.size());
             }
         }
@@ -349,6 +346,7 @@ public class WorldEraser extends CreativeSafetyModule {
         commandIndex = 0;
         lazyMode = false;
         lazyIterator = null;
+        lastProgressStep = 0;
     }
 
     private void startLazyGeneration() {
@@ -381,6 +379,7 @@ public class WorldEraser extends CreativeSafetyModule {
             pendingCommands = buildVanillaCommands();
             commandIndex = 0;
             tickDelay = 0;
+            lastProgressStep = 0;
         }
     }
 
@@ -689,6 +688,13 @@ public class WorldEraser extends CreativeSafetyModule {
         int r = radius.get();
         String block = fillBlock.get().replace("minecraft:", "");
 
+        int permits = shape.get() == EraseShape.Cube ? 5 : 2;
+        if (weConfirm.get()) permits++;
+        if (!GlobalSendLimiter.tryAcquire(permits)) {
+            info("WorldEdit erase skipped, shared command budget is full. Try again next tick.");
+            return;
+        }
+
         sendWorldEditCommand("pos1");
 
         switch (shape.get()) {
@@ -744,5 +750,17 @@ public class WorldEraser extends CreativeSafetyModule {
         Checkerboard,
         OnlyBlock,
         InvertBlock
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        pendingCommands = null;
+        commandIndex = 0;
+        tickDelay = 0;
+        armed = false;
+        lazyMode = false;
+        lazyIterator = null;
+        lazyGeneratedCount = 0;
+        lastProgressStep = 0;
     }
 }

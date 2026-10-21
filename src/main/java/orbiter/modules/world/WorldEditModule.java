@@ -1,12 +1,14 @@
 package orbiter.modules.world;
 
 import orbiter.Orbiter;
+import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.entity.player.InteractBlockEvent;
 import meteordevelopment.meteorclient.events.entity.player.StartBreakingBlockEvent;
 import meteordevelopment.meteorclient.events.game.SendMessageEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.item.Item;
@@ -88,7 +90,7 @@ public class WorldEditModule extends CreativeSafetyModule {
 
     private final Setting<Integer> maxGeneratedCommands = sgPerformance.add(new IntSetting.Builder()
             .name("max-generated-commands")
-            .description("Reject an operation before execution when its generated command plan exceeds this bound.")
+            .description("Reject an operation whose command plan would exceed this bound.")
             .defaultValue(10000)
             .min(1)
             .max(100000)
@@ -194,6 +196,8 @@ public class WorldEditModule extends CreativeSafetyModule {
 
     @Override
     public void onActivate() {
+        safetyActivate();
+
         if (mc.player == null) {
             toggle();
             return;
@@ -221,6 +225,7 @@ public class WorldEditModule extends CreativeSafetyModule {
 
     @Override
     public void onDeactivate() {
+        safetyDeactivate();
         clearExecutionState();
         awaitingConfirmation = false;
         pendingConfirmRequest = null;
@@ -262,9 +267,9 @@ public class WorldEditModule extends CreativeSafetyModule {
 
             if (runningHistoryBatch != null) {
                 if (runningBatchToRedo) {
-                    for (HistoryEntry entry : runningHistoryBatch) redoStack.push(entry);
+                    pushHistoryBatch(redoStack, runningHistoryBatch);
                 } else {
-                    for (HistoryEntry entry : runningHistoryBatch) pushUndoEntry(entry);
+                    for (int i = runningHistoryBatch.size() - 1; i >= 0; i--) pushUndoEntry(runningHistoryBatch.get(i));
                 }
                 runningHistoryBatch = null;
             } else if (pendingHistoryEntry != null) {
@@ -303,6 +308,7 @@ public class WorldEditModule extends CreativeSafetyModule {
             }
 
             if (step instanceof CommandStep command && mc.player != null && mc.player.connection != null) {
+                if (!GlobalSendLimiter.tryAcquireOne()) break;
                 mc.player.connection.sendCommand(command.command());
             }
             cmdIndex++;
@@ -379,12 +385,11 @@ public class WorldEditModule extends CreativeSafetyModule {
                 if (confirmed != null) executeRequest(confirmed);
                 return;
             }
-            if (action.equals("cancel") || action.equals("no")) {
-                awaitingConfirmation = false;
-                pendingConfirmRequest = null;
-                info("Operation cancelled.");
-                return;
-            }
+
+            awaitingConfirmation = false;
+            pendingConfirmRequest = null;
+            info("Operation cancelled.");
+            if (action.equals("cancel") || action.equals("no")) return;
         }
 
         if (action.equals("confirm") || action.equals("cancel") || action.equals("yes") || action.equals("no")) {
@@ -516,7 +521,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                     }
                     String block = parts[1];
                     if (parseBlockPattern(block) == null) return;
-                    int thickness = parts.length >= 3 ? parseInt(parts[2], 1) : 1;
+                    int thickness = parts.length >= 3 ? Math.max(1, parseInt(parts[2], 1)) : 1;
                     OperationBounds b = new OperationBounds(getMin(), getMax());
                     maybeExecute(new OperationRequest("hollow " + block + " t=" + thickness, buildHollowCommands(b.min, b.max, block, thickness), b.volume(), b, b.center(), true));
                 }
@@ -527,7 +532,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                     }
                     String block = parts[1];
                     if (parseBlockPattern(block) == null) return;
-                    int r = parseInt(parts[2], 5);
+                    int r = clampExtent(parseInt(parts[2], 5));
                     BlockPos c = mc.player.blockPosition();
                     OperationBounds b = new OperationBounds(c.offset(-r, -r, -r), c.offset(r, r, r));
                     maybeExecute(new OperationRequest("sphere " + block + " r=" + r, buildSphereCommands(c, r, block), b.volume(), b, c, true));
@@ -539,7 +544,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                     }
                     String block = parts[1];
                     if (parseBlockPattern(block) == null) return;
-                    int r = parseInt(parts[2], 5);
+                    int r = clampExtent(parseInt(parts[2], 5));
                     BlockPos c = mc.player.blockPosition();
                     OperationBounds b = new OperationBounds(c.offset(-r, -r, -r), c.offset(r, r, r));
                     maybeExecute(new OperationRequest("hsphere " + block + " r=" + r, buildHollowSphereCommands(c, r, block), b.volume(), b, c, true));
@@ -551,8 +556,8 @@ public class WorldEditModule extends CreativeSafetyModule {
                     }
                     String block = parts[1];
                     if (parseBlockPattern(block) == null) return;
-                    int r = parseInt(parts[2], 5);
-                    int h = parseInt(parts[3], 10);
+                    int r = clampExtent(parseInt(parts[2], 5));
+                    int h = Math.max(1, clampExtent(parseInt(parts[3], 10)));
                     BlockPos base = mc.player.blockPosition();
                     OperationBounds b = new OperationBounds(base.offset(-r, 0, -r), base.offset(r, h - 1, r));
                     maybeExecute(new OperationRequest("cyl " + block + " r=" + r + " h=" + h, buildCylinderCommands(base, r, h, block), b.volume(), b, b.center(), true));
@@ -564,8 +569,8 @@ public class WorldEditModule extends CreativeSafetyModule {
                     }
                     String block = parts[1];
                     if (parseBlockPattern(block) == null) return;
-                    int r = parseInt(parts[2], 5);
-                    int h = parseInt(parts[3], 10);
+                    int r = clampExtent(parseInt(parts[2], 5));
+                    int h = Math.max(1, clampExtent(parseInt(parts[3], 10)));
                     BlockPos base = mc.player.blockPosition();
                     OperationBounds b = new OperationBounds(base.offset(-r, 0, -r), base.offset(r, h - 1, r));
                     maybeExecute(new OperationRequest("hcyl " + block + " r=" + r + " h=" + h, buildHollowCylinderCommands(base, r, h, block), b.volume(), b, b.center(), true));
@@ -577,7 +582,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                     }
                     String block = parts[1];
                     if (parseBlockPattern(block) == null) return;
-                    int size = parseInt(parts[2], 5);
+                    int size = clampExtent(parseInt(parts[2], 5));
                     BlockPos base = mc.player.blockPosition();
                     OperationBounds b = new OperationBounds(base.offset(-size, 0, -size), base.offset(size, Math.max(0, size - 1), size));
                     maybeExecute(new OperationRequest("pyramid " + block + " s=" + size, buildPyramidCommands(base, size, block, false), b.volume(), b, b.center(), true));
@@ -589,7 +594,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                     }
                     String block = parts[1];
                     if (parseBlockPattern(block) == null) return;
-                    int size = parseInt(parts[2], 5);
+                    int size = clampExtent(parseInt(parts[2], 5));
                     BlockPos base = mc.player.blockPosition();
                     OperationBounds b = new OperationBounds(base.offset(-size, 0, -size), base.offset(size, Math.max(0, size - 1), size));
                     maybeExecute(new OperationRequest("hpyramid " + block + " s=" + size, buildPyramidCommands(base, size, block, true), b.volume(), b, b.center(), true));
@@ -647,7 +652,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                         error("Usage: .we stack <count> [direction]");
                         return;
                     }
-                    int count = parseInt(parts[1], 1);
+                    int count = clampExtent(parseInt(parts[1], 1));
                     String dir = parts.length >= 3 ? parts[2].toLowerCase(Locale.ROOT) : getFacingDirection();
                     BlockPos min = getMin();
                     BlockPos max = getMax();
@@ -673,7 +678,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                     maybeExecute(new OperationRequest("move " + dist + " " + dir, buildMoveCommands(min, max, dist, dir), b == null ? -1 : b.volume(), b, b == null ? mc.player.blockPosition() : b.center(), true, relocate));
                 }
                 case "drain" -> {
-                    int r = parts.length >= 2 ? parseInt(parts[1], 10) : 10;
+                    int r = clampExtent(parts.length >= 2 ? parseInt(parts[1], 10) : 10);
                     BlockPos c = mc.player.blockPosition();
                     int rawMinY = c.getY() - r;
                     int rawMaxY = c.getY() + r;
@@ -695,7 +700,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                         error("Usage: .we replacenear <radius> <from> <to>");
                         return;
                     }
-                    int r = parseInt(parts[1], 10);
+                    int r = clampExtent(parseInt(parts[1], 10));
                     String from = parts[2];
                     String to = parts[3];
                     BlockPos c = mc.player.blockPosition();
@@ -946,7 +951,7 @@ public class WorldEditModule extends CreativeSafetyModule {
 
         HistoryEntry historyEntry = null;
         if (request.recordHistory && request.bounds != null) {
-            int snapshotCap = Math.min(maxGeneratedCommands.get(), largeOpThreshold.get());
+            int snapshotCap = maxGeneratedCommands.get();
             List<String> undoCommands = createUndoSnapshotCommands(request.bounds);
             if (undoCommands.size() >= snapshotCap) warning(String.format("Undo snapshot skipped: exceeds the %d command budget.", snapshotCap));
             else if (!undoCommands.isEmpty()) historyEntry = new HistoryEntry(request.name, undoCommands, new ArrayList<>(request.commands));
@@ -1015,10 +1020,14 @@ public class WorldEditModule extends CreativeSafetyModule {
 
     private void restoreHistoryBatch() {
         if (runningHistoryBatch == null) return;
-        Deque<HistoryEntry> target = runningBatchToRedo ? undoStack : redoStack;
-        for (int i = runningHistoryBatch.size() - 1; i >= 0; i--) target.push(runningHistoryBatch.get(i));
+        pushHistoryBatch(runningBatchToRedo ? undoStack : redoStack, runningHistoryBatch);
         runningHistoryBatch = null;
     }
+
+    private void pushHistoryBatch(Deque<HistoryEntry> target, List<HistoryEntry> batch) {
+        for (int i = batch.size() - 1; i >= 0; i--) target.push(batch.get(i));
+    }
+
     private boolean verifyTeleport(BlockPos target) {
         double distSq = mc.player.distanceToSqr(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
         return !abortIfZoneTpFails.get() || distSq <= 100;
@@ -1117,7 +1126,7 @@ public class WorldEditModule extends CreativeSafetyModule {
             return cmds;
         }
 
-        int cap = Math.min(maxGeneratedCommands.get(), largeOpThreshold.get());
+        int cap = maxGeneratedCommands.get();
 
         BlockPos.MutableBlockPos mutable = new BlockPos.MutableBlockPos();
         for (int y = bounds.min.getY(); y <= bounds.max.getY(); y++) {
@@ -1467,13 +1476,21 @@ public class WorldEditModule extends CreativeSafetyModule {
 
     private List<String> buildNoiseFillCommands(BlockPos min, BlockPos max) {
         List<String> cmds = new ArrayList<>();
-        String[] blocks = noiseBlocks.get().split(",");
-        if (blocks.length == 0) return cmds;
+        BlockPattern pattern = parseBlockPattern(noiseBlocks.get());
+        if (pattern == null) return cmds;
 
-        for (int i = 0; i < blocks.length; i++) blocks[i] = normalizeBlock(blocks[i].trim());
+        int cs = fillChunkSize.get();
 
-        cmds.addAll(buildFillCommands(min, max, blocks[0]));
-        for (int i = 1; i < blocks.length; i++) cmds.addAll(buildReplaceCommands(min, max, blocks[0], blocks[i]));
+        for (int x = min.getX(); x <= max.getX(); x += cs) {
+            for (int y = min.getY(); y <= max.getY(); y += cs) {
+                for (int z = min.getZ(); z <= max.getZ(); z += cs) {
+                    int x2 = Math.min(x + cs - 1, max.getX());
+                    int y2 = Math.min(y + cs - 1, max.getY());
+                    int z2 = Math.min(z + cs - 1, max.getZ());
+                    cmds.add(String.format("fill %d %d %d %d %d %d %s", x, y, z, x2, y2, z2, pattern.randomBlock()));
+                }
+            }
+        }
 
         return cmds;
     }
@@ -1566,17 +1583,17 @@ public class WorldEditModule extends CreativeSafetyModule {
             return cmds;
         }
 
-        int r2 = radius * radius;
+        long r2 = (long) radius * radius;
         boolean single = pattern.isSingleBlock();
         String singleBlock = single ? pattern.singleBlock() : null;
 
         for (int y = -radius; y <= radius; y++) {
-            int y2 = y * y;
+            long y2 = (long) y * y;
             int by = center.getY() + y;
             if (mc.level != null && (by < mc.level.getMinY() || by > worldTopY())) continue;
             for (int z = -radius; z <= radius; z++) {
-                int z2 = z * z;
-                int remaining = r2 - y2 - z2;
+                long z2 = (long) z * z;
+                long remaining = r2 - y2 - z2;
                 if (remaining < 0) continue;
 
                 int xSpan = (int) Math.floor(Math.sqrt(remaining));
@@ -1615,7 +1632,7 @@ public class WorldEditModule extends CreativeSafetyModule {
             return cmds;
         }
 
-        int r2 = radius * radius;
+        long r2 = (long) radius * radius;
         boolean single = pattern.isSingleBlock();
         String singleBlock = single ? pattern.singleBlock() : null;
 
@@ -1623,8 +1640,8 @@ public class WorldEditModule extends CreativeSafetyModule {
             int by = base.getY() + y;
             if (mc.level != null && (by < mc.level.getMinY() || by > worldTopY())) continue;
             for (int z = -radius; z <= radius; z++) {
-                int z2 = z * z;
-                int remaining = r2 - z2;
+                long z2 = (long) z * z;
+                long remaining = r2 - z2;
                 if (remaining < 0) continue;
 
                 int xSpan = (int) Math.floor(Math.sqrt(remaining));
@@ -1759,15 +1776,15 @@ public class WorldEditModule extends CreativeSafetyModule {
         int nz = (max.getZ() - min.getZ()) / cs + 1;
 
         for (int ix = 0; ix < nx; ix++) {
-            int tx = ox < 0 ? nx - 1 - ix : ix;
+            int tx = ox > 0 ? nx - 1 - ix : ix;
             int x = min.getX() + tx * cs;
             int x2 = Math.min(x + cs - 1, max.getX());
             for (int iy = 0; iy < ny; iy++) {
-                int ty = oy < 0 ? ny - 1 - iy : iy;
+                int ty = oy > 0 ? ny - 1 - iy : iy;
                 int y = min.getY() + ty * cs;
                 int y2 = Math.min(y + cs - 1, max.getY());
                 for (int iz = 0; iz < nz; iz++) {
-                    int tz = oz < 0 ? nz - 1 - iz : iz;
+                    int tz = oz > 0 ? nz - 1 - iz : iz;
                     int z = min.getZ() + tz * cs;
                     int z2 = Math.min(z + cs - 1, max.getZ());
                     cmds.add(String.format("clone %d %d %d %d %d %d %d %d %d replace move", x, y, z, x2, y2, z2, x + ox, y + oy, z + oz));
@@ -1888,6 +1905,10 @@ public class WorldEditModule extends CreativeSafetyModule {
     }
 
     private void queueSingleCommand(String command) {
+        if (pendingCommands != null) {
+            warning("An operation is already running.");
+            return;
+        }
         List<String> cmds = new ArrayList<>();
         cmds.add(command);
         startExecution(cmds, "single-command", null);
@@ -2222,6 +2243,10 @@ public class WorldEditModule extends CreativeSafetyModule {
         }
     }
 
+    private int clampExtent(int value) {
+        return Math.max(0, value);
+    }
+
     private String formatTeleportCommand(BlockPos pos) {
         return String.format("tp %d %d %d", pos.getX(), pos.getY(), pos.getZ());
     }
@@ -2357,5 +2382,12 @@ public class WorldEditModule extends CreativeSafetyModule {
             return new OperationBounds(new BlockPos(Math.min(this.min.getX(), other.min.getX()), Math.min(this.min.getY(), other.min.getY()), Math.min(this.min.getZ(), other.min.getZ())),
                     new BlockPos(Math.max(this.max.getX(), other.max.getX()), Math.max(this.max.getY(), other.max.getY()), Math.max(this.max.getZ(), other.max.getZ())));
         }
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        onDeactivate();
+        pos1 = null;
+        pos2 = null;
     }
 }

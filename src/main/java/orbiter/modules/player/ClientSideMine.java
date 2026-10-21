@@ -19,10 +19,9 @@ import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
 import net.minecraft.core.BlockPos;
 
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class ClientSideMine extends Module {
 
@@ -47,8 +46,8 @@ public class ClientSideMine extends Module {
         .min(10).sliderRange(10, 1000)
         .build());
 
-    private final Set<BlockPos> clientMinedBlocks = new HashSet<>();
-    private final Map<BlockPos, BlockState> originalStates = new HashMap<>();
+    private final Set<BlockPos> clientMinedBlocks = ConcurrentHashMap.newKeySet();
+    private final Map<BlockPos, BlockState> originalStates = new ConcurrentHashMap<>();
     private boolean expectingTeleport = false;
     private int teleportCooldown = 0;
 
@@ -61,6 +60,14 @@ public class ClientSideMine extends Module {
         performReset();
     }
 
+    @EventHandler
+    private void onGameLeft(meteordevelopment.meteorclient.events.game.GameLeftEvent event) {
+        clientMinedBlocks.clear();
+        originalStates.clear();
+        expectingTeleport = false;
+        teleportCooldown = 0;
+    }
+
     private void performReset() {
         if (mc.level != null) {
             for (BlockPos pos : clientMinedBlocks) {
@@ -69,10 +76,7 @@ public class ClientSideMine extends Module {
                     mc.level.setBlock(pos, restore, 3);
                     mc.level.setBlocksDirty(pos, Blocks.AIR.defaultBlockState(), restore);
                 } else {
-
-                    if (mc.levelRenderer != null) {
-                        mc.level.setSectionDirtyWithNeighbors(pos.getX() >> 4, pos.getY() >> 4, pos.getZ() >> 4);
-                    }
+                    mc.level.setSectionDirtyWithNeighbors(pos.getX() >> 4, pos.getY() >> 4, pos.getZ() >> 4);
                 }
             }
         }
@@ -109,7 +113,7 @@ public class ClientSideMine extends Module {
                 int toRemove = clientMinedBlocks.size() / 2;
                 var iterator = clientMinedBlocks.iterator();
                 for (int i = 0; i < toRemove && iterator.hasNext(); i++) {
-                    iterator.next();
+                    originalStates.remove(iterator.next());
                     iterator.remove();
                 }
             }
@@ -139,11 +143,12 @@ public class ClientSideMine extends Module {
 
         if (antiRubberBand.get() && expectingTeleport && event.packet instanceof ClientboundPlayerPositionPacket) {
             event.cancel();
-            if (mc.level != null) {
+            mc.execute(() -> {
+                if (mc.level == null) return;
                 for (BlockPos pos : clientMinedBlocks) {
                     mc.level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
                 }
-            }
+            });
             return;
         }
 
@@ -178,11 +183,7 @@ public class ClientSideMine extends Module {
     private void onSendMessage(SendMessageEvent event) {
         String msg = event.message;
         if (msg == null) return;
-
-        String prefix = null;
-        if (msg.startsWith(".csm reset")) prefix = ".csm reset";
-        else if (msg.startsWith(".csm sync")) prefix = ".csm sync";
-        else return;
+        if (!msg.startsWith(".csm reset") && !msg.startsWith(".csm sync")) return;
 
         event.cancel();
         performReset();

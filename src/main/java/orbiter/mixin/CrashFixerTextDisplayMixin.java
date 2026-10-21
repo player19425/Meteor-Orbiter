@@ -19,7 +19,7 @@ public class CrashFixerTextDisplayMixin {
     @Shadow
     private Display.TextDisplay.TextRenderState textRenderState;
 
-    @Inject(method = "cacheDisplay", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "cacheDisplay", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$sanitizeDisplayCache(Display.TextDisplay.LineSplitter splitter,
                                               CallbackInfoReturnable<Display.TextDisplay.CachedInfo> cir) {
         ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);

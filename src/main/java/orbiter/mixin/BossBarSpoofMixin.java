@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(BossEvent.class)
 public abstract class BossBarSpoofMixin {
-    @Inject(method = "getName", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getName", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$getName(CallbackInfoReturnable<Component> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module != null && module.shouldOverrideBossbar()) {
@@ -21,13 +21,13 @@ public abstract class BossBarSpoofMixin {
         }
     }
 
-    @Inject(method = "getProgress", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getProgress", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$getPercent(CallbackInfoReturnable<Float> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module != null && module.shouldOverrideBossbarPercent()) cir.setReturnValue(module.getBossbarPercentOverride());
     }
 
-    @Inject(method = "getColor", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getColor", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$getColor(CallbackInfoReturnable<BossEvent.BossBarColor> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module != null && module.shouldOverrideBossbarColor()) cir.setReturnValue(module.getBossbarColorOverride());

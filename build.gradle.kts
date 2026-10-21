@@ -1,95 +1,101 @@
+// Meteor Orbiter, standalone build.
+//
+// This project is self-contained: `gradlew build` here produces the jar for the
+// Minecraft version named in version.properties. Every other supported version
+// lives in versions/<target>/ and is its own standalone project with its own
+// wrapper and its own sources.
+
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.fabric.loom)
 }
 
-val archivesBaseName = providers.gradleProperty("archives_base_name").get()
-val mavenGroup = providers.gradleProperty("maven_group").get()
+val targetProps = Properties().apply {
+    file("version.properties").inputStream().use { load(it) }
+}
+
+fun target(key: String): String =
+    targetProps.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() }
+        ?: throw GradleException("version.properties is missing '$key'")
+
+fun targetOrNull(key: String): String? =
+    targetProps.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() }
+
+val mc = target("mc")
+
+version = "${providers.gradleProperty("mod_version").get()}-$mc"
+group = providers.gradleProperty("maven_group").get()
 
 base {
-    archivesName = archivesBaseName
-    version = libs.versions.mod.version.get() + "-" + libs.versions.minecraft.get()
-    group = mavenGroup
+    archivesName = providers.gradleProperty("archives_base_name").get()
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(target("jdk").toInt()))
+    }
 }
 
 repositories {
     maven {
-        name = "meteor-maven"
+        name = "meteor-releases"
         url = uri("https://maven.meteordev.org/releases")
     }
     maven {
-        name = "meteor-maven-snapshots"
+        name = "meteor-snapshots"
         url = uri("https://maven.meteordev.org/snapshots")
     }
 }
 
 dependencies {
-    // Fabric
-    minecraft(libs.minecraft)
-    implementation(libs.fabric.loader)
-    implementation(libs.fabric.resource.loader)
+    minecraft("com.mojang:minecraft:$mc")
+    implementation("net.fabricmc:fabric-loader:${target("loader")}")
+    implementation("meteordevelopment:meteor-client:${target("meteor")}")
 
-    // Meteor
-    implementation(libs.meteor.client)
-}
-
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(libs.versions.jdk.get().toInt()))
+    // Compile-time only. The merged Minecraft jar of these versions still
+    // exposes Fabric API types, so they have to be on the classpath.
+    targetOrNull("resource-loader")?.let {
+        implementation("net.fabricmc.fabric-api:fabric-resource-loader-v1:$it")
+    }
+    targetOrNull("fabric-api-base")?.let {
+        implementation("net.fabricmc.fabric-api:fabric-api-base:$it")
     }
 }
 
-fun toMinecraftCompat(version: String): String {
-    val stable = Regex("""^(\d{2})\.([1-9]\d*)(?:\.(\d+))?$""")
-
-    stable.matchEntire(version)?.let {
-        val (year, drop, _) = it.destructured
-        return "~$year.$drop"
-    }
-
-    val pre = Regex("""^(\d{2})\.([1-9]\d*)-pre[-.](\d+)$""")
-    pre.matchEntire(version)?.let {
-        return version.replace("-pre-", "-pre.")
-    }
-
-    val rc = Regex("""^(\d{2})\.([1-9]\d*)-rc[-.](\d+)$""")
-    rc.matchEntire(version)?.let {
-        return version.replace("-rc-", "-rc.")
-    }
-
-    return version
+tasks.withType<JavaCompile>().configureEach {
+    options.encoding = "UTF-8"
+    options.compilerArgs.addAll(listOf("-Xlint:deprecation", "-Xlint:unchecked", "-Xmaxerrs", "10000"))
 }
 
-tasks {
-    processResources {
-        val propertyMap = mapOf(
-            "version" to project.version,
-            "minecraft_version" to toMinecraftCompat(libs.versions.minecraft.get()),
-            "jdk_version" to libs.versions.jdk.get(),
-        )
+tasks.processResources {
+    val compatible = "~" + mc.replace("-pre-", "-pre.").replace("-rc-", "-rc.")
 
-        inputs.properties(propertyMap)
-        filesMatching("fabric.mod.json") {
-            expand(propertyMap)
-        }
+    val tokens = mapOf(
+        "version" to project.version.toString(),
+        "minecraft_version" to compatible,
+        "jdk_version" to target("jdk"),
+        "jdk_maj" to target("jdk")
+    )
+
+    inputs.properties(tokens)
+    filesMatching("fabric.mod.json") {
+        expand(tokens)
     }
-
-    jar {
-        inputs.property("archivesName", archivesBaseName)
-
-        from("LICENSE") {
-            rename { "${it}_$archivesBaseName" }
-        }
+    filesMatching("orbiter.mixins.json") {
+        expand(tokens)
     }
+}
 
-    withType<JavaCompile>().configureEach {
-        options.encoding = "UTF-8"
-        options.compilerArgs.addAll(
-            listOf(
-                "-Xlint:deprecation",
-                "-Xlint:unchecked",
-                "-Xmaxerrs",
-                "10000"
-            )
-        )
+tasks.jar {
+    val archiveName = providers.gradleProperty("archives_base_name").get()
+    inputs.property("archivesName", archiveName)
+    from(layout.projectDirectory.file("LICENSE")) {
+        rename { "${it}_$archiveName" }
     }
+}
+
+tasks.register("printTarget") {
+    val summary = "Minecraft $mc | Meteor ${target("meteor")} | JDK ${target("jdk")}"
+    doLast { println("${project.path}: $summary") }
 }

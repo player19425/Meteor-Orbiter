@@ -9,10 +9,15 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
+
+import java.util.Set;
+
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
-import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
+import net.minecraft.world.entity.PositionMoveRotation;
+import net.minecraft.world.entity.Relative;
 import net.minecraft.world.phys.Vec3;
 import orbiter.Orbiter;
+import orbiter.compat.PacketCompat;
 
 public class Noclip extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -37,7 +42,9 @@ public class Noclip extends Module {
         .defaultValue(true)
         .build());
 
-    private static Noclip instance;
+    private static volatile Noclip instance;
+
+    private static final double CORRECTION_RANGE = 8.0;
 
     private double anchorX;
     private double anchorY;
@@ -47,7 +54,7 @@ public class Noclip extends Module {
     private double currentDip;
 
     public Noclip() {
-        super(Orbiter.CATEGORY, "noclip", "Flies through blocks. The server accepts the position claim that lands in open air on the far side. In survival, let a falling sand or gravel block land on your head first.");
+        super(Orbiter.CATEGORY, "noclip", "Flies through blocks and hides the teleports the server sends back.");
         instance = this;
     }
 
@@ -58,31 +65,43 @@ public class Noclip extends Module {
 
     @Override
     public void onActivate() {
+        hasAnchor = false;
+        currentDip = 0;
         dipTimer = 0;
-        if (mc.player != null) {
-            anchorX = mc.player.getX();
-            anchorY = mc.player.getY();
-            anchorZ = mc.player.getZ();
-            hasAnchor = true;
-        }
+        updateAnchor();
+    }
+
+    private void updateAnchor() {
+        if (mc.player == null || mc.level == null) return;
+        if (!mc.level.noCollision(mc.player, mc.player.getBoundingBox())) return;
+
+        anchorX = mc.player.getX();
+        anchorY = mc.player.getY();
+        anchorZ = mc.player.getZ();
+        hasAnchor = true;
     }
 
     @Override
     public void onDeactivate() {
-        if (mc.player != null && mc.level != null && hasAnchor) {
-            if (!mc.level.noCollision(mc.player, mc.player.getBoundingBox())) {
+        if (mc.player != null) {
+            if (hasAnchor && mc.level != null && !mc.level.noCollision(mc.player, mc.player.getBoundingBox())) {
                 mc.player.absSnapTo(anchorX, anchorY, anchorZ);
             }
+
             mc.player.setDeltaMovement(Vec3.ZERO);
             mc.player.fallDistance = 0;
         }
+
         hasAnchor = false;
         dipTimer = 0;
+        currentDip = 0;
     }
 
     @EventHandler
     private void onGameJoined(GameJoinedEvent event) {
         hasAnchor = false;
+        dipTimer = 0;
+        currentDip = 0;
     }
 
     @EventHandler
@@ -96,8 +115,12 @@ public class Noclip extends Module {
             return;
         }
 
+        updateAnchor();
+
         dipTimer++;
-        if (dipTimer >= 55 && !mc.player.onGround() && !mc.options.keyShift.isDown()) {
+        if (mc.player.onGround()) {
+            dipTimer = 0;
+        } else if (dipTimer >= 55 && !mc.options.keyShift.isDown()) {
             dipTimer = 0;
             currentDip = -0.5;
         }
@@ -107,9 +130,33 @@ public class Noclip extends Module {
     private void onPacketReceive(PacketEvent.Receive event) {
         if (!(event.packet instanceof ClientboundPlayerPositionPacket packet)) return;
         if (mc.player == null || mc.player.connection == null) return;
+        if (!isCorrection(packet)) return;
 
-        mc.player.connection.send(new ServerboundAcceptTeleportationPacket(packet.id()));
+        int id = packet.id();
         event.cancel();
+
+        mc.execute(() -> {
+            if (mc.player == null || mc.player.connection == null) return;
+            PacketCompat.acceptTeleport(mc.player.connection, mc.player, id);
+        });
+    }
+
+    private boolean isCorrection(ClientboundPlayerPositionPacket packet) {
+        PositionMoveRotation change = packet.change();
+        if (change == null) return false;
+
+        Set<Relative> relatives = packet.relatives();
+        if (relatives != null
+            && (relatives.contains(Relative.X)
+                || relatives.contains(Relative.Y)
+                || relatives.contains(Relative.Z))) {
+            return false;
+        }
+
+        Vec3 target = change.position();
+        return Math.abs(target.x - mc.player.getX()) <= CORRECTION_RANGE
+            && Math.abs(target.y - mc.player.getY()) <= CORRECTION_RANGE
+            && Math.abs(target.z - mc.player.getZ()) <= CORRECTION_RANGE;
     }
 
     public static Vec3 currentMotion(net.minecraft.client.player.LocalPlayer player) {

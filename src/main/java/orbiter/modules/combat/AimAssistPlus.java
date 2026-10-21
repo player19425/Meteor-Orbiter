@@ -15,11 +15,12 @@ import meteordevelopment.meteorclient.utils.entity.Target;
 import meteordevelopment.meteorclient.utils.entity.TargetUtils;
 import meteordevelopment.meteorclient.utils.player.PlayerUtils;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EntityTypes;
+import orbiter.compat.TypeCompat;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BowItem;
@@ -64,7 +65,7 @@ public class AimAssistPlus extends Module {
     private final Setting<Set<EntityType<?>>> entities = sgGeneral.add(new EntityTypeListSetting.Builder()
             .name("entities")
             .description("Which entities to aim at.")
-            .defaultValue(EntityTypes.PLAYER)
+            .defaultValue(TypeCompat.PLAYER)
             .build());
 
     private final Setting<Double> range = sgGeneral.add(new DoubleSetting.Builder()
@@ -202,12 +203,6 @@ public class AimAssistPlus extends Module {
             .visible(stickyAim::get)
             .build());
 
-    private final Setting<Boolean> breakAimOnHit = sgStickyAim.add(new BoolSetting.Builder()
-            .name("break-on-kill")
-            .description("Release target lock when target dies.")
-            .defaultValue(true)
-            .build());
-
     private final Setting<Boolean> humanize = sgHumanize.add(new BoolSetting.Builder()
             .name("humanize")
             .description("Add subtle random jitter to aim movement to look natural.")
@@ -322,11 +317,9 @@ public class AimAssistPlus extends Module {
                 target = lockedTarget;
                 stickyTicks = 0;
             } else if (stickyAim.get() && stickyTicks < stickyDuration.get() && lockedTarget.isAlive()) {
-
                 target = lockedTarget;
                 stickyTicks++;
             } else {
-
                 lockedTarget = null;
                 target = findTarget();
                 if (target != null) {
@@ -339,12 +332,9 @@ public class AimAssistPlus extends Module {
             if (targetLock.get() && target != null) {
                 lockedTarget = target;
                 stickyTicks = 0;
+            } else {
+                lockedTarget = null;
             }
-        }
-
-        if (breakAimOnHit.get() && target != null && !target.isAlive()) {
-            target = null;
-            lockedTarget = null;
         }
 
         if (target != null) aim(target);
@@ -433,7 +423,7 @@ public class AimAssistPlus extends Module {
         );
         CombatRequest.Mode mode = aimMode.get() == AimMode.Silent ? CombatRequest.Mode.Silent : CombatRequest.Mode.Visible;
 
-        if (projectileAim.get() && isHoldingProjectileWeapon()) {
+        if (projectileAim.get() && mc.player.isUsingItem() && isHoldingProjectileWeapon()) {
             CombatEngine.get().submit(CombatRequest.rotation(this, prioritySetting.get(), aimPoint,
                 calculateBallisticPitch(horizontalDist, dy), mode, profile, null));
         } else {
@@ -448,11 +438,11 @@ public class AimAssistPlus extends Module {
         double v = projectileVelocity.get();
         if (!Double.isFinite(g) || g <= 0 || !Double.isFinite(v) || v <= 0) return 0.0;
 
-        if (chargeCompensation.get() && mc.player != null) {
+        if (chargeCompensation.get() && mc.player.isUsingItem()) {
             ItemStack active = mc.player.getActiveItem();
             if (active != null && active.getItem() instanceof BowItem) {
-                int useTime = 72000 - mc.player.getUseItemRemainingTicks();
-                float charge = BowItem.getPowerForTime(useTime);
+                int elapsedTicks = active.getUseDuration(mc.player) - mc.player.getUseItemRemainingTicks();
+                float charge = BowItem.getPowerForTime(elapsedTicks);
                 v *= Math.max(0.1, charge);
             }
         }
@@ -501,26 +491,15 @@ public class AimAssistPlus extends Module {
     private Vec3 getTargetPosition(Entity entity) {
         if (entity == null) return Vec3.ZERO;
 
-        Vec3 lerpedPos = entity.position();
-        double x = lerpedPos.x;
-        double y = lerpedPos.y;
-        double z = lerpedPos.z;
-
-        switch (bodyTarget.get()) {
-            case Head -> {
-                if (entity instanceof LivingEntity living) {
-                    y += living.getEyeHeight(living.getPose());
-                }
-            }
-            case Body -> {
-                if (entity instanceof LivingEntity living) {
-                    y += living.getEyeHeight(living.getPose()) * 0.5;
-                }
-            }
-            case Feet -> {
-
-            }
+        double height = 0.0;
+        if (entity instanceof LivingEntity living) {
+            if (bodyTarget.get() == Target.Head) height = living.getEyeHeight(living.getPose());
+            else if (bodyTarget.get() == Target.Body) height = living.getEyeHeight(living.getPose()) * 0.5;
         }
+
+        double x = entity.getX();
+        double y = entity.getY() + height;
+        double z = entity.getZ();
 
         if (prediction.get()) {
             Vec3 vel = entity.getDeltaMovement();
@@ -547,5 +526,10 @@ public class AimAssistPlus extends Module {
         if (target == null)
             return null;
         return EntityUtils.getName(target);
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        onDeactivate();
     }
 }

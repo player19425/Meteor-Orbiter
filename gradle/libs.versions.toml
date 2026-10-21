@@ -1,34 +1,15 @@
+# Build-time only. Everything that differs per Minecraft version (minecraft,
+# meteor, the Fabric API pieces the merged jar needs at compile time) lives in
+# versions/<target>/version.properties, NOT here.
+#
+# Loom ships two plugin ids since 1.14:
+#   net.fabricmc.fabric-loom        -> non-obfuscated Minecraft (the 26.x line)
+#   net.fabricmc.fabric-loom-remap  -> obfuscated Minecraft (1.21.11 and older)
+# A module picks whichever matches its target.
+
 [versions]
-mod-version = "1.0.6"
-
-# Fabric (https://fabricmc.net/develop)
-jdk = "25"
-minecraft = "26.2"
-fabric-loader = "0.19.3"
-
-# Loom (https://github.com/FabricMC/fabric-loom)
 loom = "1.17.19"
-
-# Meteor (https://github.com/MeteorDevelopment/meteor-client/)
-meteor = "26.2-SNAPSHOT"
-
-# Fabric API (required at compile time by the 26.2 merged Minecraft jar)
-fabric-resource-loader = "2.0.13+9edec1269e"
-
-# Mods
-
-[libraries]
-# Fabric base
-minecraft = { module = "com.mojang:minecraft", version.ref = "minecraft" }
-fabric-loader = { module = "net.fabricmc:fabric-loader", version.ref = "fabric-loader" }
-
-# Meteor client
-meteor-client = { module = "meteordevelopment:meteor-client", version.ref = "meteor" }
-
-# Fabric API
-fabric-resource-loader = { module = "net.fabricmc.fabric-api:fabric-resource-loader-v1", version.ref = "fabric-resource-loader" }
-
-# Mods
 
 [plugins]
 fabric-loom = { id = "net.fabricmc.fabric-loom", version.ref = "loom" }
+fabric-loom-remap = { id = "net.fabricmc.fabric-loom-remap", version.ref = "loom" }

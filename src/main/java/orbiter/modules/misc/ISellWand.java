@@ -1,12 +1,15 @@
 package orbiter.modules.misc;
 
 import orbiter.Orbiter;
+import orbiter.compat.EntityCompat;
+import orbiter.compat.ClientCompat;
 import meteordevelopment.meteorclient.events.entity.player.InteractBlockEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.FindItemResult;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
@@ -18,6 +21,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -35,6 +39,7 @@ public class ISellWand extends Module {
     }
 
     private static final Direction[] HORIZONTALS = {Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST};
+    private static final double MIN_WAND_REACH = 4.5;
 
     private final SettingGroup sgGeneral   = settings.getDefaultGroup();
     private final SettingGroup sgRecording = settings.createGroup("Recording");
@@ -48,13 +53,13 @@ public class ISellWand extends Module {
 
     private final Setting<Boolean> recordMode = sgRecording.add(new BoolSetting.Builder()
         .name("record-mode")
-        .description("While ON, right-clicking a chest records its coordinates instead of running the wand. Double chests are stored as one entry.")
+        .description("Record chests by right-clicking them. A double chest counts as one.")
         .defaultValue(false)
         .build());
 
     private final Setting<List<String>> chestList = sgRecording.add(new StringListSetting.Builder()
         .name("chest-list")
-        .description("Recorded chest positions. Format \"x,y,z\" or \"x,y,z,ticks\" for a per-chest delay. Populated by record-mode or edited manually.")
+        .description("Recorded chests, \"x,y,z\" or \"x,y,z,ticks\" for a per-chest delay.")
         .defaultValue(new ArrayList<>())
         .build());
 
@@ -69,7 +74,7 @@ public class ISellWand extends Module {
         .name("range")
         .description("Blocks around you to search for chests in AllNearby mode.")
         .defaultValue(5)
-        .min(1).sliderRange(1, 12)
+        .min(1).max(12).sliderRange(1, 12)
         .visible(() -> !recordMode.get() && targetMode.get() == TargetMode.AllNearby)
         .build());
 
@@ -190,7 +195,13 @@ public class ISellWand extends Module {
             return;
         }
 
-        if (mc.gui.screen() != null) {
+        if (!withinReach(t.pos)) {
+            targetIndex++;
+            tickWaiter = 0;
+            return;
+        }
+
+        if (ClientCompat.screen() != null) {
             mc.player.closeContainer();
             tickWaiter = 2;
             return;
@@ -205,7 +216,7 @@ public class ISellWand extends Module {
 
         BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(t.pos), Direction.UP, t.pos, false);
         mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
-        mc.player.swing(InteractionHand.MAIN_HAND);
+        EntityCompat.swing(mc.player, InteractionHand.MAIN_HAND);
 
         targetIndex++;
         tickWaiter = Math.max(1, t.delay);
@@ -242,6 +253,11 @@ public class ISellWand extends Module {
                 }
             }
         }
+    }
+
+    private boolean withinReach(BlockPos pos) {
+        double reach = Math.max(Math.max(mc.player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE), MIN_WAND_REACH), range.get()) + 1.0;
+        return mc.player.distanceToSqr(Vec3.atCenterOf(pos)) <= reach * reach;
     }
 
     private boolean equipWand() {
@@ -324,7 +340,6 @@ public class ISellWand extends Module {
                 };
             }
         } catch (NumberFormatException ignored) {
-
         }
         return null;
     }
@@ -346,5 +361,13 @@ public class ISellWand extends Module {
 
     public int recordedChestCount() {
         return chestList.get().size();
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        targets.clear();
+        targetIndex = 0;
+        cycleCount = 0;
+        tickWaiter = 0;
     }
 }

@@ -18,14 +18,14 @@ public abstract class Camera360RenderPitchMixin {
         return mod != null && mod.isActive();
     }
 
-    @WrapOperation(method = "applyInput", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getXRot()F", ordinal = 0))
+    @WrapOperation(method = "applyInput", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getXRot()F", ordinal = 0), require = 0)
     private float orbiter$wrapRenderPitchTarget(LocalPlayer player, Operation<Float> original) {
         float pitch = original.call(player);
         if (!orbiter$is360Active()) return pitch;
         return player.getXRot(1.0f) + Mth.wrapDegrees(pitch - player.getXRot(1.0f));
     }
 
-    @WrapOperation(method = "applyInput", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getYRot()F", ordinal = 0))
+    @WrapOperation(method = "applyInput", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getYRot()F", ordinal = 0), require = 0)
     private float orbiter$wrapRenderYawTarget(LocalPlayer player, Operation<Float> original) {
         float yaw = original.call(player);
         if (!orbiter$is360Active()) return yaw;

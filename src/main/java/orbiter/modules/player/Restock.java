@@ -1,6 +1,7 @@
 package orbiter.modules.player;
 
 import orbiter.Orbiter;
+import orbiter.compat.ClientCompat;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.EnumSetting;
@@ -9,6 +10,7 @@ import meteordevelopment.meteorclient.settings.ItemListSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.world.entity.player.Inventory;
@@ -32,7 +34,7 @@ public class Restock extends Module {
 
     private final Setting<Integer> minCount = sgGeneral.add(new IntSetting.Builder()
         .name("min-hotbar-count")
-        .description("When hotbar stack is below this amount, restock from inventory or open container.")
+        .description("Restock the hotbar once its stack drops below this amount.")
         .defaultValue(16)
         .min(1)
         .sliderRange(1, 64)
@@ -92,7 +94,7 @@ public class Restock extends Module {
         if (mc.player == null || mc.gameMode == null) return;
         if (CombatEngine.get().isFrozen()) return;
 
-        if (!(mc.gui.screen() instanceof AbstractContainerScreen<?> handledScreen)) return;
+        if (!(ClientCompat.screen() instanceof AbstractContainerScreen<?> handledScreen)) return;
         AbstractContainerMenu handler = handledScreen.getMenu();
         if (handler == null) return;
 
@@ -142,6 +144,7 @@ public class Restock extends Module {
 
             if (useQuickMove.get()) {
                 mc.gameMode.handleContainerInput(handler.containerId, containerSlotId, 0, ContainerInput.QUICK_MOVE, mc.player);
+                failedMoveAttempts = 0;
                 timer = tickDelay.get();
                 return;
             }
@@ -218,5 +221,11 @@ public class Restock extends Module {
 
         ItemStack after = mc.player.containerMenu.getSlot(toSlot).getItem();
         return after.getCount() > beforeCount || (before.isEmpty() && !after.isEmpty());
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        timer = 0;
+        failedMoveAttempts = 0;
     }
 }

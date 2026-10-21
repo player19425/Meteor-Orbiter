@@ -11,7 +11,7 @@ import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 
 public class EscapeCommand extends Command {
     public EscapeCommand() {
-        super("escape", "Controls ForceInvisibility escape logic. Usage: .escape sky [y], .escape bedrock, .escape cancel");
+        super("escape", "Drives the ForceInvisibility escape routines.");
     }
 
     @Override
@@ -34,7 +34,7 @@ public class EscapeCommand extends Command {
                     double y = DoubleArgumentType.getDouble(context, "y");
                     module.requestEscapeSky(y);
                     ensureEnabled(module);
-                    info("Sky escape started at Y " + Math.round(y) + ".");
+                    info("Sky escape started at Y %s.", Math.round(y));
                     return SINGLE_SUCCESS;
                 })));
 

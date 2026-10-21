@@ -1,6 +1,8 @@
 package orbiter.modules;
 
 import orbiter.Orbiter;
+import orbiter.compat.PacketCompat;
+import orbiter.compat.ClientCompat;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
@@ -11,29 +13,25 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.settings.StringSetting;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.common.ServerboundPongPacket;
 import net.minecraft.network.protocol.common.ServerboundKeepAlivePacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
-import net.minecraft.network.protocol.game.ServerboundSwingPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 
 import java.io.File;
-import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.PriorityQueue;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.Collectors;
 
 public class PingSpoof extends Module {
     public enum Mode {
@@ -409,7 +407,7 @@ public class PingSpoof extends Module {
     private void onPacketSend(PacketEvent.Send event) {
         if (sendingInternally || mc.player == null || mc.getConnection() == null) return;
 
-        if (disableInInventory.get() && mc.gui.screen() != null) {
+        if (disableInInventory.get() && ClientCompat.screen() != null) {
             return;
         }
 
@@ -436,7 +434,7 @@ public class PingSpoof extends Module {
         }
 
         if (disableInInventory.get()) {
-            boolean inventoryOpen = mc.gui.screen() != null;
+            boolean inventoryOpen = ClientCompat.screen() != null;
             if (inventoryOpen && !wasInventoryOpen) {
                 flushAllNow();
             }
@@ -508,7 +506,7 @@ public class PingSpoof extends Module {
 
     private boolean isCombatPacket(Packet<?> packet) {
         return packet instanceof ServerboundInteractPacket
-            || packet instanceof ServerboundSwingPacket
+            || PacketCompat.isSwingPacket(packet)
             || packet instanceof ServerboundUseItemPacket;
     }
 
@@ -541,7 +539,7 @@ public class PingSpoof extends Module {
             return result;
         }
 
-        if (packet instanceof net.minecraft.network.protocol.common.ServerboundPongPacket) {
+        if (packet instanceof ServerboundPongPacket) {
             if (!supportsPingDelay() || !delayPong.get()) return -1L;
             if (isCompetitiveMode()) {
                 int base = jitterDelay(Math.max(0, competitiveLatencyMs.get()), Math.max(0, competitiveJitterMs.get()));
@@ -563,7 +561,7 @@ public class PingSpoof extends Module {
         if (!supportsMovementDelay() || !delayMovement.get()) return -1L;
         if (movementOnlyWhileMoving.get() && !isPlayerMoving()) return -1L;
 
-        if (disableInInventory.get() && mc.gui.screen() != null) return -1L;
+        if (disableInInventory.get() && ClientCompat.screen() != null) return -1L;
 
         if (isCompetitiveMode()) {
             movementPacketCounter++;
@@ -686,7 +684,7 @@ public class PingSpoof extends Module {
     }
 
     private boolean isMovementPacket(Packet<?> packet) {
-        return packet instanceof ServerboundMovePlayerPacket || packet instanceof net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
+        return packet instanceof ServerboundMovePlayerPacket || packet instanceof ServerboundMoveVehiclePacket;
     }
 
     private boolean isPlayerMoving() {
@@ -943,7 +941,6 @@ public class PingSpoof extends Module {
         }
 
         String combatOverlay = inCombatState ? " combat" : "";
-        String modeLabel = mode.get().toString();
 
         return String.format(java.util.Locale.ROOT, "%dms q:%d%s%s%s",
             effectivePing, queued, burstState, combatOverlay,
@@ -964,4 +961,13 @@ public class PingSpoof extends Module {
     }
 
     private record DelayedPacket(Packet<?> packet, long sendAt, long sequence) {}
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        clearQueue();
+        queueOverflowWarned = false;
+        wasInventoryOpen = false;
+        inCombatState = false;
+        lastCombatPacketTime = 0;
+    }
 }

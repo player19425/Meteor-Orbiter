@@ -14,7 +14,7 @@ public abstract class MinecraftClientStopMixin {
     @Unique
     private static volatile boolean orbiter$deferredStop = false;
 
-    @Inject(method = "stop", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "stop", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$onScheduleStop(CallbackInfo ci) {
         if (Modules.get() == null) return;
 
@@ -27,7 +27,7 @@ public abstract class MinecraftClientStopMixin {
         }
     }
 
-    @Inject(method = "tick", at = @At("TAIL"))
+    @Inject(method = "tick", at = @At("TAIL"), require = 0)
     private void orbiter$completeDeferredStop(CallbackInfo ci) {
         if (!orbiter$deferredStop) return;
 

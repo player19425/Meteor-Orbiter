@@ -8,9 +8,9 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(DialogScreen.class)
 public interface DialogScreenAccessor {
-    @Accessor("dialog")
+    @Accessor(value = "dialog")
     Dialog orbiter$getDialog();
 
-    @Accessor("layout")
+    @Accessor(value = "layout")
     HeaderAndFooterLayout orbiter$getLayout();
 }

@@ -1,43 +1,54 @@
 package orbiter.util;
 
 public final class GlobalSendLimiter {
-    private static final long TICK_NANOS = 50_000_000L;
-    private static final int MAX_BURST_TICKS = 8;
+    private static final double NANOS_PER_SECOND = 1_000_000_000.0;
+    private static final int MAX_RESERVATION = 6;
 
-    private static volatile int perTick = 32768;
+    private static volatile double permitsPerSecond = 20.0;
+    private static double tokens;
     private static long windowStart;
-    private static int tokens;
 
     private GlobalSendLimiter() {
     }
 
-    public static void setPerTick(int value) {
-        perTick = Math.max(1, value);
+    public static void setPermitsPerSecond(double value) {
+        synchronized (GlobalSendLimiter.class) {
+            permitsPerSecond = Double.isFinite(value) && value > 0 ? value : 20.0;
+            tokens = Math.min(tokens, budget());
+        }
     }
 
-    public static synchronized int acquire(int wanted) {
-        if (wanted <= 0) return 0;
+    public static double permitsPerSecond() {
+        return permitsPerSecond;
+    }
+
+    public static synchronized boolean tryAcquireOne() {
+        return tryAcquire(1);
+    }
+
+    public static synchronized boolean tryAcquire(int permits) {
+        if (permits <= 0) return true;
         refill();
-        int granted = Math.min(wanted, tokens);
-        tokens -= granted;
-        return granted;
+        if (tokens < permits) return false;
+        tokens -= permits;
+        return true;
     }
 
-    public static boolean tryAcquireOne() {
-        return acquire(1) >= 1;
+    private static double budget() {
+        return Math.max(permitsPerSecond, MAX_RESERVATION);
     }
 
     private static void refill() {
         long now = System.nanoTime();
         if (windowStart == 0) {
             windowStart = now;
-            tokens = perTick;
+            tokens = budget();
             return;
         }
-        long elapsed = now - windowStart;
-        if (elapsed < TICK_NANOS) return;
-        int ticks = (int) Math.min(MAX_BURST_TICKS, elapsed / TICK_NANOS);
-        tokens = Math.min(perTick * MAX_BURST_TICKS, tokens + perTick * ticks);
+
+        double elapsed = (now - windowStart) / NANOS_PER_SECOND;
+        if (elapsed <= 0) return;
         windowStart = now;
+        tokens = Math.min(budget(), tokens + elapsed * permitsPerSecond);
     }
 }

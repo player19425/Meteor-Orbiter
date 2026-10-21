@@ -4,6 +4,7 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -18,6 +19,7 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.ClipContext;
+import orbiter.compat.EntityCompat;
 import orbiter.Orbiter;
 import orbiter.systems.combat.CombatEngine;
 import orbiter.systems.combat.CombatRequest;
@@ -45,7 +47,7 @@ public class SpearAssist extends Module {
 
     private final Setting<AttackMode> attackMode = sgGeneral.add(new EnumSetting.Builder<AttackMode>()
         .name("attack-mode")
-        .description("JabOnly = only jab attacks. ChargeOnly = only charge attacks. JabCharge = alternate. Auto = pick best.")
+        .description("Auto switches to a charge attack once you move fast enough, jab otherwise.")
         .defaultValue(AttackMode.Auto)
         .build()
     );
@@ -59,7 +61,7 @@ public class SpearAssist extends Module {
 
     private final Setting<Boolean> onlyWhenHoldingSpear = sgGeneral.add(new BoolSetting.Builder()
         .name("only-when-holding-spear")
-        .description("Only activate when holding a melee weapon (sword, axe, mace, trident, tool).")
+        .description("Only activate when holding a sword, axe, mace, trident or spear.")
         .defaultValue(true)
         .build()
     );
@@ -105,7 +107,7 @@ public class SpearAssist extends Module {
 
     private final Setting<Boolean> ignoreWalls = sgTarget.add(new BoolSetting.Builder()
         .name("ignore-walls")
-        .description("Spear attacks can go through non-solid blocks like cobwebs and tall grass.")
+        .description("Spear jabs reach through cobwebs and tall grass, so those are not walls.")
         .defaultValue(true)
         .build()
     );
@@ -118,7 +120,7 @@ public class SpearAssist extends Module {
 
     private final Setting<Double> minAttackRange = sgTarget.add(new DoubleSetting.Builder()
         .name("min-attack-range")
-        .description("Minimum distance • spears can't hit targets closer than 2 blocks.")
+        .description("Closest a target can be. Spears can't hit anything nearer than 2 blocks.")
         .defaultValue(2.0)
         .min(0.5)
         .sliderRange(0.5, 4.0)
@@ -229,7 +231,7 @@ public class SpearAssist extends Module {
 
     private final Setting<Boolean> critOnly = sgJab.add(new BoolSetting.Builder()
         .name("crit-only")
-        .description("Only jab when a critical hit is possible (falling + not on ground). Note: spears can't crit.")
+        .description("Only jab while falling. Spears can't crit at all.")
         .defaultValue(false)
         .build()
     );
@@ -243,7 +245,7 @@ public class SpearAssist extends Module {
 
     private final Setting<Double> minChargeSpeed = sgCharge.add(new DoubleSetting.Builder()
         .name("min-charge-speed")
-        .description("Minimum relative speed (blocks/sec) required for charge attack damage. Vanilla: 5.1")
+        .description("Minimum relative speed (blocks/sec) for charge attack damage. Vanilla: 5.1")
         .defaultValue(5.1)
         .min(1.0)
         .sliderRange(1.0, 15.0)
@@ -282,18 +284,21 @@ public class SpearAssist extends Module {
             toggle();
             return;
         }
-        currentTarget = null;
-        jabCooldown = 0;
-        isCharging = false;
-        lastJabWasJab = false;
+        resetState();
     }
 
     @Override
     public void onDeactivate() {
-        currentTarget = null;
-        isCharging = false;
-        mc.options.keyUse.setDown(false);
+        stopCharging();
+        resetState();
         ComboTracker.clearAll();
+    }
+
+    private void resetState() {
+        currentTarget = null;
+        jabCooldown = 0;
+        isCharging = false;
+        lastJabWasJab = false;
     }
 
     @EventHandler
@@ -390,6 +395,7 @@ public class SpearAssist extends Module {
             if (!isActive() || CombatEngine.get().isFrozen()) return;
             if (!autoAttack.get()) return;
             if (target == null || !target.isAlive() || !isValidTarget(target)) return;
+            if (mc.player == null) return;
 
             double distNow = mc.player.getEyePosition().distanceTo(target.getBoundingBox().getCenter());
             if (distNow < minAttackRange.get() || distNow > range.get()) return;
@@ -417,7 +423,7 @@ public class SpearAssist extends Module {
 
         if (mc.gameMode != null) {
             mc.gameMode.attack(mc.player, target);
-            mc.player.swing(InteractionHand.MAIN_HAND);
+            EntityCompat.swingWithAttackAnimation(mc.player, InteractionHand.MAIN_HAND);
             if (trackCombo.get()) ComboTracker.registerHit(target.getUUID());
             jabCooldown = jabCooldownTicks.get();
             return true;
@@ -473,6 +479,13 @@ public class SpearAssist extends Module {
             || item instanceof TridentItem
             || item == Items.MACE
             || item == Items.TRIDENT
+            || item == Items.WOODEN_SPEAR
+            || item == Items.STONE_SPEAR
+            || item == Items.COPPER_SPEAR
+            || item == Items.IRON_SPEAR
+            || item == Items.GOLDEN_SPEAR
+            || item == Items.DIAMOND_SPEAR
+            || item == Items.NETHERITE_SPEAR
             || item == Items.NETHERITE_SWORD
             || item == Items.DIAMOND_SWORD
             || item == Items.IRON_SWORD
@@ -569,5 +582,11 @@ public class SpearAssist extends Module {
         }
 
         return sb.toString();
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        resetState();
+        ComboTracker.clearAll();
     }
 }

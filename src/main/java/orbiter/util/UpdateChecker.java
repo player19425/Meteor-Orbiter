@@ -13,6 +13,8 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.Style;
 import meteordevelopment.orbit.EventHandler;
+import orbiter.compat.ClientCompat;
+import orbiter.compat.EntityCompat;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -76,7 +78,7 @@ public final class UpdateChecker {
                     install(release[0], release[2]);
                 } else {
                     Minecraft.getInstance().execute(() ->
-                        Minecraft.getInstance().gui.setScreen(new orbiter.gui.UpdateAvailableScreen(
+                        ClientCompat.setScreen(new orbiter.gui.UpdateAvailableScreen(
                             GuiThemes.get(), release[0], release[1], release[2])));
                 }
             });
@@ -137,7 +139,7 @@ public final class UpdateChecker {
     public static void sendChangelogLink(String pageUrl) {
         Minecraft.getInstance().execute(() -> {
             try {
-                net.minecraft.util.Util.getPlatform().openUri(URI.create(pageUrl));
+                EntityCompat.openUri(URI.create(pageUrl));
             } catch (Throwable browserFailure) {
                 sendClickableLink(pageUrl);
             }

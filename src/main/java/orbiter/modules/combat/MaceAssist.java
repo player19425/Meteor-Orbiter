@@ -8,6 +8,7 @@ import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.systems.modules.movement.NoFall;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -19,6 +20,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
+import orbiter.compat.EntityCompat;
 import orbiter.systems.combat.CombatEngine;
 import orbiter.systems.combat.CombatRequest;
 
@@ -138,7 +140,7 @@ public class MaceAssist extends Module {
 
     private final Setting<Boolean> smashOnly = sgGeneral.add(new BoolSetting.Builder()
         .name("smash-only")
-        .description("Only attack when a smash attack is possible (fallen >= 1.5 blocks, not grounded, not elytra flying).")
+        .description("Only strike while airborne, past min-fall-blocks, with no elytra out.")
         .defaultValue(false)
         .build()
     );
@@ -170,7 +172,7 @@ public class MaceAssist extends Module {
 
     private final Setting<Boolean> enableNoFall = sgGeneral.add(new BoolSetting.Builder()
         .name("enable-no-fall")
-        .description("Automatically enable Meteor's NoFall while this module is active to prevent smash-attack fall damage.")
+        .description("Turns on Meteor NoFall so smash attacks take no fall damage.")
         .defaultValue(true)
         .build()
     );
@@ -229,7 +231,6 @@ public class MaceAssist extends Module {
 
     private LivingEntity target;
     private boolean wasAutoSwapped = false;
-    private int chestplateSlot = -1;
     private boolean weToggledNoFall = false;
 
     public MaceAssist() {
@@ -240,7 +241,6 @@ public class MaceAssist extends Module {
     public void onActivate() {
         target = null;
         wasAutoSwapped = false;
-        chestplateSlot = -1;
         weToggledNoFall = false;
         if (enableNoFall.get()) toggleNoFall(true);
     }
@@ -249,7 +249,7 @@ public class MaceAssist extends Module {
     public void onDeactivate() {
         restoreElytra();
         target = null;
-        if (enableNoFall.get()) toggleNoFall(false);
+        toggleNoFall(false);
     }
 
     private void toggleNoFall(boolean on) {
@@ -293,7 +293,7 @@ public class MaceAssist extends Module {
             return;
         }
 
-        boolean canCrit = canCriticalHit(target);
+        boolean canCrit = canCriticalHit();
 
         handleElytraSwap(target, canCrit);
 
@@ -310,12 +310,12 @@ public class MaceAssist extends Module {
 
         if (smashOnly.get() && !canSmashAttack()) return;
 
-        if (onlyCrits.get() && !canCriticalHit(attackTarget)) return;
+        if (onlyCrits.get() && !canCriticalHit()) return;
         if (!ignoreCooldown.get() && mc.player.getAttackStrengthScale(0.5f) < 1) return;
         if (mc.player.getEyePosition().distanceToSqr(attackTarget.getBoundingBox().getCenter()) > range.get() * range.get()) return;
 
         mc.gameMode.attack(mc.player, attackTarget);
-        mc.player.swing(InteractionHand.MAIN_HAND);
+        EntityCompat.swingWithAttackAnimation(mc.player, InteractionHand.MAIN_HAND);
     }
 
     private CombatRequest.Profile buildProfile() {
@@ -402,14 +402,12 @@ public class MaceAssist extends Module {
         return Math.acos(Mth.clamp(dot, -1.0, 1.0));
     }
 
-    private boolean canCriticalHit(LivingEntity target) {
-        if (!mc.player.onGround() && !mc.player.isFallFlying() && mc.player.getDeltaMovement().y < -0.1) {
-            return true;
-        }
-        if (!mc.player.onGround() && !mc.player.isSprinting() && !mc.player.onClimbable() && mc.player.getDeltaMovement().y < -0.08) {
-            return true;
-        }
-        return false;
+    private boolean canCriticalHit() {
+        if (mc.player == null) return false;
+        if (mc.player.onGround() || mc.player.onClimbable()) return false;
+        if (mc.player.isInWater() || mc.player.isMobilityRestricted() || mc.player.isPassenger()) return false;
+        if (mc.player.isSprinting()) return false;
+        return mc.player.getDeltaMovement().y < -0.08;
     }
 
     private boolean canSmashAttack() {
@@ -441,7 +439,6 @@ public class MaceAssist extends Module {
                 if (cpSlot != -1) {
                     InvUtils.move().from(cpSlot).toArmor(2);
                     wasAutoSwapped = true;
-                    chestplateSlot = cpSlot;
                 }
             }
         } else if (wasAutoSwapped) {
@@ -462,7 +459,7 @@ public class MaceAssist extends Module {
     }
 
     private void restoreElytra() {
-        if (!wasAutoSwapped) return;
+        if (!wasAutoSwapped || mc.player == null) return;
 
         int elytra = findElytraSlot();
         if (elytra != -1) {
@@ -470,7 +467,6 @@ public class MaceAssist extends Module {
         }
 
         wasAutoSwapped = false;
-        chestplateSlot = -1;
     }
 
     private int findChestplateSlot() {
@@ -496,5 +492,11 @@ public class MaceAssist extends Module {
         if (!stack.has(DataComponents.EQUIPPABLE)) return false;
         var equippable = stack.get(DataComponents.EQUIPPABLE);
         return equippable != null && equippable.slot() == EquipmentSlot.CHEST;
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        target = null;
+        weToggledNoFall = false;
     }
 }

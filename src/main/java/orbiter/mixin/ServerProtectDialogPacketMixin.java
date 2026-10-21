@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ClientCommonPacketListenerImpl.class)
 public abstract class ServerProtectDialogPacketMixin {
     @Inject(
+        require = 0,
         method = "handleShowDialog(Lnet/minecraft/network/protocol/common/ClientboundShowDialogPacket;)V",
         at = @At("HEAD"),
         cancellable = true

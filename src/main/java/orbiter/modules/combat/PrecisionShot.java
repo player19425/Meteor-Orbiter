@@ -1,6 +1,7 @@
 package orbiter.modules.combat;
 
 import orbiter.Orbiter;
+import orbiter.compat.PacketCompat;
 import meteordevelopment.meteorclient.events.entity.EntityAddedEvent;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
@@ -10,7 +11,10 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.utils.render.color.SettingColor;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.component.ChargedProjectiles;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
@@ -87,14 +91,7 @@ public class PrecisionShot extends Module {
 
     @Override
     public void onActivate() {
-        points.clear();
-        blockHitPos = null;
-        entityHitBox = null;
-        lastHitPos = null;
-        isSending = false;
-        pendingSilentShot = null;
-        aimRecalcTickCounter = 0;
-        cachedPreviewAim = null;
+        resetState();
     }
 
     @EventHandler
@@ -103,7 +100,7 @@ public class PrecisionShot extends Module {
         ItemStack stack = mc.player.getMainHandItem();
         ProjectileProfile profile = getProfile(stack.getItem(), stack);
         if (profile == null && autoOnlySupportedItems.get()) return;
-        if (profile == null) profile = new ProjectileProfile(1.5, 0.99, 0.03);
+        if (profile == null) profile = new ProjectileProfile(1.5, 0.99, 0.03, 0.0f, true);
 
         AimSolution preview = cachedPreviewAim;
         if (preview == null) {
@@ -160,13 +157,18 @@ public class PrecisionShot extends Module {
 
         if (!matchesPendingShot(projectile, pendingSilentShot)) return;
 
-        projectile.shootFromRotation(mc.player, pendingSilentShot.pitch(), pendingSilentShot.yaw(), 0.0f, (float) pendingSilentShot.profile().speed(), 0.0f);
-        projectile.setYRot(pendingSilentShot.yaw());
-        projectile.setXRot(pendingSilentShot.pitch());
+        ProjectileProfile profile = pendingSilentShot.profile();
+        float yaw = pendingSilentShot.yaw() + profile.yawOffset();
+        float pitch = pendingSilentShot.pitch();
 
-        if (projectile instanceof AbstractArrow persistent) {
-            persistent.setDeltaMovement(projectile.getDeltaMovement());
+        if (profile.shooterMomentum()) {
+            projectile.shootFromRotation(mc.player, pitch, yaw, 0.0f, (float) profile.speed(), 0.0f);
+        } else {
+            Vec3 direction = Vec3.directionFromRotation(pitch, yaw);
+            projectile.shoot(direction.x, direction.y, direction.z, (float) profile.speed(), 0.0f);
         }
+        projectile.setYRot(yaw);
+        projectile.setXRot(pitch);
         pendingSilentShot = null;
     }
 
@@ -185,7 +187,7 @@ public class PrecisionShot extends Module {
 
         if (!(event.packet instanceof ServerboundUseItemPacket interactPacket)) return;
 
-        ItemStack stack = interactPacket.getHand() == InteractionHand.MAIN_HAND
+        ItemStack stack = PacketCompat.useItemHand(interactPacket) == InteractionHand.MAIN_HAND
             ? mc.player.getMainHandItem()
             : mc.player.getOffhandItem();
         if (isThrowable(stack.getItem())) performSilentAim(stack);
@@ -198,7 +200,7 @@ public class PrecisionShot extends Module {
         if (solution == null) return;
 
         pendingSilentShot = new PendingSilentShot(solution.yaw(), solution.pitch(), stack.getItem(), profile, mc.level.getGameTime());
-        sendLook(solution.yaw(), solution.pitch());
+        sendLook(solution.yaw() - profile.yawOffset(), solution.pitch());
     }
 
     private AimSolution getPreviewAim(ItemStack stack, ProjectileProfile profile) {
@@ -253,7 +255,7 @@ public class PrecisionShot extends Module {
         if (mc.player == null || mc.level == null) return;
 
         Vec3 pos = mc.player.getEyePosition();
-        Vec3 vel = Vec3.directionFromRotation(pitch, yaw).scale(profile.speed);
+        Vec3 vel = initialVelocity(profile, yaw, pitch);
         points.add(pos);
 
         for (int i = 0; i < maxSteps.get(); i++) {
@@ -322,7 +324,7 @@ public class PrecisionShot extends Module {
 
     private double simulateErrorSq(Vec3 origin, float yaw, float pitch, Vec3 target, ProjectileProfile profile) {
         Vec3 pos = origin;
-        Vec3 vel = Vec3.directionFromRotation(pitch, yaw).scale(profile.speed);
+        Vec3 vel = initialVelocity(profile, yaw, pitch);
         double best = pos.distanceToSqr(target);
 
         int steps = Math.min(maxSteps.get(), 120);
@@ -362,13 +364,29 @@ public class PrecisionShot extends Module {
                 int use = stack.getUseDuration(mc.player) - mc.player.getUseItemRemainingTicks();
                 pull = BowItem.getPowerForTime(use);
             }
-            return new ProjectileProfile(Math.max(0.1, pull * 3.0), 0.99, 0.05);
+            return new ProjectileProfile(Math.max(0.1, pull * 3.0), 0.99, 0.05, 1.0f, true);
         }
-        if (item == Items.CROSSBOW) return new ProjectileProfile(3.15, 0.99, 0.05);
-        if (item == Items.ENDER_PEARL) return new ProjectileProfile(1.5, 0.99, 0.03);
-        if (item == Items.SNOWBALL || item == Items.EGG) return new ProjectileProfile(1.5, 0.99, 0.03);
-        if (item == Items.SPLASH_POTION || item == Items.LINGERING_POTION) return new ProjectileProfile(0.5, 0.95, 0.05);
+        if (item == Items.CROSSBOW) {
+            double speed = isFireworkLoaded(stack) ? 1.6 : 3.15;
+            return new ProjectileProfile(speed, 0.99, 0.05, 0.0f, false);
+        }
+        if (item == Items.ENDER_PEARL) return new ProjectileProfile(1.5, 0.99, 0.03, 0.0f, true);
+        if (item == Items.SNOWBALL || item == Items.EGG) return new ProjectileProfile(1.5, 0.99, 0.03, 0.0f, true);
+        if (item == Items.SPLASH_POTION || item == Items.LINGERING_POTION) return new ProjectileProfile(0.5, 0.99, 0.05, 0.0f, true);
         return null;
+    }
+
+    private boolean isFireworkLoaded(ItemStack stack) {
+        ChargedProjectiles charged = stack.get(DataComponents.CHARGED_PROJECTILES);
+        return charged != null && !charged.isEmpty() && charged.contains(Items.FIREWORK_ROCKET);
+    }
+
+    private Vec3 initialVelocity(ProjectileProfile profile, float yaw, float pitch) {
+        Vec3 velocity = Vec3.directionFromRotation(pitch, yaw).scale(profile.speed);
+        if (!profile.shooterMomentum()) return velocity;
+
+        Vec3 known = mc.player.getKnownMovement();
+        return velocity.add(known.x, mc.player.onGround() ? 0.0 : known.y, known.z);
     }
 
     private boolean matchesPendingShot(Projectile projectile, PendingSilentShot shot) {
@@ -387,5 +405,22 @@ public class PrecisionShot extends Module {
 
     private record AimSolution(float yaw, float pitch, Vec3 target) {}
     private record PendingSilentShot(float yaw, float pitch, Item item, ProjectileProfile profile, long worldTime) {}
-    private record ProjectileProfile(double speed, double drag, double gravity) {}
+
+    private record ProjectileProfile(double speed, double drag, double gravity, float yawOffset, boolean shooterMomentum) {}
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        resetState();
+    }
+
+    private void resetState() {
+        points.clear();
+        blockHitPos = null;
+        entityHitBox = null;
+        lastHitPos = null;
+        isSending = false;
+        pendingSilentShot = null;
+        aimRecalcTickCounter = 0;
+        cachedPreviewAim = null;
+    }
 }

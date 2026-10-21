@@ -1,13 +1,16 @@
 package orbiter.modules.player;
 
 import orbiter.Orbiter;
+import orbiter.compat.ClientCompat;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.gui.screens.inventory.CraftingScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -149,13 +152,6 @@ public class AutoCraftPlus extends Module {
         .min(0).sliderRange(0, 20)
         .build());
 
-    private final Setting<Integer> placeDelay = sgSpeed.add(new IntSetting.Builder()
-        .name("place-delay")
-        .description("Ticks between placing each ingredient in the grid.")
-        .defaultValue(0)
-        .min(0).sliderRange(0, 10)
-        .build());
-
     private final Setting<Integer> takeDelay = sgSpeed.add(new IntSetting.Builder()
         .name("take-delay")
         .description("Ticks to wait before taking the result.")
@@ -165,7 +161,7 @@ public class AutoCraftPlus extends Module {
 
     private final Setting<Integer> craftsPerTick = sgSpeed.add(new IntSetting.Builder()
         .name("crafts-per-tick")
-        .description("How many complete craft cycles to attempt per tick. Higher = faster but riskier.")
+        .description("Complete craft cycles per tick, higher is faster but riskier.")
         .defaultValue(1)
         .min(1).sliderRange(1, 10)
         .build());
@@ -173,8 +169,7 @@ public class AutoCraftPlus extends Module {
     private enum CraftState {
         OPEN_SCREEN,
         PLACE_INGREDIENTS,
-        TAKE_RESULT,
-        WAIT
+        TAKE_RESULT
     }
 
     private CraftState craftState = CraftState.OPEN_SCREEN;
@@ -193,6 +188,8 @@ public class AutoCraftPlus extends Module {
         craftState = CraftState.OPEN_SCREEN;
         tickWaiter = 0;
         totalCrafted = 0;
+        lastGridSignature = "";
+        sameGridStreak = 0;
         info("AutoCraft+ started.");
     }
 
@@ -231,16 +228,15 @@ public class AutoCraftPlus extends Module {
         switch (craftState) {
             case OPEN_SCREEN -> {
                 if (useInventoryCrafting.get()) {
-                    if (!(mc.gui.screen() instanceof InventoryScreen)) {
+                    if (!(ClientCompat.screen() instanceof InventoryScreen)) {
                         if (openInventoryAutomatically.get()) {
-                            mc.gui.setScreen(new InventoryScreen(mc.player));
+                            ClientCompat.setScreen(new InventoryScreen(mc.player));
                         } else {
                             return false;
                         }
                     }
                 } else {
-
-                    if (!(mc.gui.screen() instanceof CraftingScreen)) {
+                    if (!(ClientCompat.screen() instanceof CraftingScreen)) {
                         info("Please open a crafting table.");
                         return false;
                     }
@@ -250,16 +246,16 @@ public class AutoCraftPlus extends Module {
             }
 
             case PLACE_INGREDIENTS -> {
-                if (!(mc.gui.screen() instanceof AbstractContainerScreen<?>)) {
+                AbstractContainerScreen<?> screen = craftingScreen();
+                if (screen == null) {
                     craftState = CraftState.OPEN_SCREEN;
                     return false;
                 }
 
-                AbstractContainerScreen<?> screen = (AbstractContainerScreen<?>) mc.gui.screen();
                 int syncId = screen.getMenu().containerId;
 
                 Item[] recipe = getRecipe();
-                int gridStart = getCraftingGridStart(screen);
+                int gridStart = getCraftingGridStart();
                 int gridSize = useInventoryCrafting.get() ? 4 : 9;
 
                 if (!hasMaterials(recipe, gridSize)) {
@@ -276,11 +272,12 @@ public class AutoCraftPlus extends Module {
                     if (needed == Items.AIR || needed == null) continue;
 
                     int craftSlot = gridStart + i;
+                    if (craftSlot >= screen.getMenu().slots.size()) continue;
                     Slot slot = screen.getMenu().slots.get(craftSlot);
 
                     if (!slot.getItem().isEmpty() && slot.getItem().getItem() == needed) continue;
 
-                    int srcSlot = findItemInInventory(screen, needed, gridStart, gridSize);
+                    int srcSlot = findItemInInventory(screen, needed);
                     if (srcSlot < 0) {
                         if (stopWhenOutOfMaterials.get()) {
                             info("Missing ingredient: " + needed.toString() + ". Stopping.");
@@ -322,14 +319,19 @@ public class AutoCraftPlus extends Module {
             }
 
             case TAKE_RESULT -> {
-                if (!(mc.gui.screen() instanceof AbstractContainerScreen<?>)) {
+                AbstractContainerScreen<?> screen = craftingScreen();
+                if (screen == null) {
                     craftState = CraftState.OPEN_SCREEN;
                     return false;
                 }
 
-                AbstractContainerScreen<?> screen = (AbstractContainerScreen<?>) mc.gui.screen();
                 int syncId = screen.getMenu().containerId;
-                int resultSlot = getResultSlot(screen);
+                int resultSlot = getResultSlot();
+
+                if (resultSlot >= screen.getMenu().slots.size()) {
+                    craftState = CraftState.PLACE_INGREDIENTS;
+                    return false;
+                }
 
                 Slot result = screen.getMenu().slots.get(resultSlot);
                 if (!result.getItem().isEmpty()) {
@@ -340,8 +342,7 @@ public class AutoCraftPlus extends Module {
 
                 if (!mc.player.containerMenu.getCarried().isEmpty()) {
 
-                    for (int i = getCraftingGridStart(screen) + (useInventoryCrafting.get() ? 4 : 9);
-                         i < screen.getMenu().slots.size(); i++) {
+                    for (int i = getPlayerInventoryStart(); i < screen.getMenu().slots.size(); i++) {
                         Slot s = screen.getMenu().slots.get(i);
                         if (s.getItem().isEmpty()) {
                             mc.gameMode.handleContainerInput(syncId, i, 0, ContainerInput.PICKUP, mc.player);
@@ -375,14 +376,24 @@ public class AutoCraftPlus extends Module {
         };
     }
 
-    private int getCraftingGridStart(AbstractContainerScreen<?> screen) {
-        if (screen instanceof CraftingScreen) return 1;
-        if (screen instanceof InventoryScreen) return 1;
-        return 1;
+    private AbstractContainerScreen<?> craftingScreen() {
+        var screen = ClientCompat.screen();
+        if (useInventoryCrafting.get()) {
+            return screen instanceof InventoryScreen inventory ? inventory : null;
+        }
+        return screen instanceof CraftingScreen crafting ? crafting : null;
     }
 
-    private int getResultSlot(AbstractContainerScreen<?> screen) {
-        return 0;
+    private int getCraftingGridStart() {
+        return CraftingMenu.RESULT_SLOT + 1;
+    }
+
+    private int getResultSlot() {
+        return CraftingMenu.RESULT_SLOT;
+    }
+
+    private int getPlayerInventoryStart() {
+        return useInventoryCrafting.get() ? 9 : CraftingMenu.RESULT_SLOT + 10;
     }
 
     private boolean hasMaterials(Item[] recipe, int gridSize) {
@@ -409,9 +420,8 @@ public class AutoCraftPlus extends Module {
         return true;
     }
 
-    private int findItemInInventory(AbstractContainerScreen<?> screen, Item item, int gridStart, int gridSize) {
-
-        int invStart = gridStart + gridSize;
+    private int findItemInInventory(AbstractContainerScreen<?> screen, Item item) {
+        int invStart = getPlayerInventoryStart();
         for (int i = invStart; i < screen.getMenu().slots.size(); i++) {
             Slot slot = screen.getMenu().slots.get(i);
             if (!slot.getItem().isEmpty() && slot.getItem().getItem() == item) {
@@ -428,5 +438,14 @@ public class AutoCraftPlus extends Module {
             if (mc.player.getInventory().getItem(i).isEmpty()) empty++;
         }
         return empty;
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        craftState = CraftState.OPEN_SCREEN;
+        tickWaiter = 0;
+        totalCrafted = 0;
+        lastGridSignature = "";
+        sameGridStreak = 0;
     }
 }

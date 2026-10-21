@@ -9,7 +9,6 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DynamicOps;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.Advancement;
-import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.advancements.CriterionProgress;
 import net.minecraft.world.level.block.state.BlockState;
@@ -19,6 +18,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.client.multiplayer.ClientAdvancements;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.EntityEquipment;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
@@ -47,6 +47,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.Vec2;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.chunk.LevelChunkSection;
@@ -57,6 +59,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -74,8 +77,12 @@ import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import orbiter.compat.PacketCompat;
 
 public class SwdSaveManager implements AutoCloseable {
 
@@ -89,15 +96,23 @@ public class SwdSaveManager implements AutoCloseable {
     private final DynamicOps<Tag> ops;
     private final SwdRegionStorage regionStorage;
     private final Path regionDir;
+    private final SwdRegionStorage entityStorage;
+    private final Path entitiesDir;
+    public boolean saveFullEntityData = true;
     private final Map<BlockPos, List<ItemStack>> blockInventoryCache = new HashMap<>();
     private final Map<UUID, List<ItemStack>> entityInventoryCache = new HashMap<>();
     private final Map<UUID, CompoundTag> entityOverrideCache = new HashMap<>();
-    private final Map<UUID, List<ItemStack>> enderChestCache = new HashMap<>();
 
     private ExecutorService diskWorker;
     private final AtomicInteger inFlightWrites = new AtomicInteger(0);
+    private volatile FinishHandler finishHandler;
 
     private final ConcurrentLinkedQueue<String> writeErrors = new ConcurrentLinkedQueue<>();
+
+    private final AtomicInteger chunksWritten = new AtomicInteger(0);
+    private final AtomicInteger entitiesWritten = new AtomicInteger(0);
+    private final AtomicInteger entityChunksWritten = new AtomicInteger(0);
+    private final AtomicLong bytesWritten = new AtomicLong(0L);
 
     private final Object metaLock = new Object();
 
@@ -114,7 +129,7 @@ public class SwdSaveManager implements AutoCloseable {
     private boolean statsDirty;
     private boolean advancementsDirty;
     private long lastMetaFlushTimeMs;
-    private UUID cachePlayerUuid;
+    private volatile UUID cachePlayerUuid;
 
     public SwdSaveManager(net.minecraft.client.Minecraft mc, Path path) {
         this.mc = mc;
@@ -123,7 +138,11 @@ public class SwdSaveManager implements AutoCloseable {
             ? RegistryOps.create(NbtOps.INSTANCE, mc.level.registryAccess())
             : NbtOps.INSTANCE;
         this.regionDir = path.resolve("region");
-        this.regionStorage = new SwdRegionStorage(regionDir, mc.level != null ? mc.level.dimension() : net.minecraft.world.level.Level.OVERWORLD);
+        this.entitiesDir = path.resolve("entities");
+        net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dim =
+            mc.level != null ? mc.level.dimension() : net.minecraft.world.level.Level.OVERWORLD;
+        this.regionStorage = new SwdRegionStorage(regionDir, dim);
+        this.entityStorage = new SwdRegionStorage(entitiesDir, dim);
     }
 
     public void start(String name) {
@@ -145,9 +164,16 @@ public class SwdSaveManager implements AutoCloseable {
         try {
             Files.createDirectories(path);
             Files.createDirectories(regionDir);
+            Files.createDirectories(entitiesDir);
             createLevelDat(name);
             bootstrapAdvancementsFromClientCache();
         } catch (IOException e) {
+            isSaving = false;
+            if (diskWorker != null) {
+                diskWorker.shutdownNow();
+                diskWorker = null;
+            }
+            releaseSessionLock();
             throw new RuntimeException(e);
         }
     }
@@ -155,40 +181,92 @@ public class SwdSaveManager implements AutoCloseable {
     public void stop() {
         try {
             flushPlayerMetaFiles(true);
-        } finally {
-            isSaving = false;
-            if (diskWorker != null) {
-                diskWorker.shutdown();
-                try {
+        } catch (Exception e) {
+            writeErrors.offer("Failed to flush the session metadata: " + e.getMessage());
+        }
 
-                    if (!diskWorker.awaitTermination(10, TimeUnit.SECONDS)) {
-                        diskWorker.shutdownNow();
-                        diskWorker.awaitTermination(2, TimeUnit.SECONDS);
+        isSaving = false;
+
+        ExecutorService worker = diskWorker;
+        diskWorker = null;
+        if (worker != null) worker.shutdown();
+
+        Thread closer = new Thread(() -> {
+            int discarded = 0;
+            if (worker != null) {
+                try {
+                    if (!worker.awaitTermination(60, TimeUnit.SECONDS)) {
+                        worker.shutdownNow();
                     }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    diskWorker.shutdownNow();
+                    worker.shutdownNow();
                 }
-                diskWorker = null;
             }
-            inFlightWrites.set(0);
-            try {
-                regionStorage.close();
-            } catch (IOException ignored) {}
-            blockInventoryCache.clear();
-            entityInventoryCache.clear();
-            entityOverrideCache.clear();
-            enderChestCache.clear();
-            drainWriteErrors();
-        }
+
+            discarded = inFlightWrites.getAndSet(0);
+            closeStorages();
+
+            List<String> errors = drainWriteErrors();
+            FinishHandler handler = finishHandler;
+            if (handler != null) handler.onFinished(discarded, errors);
+        }, "Orbiter-WDL-Closer");
+        closer.setDaemon(true);
+        closer.start();
     }
 
-    public void drainWriteErrors() {
-        if (writeErrors.isEmpty()) return;
+    private void closeStorages() {
+        try {
+            regionStorage.close();
+        } catch (IOException ignored) {}
+        try {
+            entityStorage.close();
+        } catch (IOException ignored) {}
+        releaseSessionLock();
+        blockInventoryCache.clear();
+        entityInventoryCache.clear();
+        entityOverrideCache.clear();
+    }
+
+    public void setFinishHandler(FinishHandler handler) {
+        this.finishHandler = handler;
+    }
+
+    public interface FinishHandler {
+        void onFinished(int discardedWrites, List<String> errors);
+    }
+
+    private void releaseSessionLock() {
+        try {
+            Files.deleteIfExists(path.resolve("session.lock"));
+        } catch (IOException ignored) {}
+    }
+
+    public List<String> drainWriteErrors() {
+        if (writeErrors.isEmpty()) return List.of();
+        List<String> errors = new ArrayList<>();
         String error;
         while ((error = writeErrors.poll()) != null) {
             System.err.println("[SwdSaveManager] " + error);
+            errors.add(error);
         }
+        return errors;
+    }
+
+    public int chunksWritten() {
+        return chunksWritten.get();
+    }
+
+    public int entitiesWritten() {
+        return entitiesWritten.get();
+    }
+
+    public int entityChunksWritten() {
+        return entityChunksWritten.get();
+    }
+
+    public long bytesWritten() {
+        return bytesWritten.get();
     }
 
     private void createLevelDat(String name) throws IOException {
@@ -265,11 +343,37 @@ public class SwdSaveManager implements AutoCloseable {
 
         CompoundTag root = new CompoundTag();
         root.put("Data", data);
-        NbtIo.writeCompressed(root, path.resolve("level.dat"));
+        writeCompressedTag(root, path.resolve("level.dat"));
 
         long now = System.currentTimeMillis();
         java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocate(8).putLong(now);
         Files.write(path.resolve("session.lock"), buf.array());
+    }
+
+    private void writeCompressedTag(CompoundTag tag, Path target) throws IOException {
+        Path temp = target.resolveSibling(target.getFileName() + ".tmp");
+        NbtIo.writeCompressed(tag, temp);
+        moveIntoPlace(temp, target);
+    }
+
+    private CompoundTag readOrCreateTag(Path file) {
+        if (!Files.exists(file)) return new CompoundTag();
+        try {
+            CompoundTag tag = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
+            if (tag == null) return new CompoundTag();
+            return tag;
+        } catch (IOException | RuntimeException e) {
+            System.err.println("Unreadable save at " + file + ", rebuilding it: " + e.getMessage());
+            return new CompoundTag();
+        }
+    }
+
+    private static void moveIntoPlace(Path temp, Path target) throws IOException {
+        try {
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (IOException e) {
+            Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private CompoundTag createDimensionEntry(String type, String biome) {
@@ -302,7 +406,9 @@ public class SwdSaveManager implements AutoCloseable {
             final ChunkPos pos = chunk.getPos();
             submitDiskWrite(() -> {
                 try {
-                    regionStorage.write(pos, nbt);
+                    long bytes = regionStorage.write(pos, nbt);
+                    chunksWritten.incrementAndGet();
+                    bytesWritten.addAndGet(bytes);
                 } catch (Exception e) {
                     writeErrors.offer("Failed to save chunk " + pos + ": " + e.getMessage());
                 }
@@ -315,32 +421,50 @@ public class SwdSaveManager implements AutoCloseable {
     public void saveChunkAt(BlockPos pos) {
         if (mc.level == null) return;
         LevelChunk chunk = mc.level.getChunkSource().getChunk(pos.getX() >> 4, pos.getZ() >> 4, false);
-        if (chunk != null) saveChunk(chunk);
+        if (chunk != null) {
+            saveChunk(chunk);
+            saveEntitiesForChunk(chunk);
+        }
     }
 
-    public void saveEntitiesForChunk(LevelChunk chunk) {
-        if (!isSaving || chunk == null) return;
-        if (mc.level == null) return;
+    public int saveEntitiesForChunk(LevelChunk chunk) {
+        if (!isSaving || chunk == null) return 0;
+        if (mc.level == null) return 0;
         try {
+            return saveEntities(chunk.getPos(), collectChunkEntities(chunk));
+        } catch (Exception e) {
+            writeErrors.offer("Failed to read entities for chunk " + chunk.getPos() + ": " + e.getMessage());
+            return 0;
+        }
+    }
 
-            final ListTag entityList = buildEntityListSnapshot(chunk);
-            final ChunkPos pos = chunk.getPos();
+    public int saveEntities(ChunkPos pos, List<Entity> entities) {
+        if (!isSaving || entities == null || entities.isEmpty()) return 0;
+        if (mc.level == null) return 0;
+        try {
+            ListTag list = new ListTag();
+            for (Entity entity : entities) {
+                CompoundTag tag = encodeEntity(entity);
+                if (tag != null) list.add(tag);
+            }
+            if (list.isEmpty()) return 0;
             submitDiskWrite(() -> {
                 try {
-                    CompoundTag existing = regionStorage.read(pos);
-                    if (existing == null) {
-
-                        return;
-                    }
-                    existing.put("Entities", entityList);
-                    regionStorage.write(pos, existing);
+                    CompoundTag chunkTag = new CompoundTag();
+                    chunkTag.put("Entities", list);
+                    chunkTag.store("Position", ChunkPos.CODEC, pos);
+                    long bytes = entityStorage.write(pos, chunkTag);
+                    entitiesWritten.addAndGet(list.size());
+                    entityChunksWritten.incrementAndGet();
+                    bytesWritten.addAndGet(bytes);
                 } catch (Exception e) {
-                    writeErrors.offer("Failed to update entities for chunk " + pos + ": " + e.getMessage());
+                    writeErrors.offer("Failed to save entities for chunk " + pos + ": " + e.getMessage());
                 }
             });
+            return list.size();
         } catch (Exception e) {
-
-            saveChunk(chunk);
+            writeErrors.offer("Failed to encode entities for chunk " + pos + ": " + e.getMessage());
+            return 0;
         }
     }
 
@@ -351,13 +475,18 @@ public class SwdSaveManager implements AutoCloseable {
             return;
         }
         inFlightWrites.incrementAndGet();
-        diskWorker.execute(() -> {
-            try {
-                task.run();
-            } finally {
-                inFlightWrites.decrementAndGet();
-            }
-        });
+        try {
+            diskWorker.execute(() -> {
+                try {
+                    task.run();
+                } finally {
+                    inFlightWrites.decrementAndGet();
+                }
+            });
+        } catch (RejectedExecutionException rejected) {
+            inFlightWrites.decrementAndGet();
+            runWriteSynchronized(task);
+        }
     }
 
     private void runWriteSynchronized(Runnable task) {
@@ -366,19 +495,14 @@ public class SwdSaveManager implements AutoCloseable {
         }
     }
 
-    private ListTag buildEntityListSnapshot(LevelChunk chunk) {
-        ListTag list = new ListTag();
-        if (mc.level == null) return list;
+    private List<Entity> collectChunkEntities(LevelChunk chunk) {
+        if (mc.level == null) return List.of();
         ChunkPos pos = chunk.getPos();
         int minY = mc.level.getMinY();
         int maxY = minY + mc.level.getHeight();
         AABB box = new AABB(pos.getMinBlockX(), minY, pos.getMinBlockZ(),
             pos.getMaxBlockX() + 1, maxY, pos.getMaxBlockZ() + 1);
-        for (Entity entity : mc.level.getEntities(EntityTypeTest.forClass(Entity.class), box, e -> !(e instanceof Player))) {
-            CompoundTag tag = encodeEntity(entity);
-            if (tag != null) list.add(tag);
-        }
-        return list;
+        return mc.level.getEntities(EntityTypeTest.forClass(Entity.class), box, e -> !(e instanceof Player));
     }
 
     private CompoundTag buildChunkNbt(LevelChunk chunk) {
@@ -395,7 +519,6 @@ public class SwdSaveManager implements AutoCloseable {
 
         writeSections(chunk, nbt);
         writeBlockEntities(chunk, nbt);
-        writeEntities(chunk, nbt);
         return nbt;
     }
 
@@ -446,38 +569,20 @@ public class SwdSaveManager implements AutoCloseable {
         nbt.put("block_entities", list);
     }
 
-    private void writeEntities(LevelChunk chunk, CompoundTag nbt) {
-        ListTag list = new ListTag();
-        if (mc.level == null) {
-            nbt.put("Entities", list);
-            return;
-        }
-
-        ChunkPos pos = chunk.getPos();
-        int minY = mc.level.getMinY();
-        int maxY = minY + mc.level.getHeight();
-        AABB box = new AABB(pos.getMinBlockX(), minY, pos.getMinBlockZ(),
-            pos.getMaxBlockX() + 1, maxY, pos.getMaxBlockZ() + 1);
-
-        for (Entity entity : mc.level.getEntities(EntityTypeTest.forClass(Entity.class), box, e -> !(e instanceof Player))) {
-            CompoundTag tag = encodeEntity(entity);
-            if (tag != null) list.add(tag);
-        }
-        nbt.put("Entities", list);
-    }
-
     private CompoundTag encodeEntity(Entity entity) {
         if (mc.level == null) return null;
         CompoundTag tag = null;
         boolean fullSave = false;
-        try {
-            TagValueOutput view = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, mc.level.registryAccess());
-            if (entity.save(view)) {
-                tag = view.buildResult();
-                fullSave = true;
+        if (saveFullEntityData) {
+            try {
+                TagValueOutput view = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, mc.level.registryAccess());
+                if (entity.save(view)) {
+                    tag = view.buildResult();
+                    fullSave = true;
+                }
+            } catch (Exception e) {
+                System.err.println("Full entity save failed for " + entity.getType() + ", falling back: " + e.getMessage());
             }
-        } catch (Exception e) {
-            System.err.println("Full entity save failed for " + entity.getType() + ", falling back: " + e.getMessage());
         }
 
         if (tag == null) {
@@ -503,21 +608,25 @@ public class SwdSaveManager implements AutoCloseable {
     }
 
     private void encodeEntityExtra(CompoundTag tag, Entity entity) {
-        tag.putDouble("x", entity.getX());
-        tag.putDouble("y", entity.getY());
-        tag.putDouble("z", entity.getZ());
-        tag.putFloat("Yaw", entity.getYRot());
-        tag.putFloat("Pitch", entity.getXRot());
-        tag.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString());
+        if (!tag.contains("id")) {
+            Identifier typeId = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
+            if (typeId != null) tag.putString("id", typeId.toString());
+        }
+        if (!tag.contains("Pos")) {
+            tag.store("Pos", Vec3.CODEC, entity.position());
+            tag.store("Motion", Vec3.CODEC, Vec3.ZERO);
+        }
+        if (!tag.contains("Rotation")) {
+            tag.store("Rotation", Vec2.CODEC, new Vec2(entity.getYRot(), entity.getXRot()));
+        }
+        if (!tag.contains("UUID")) {
+            tag.store("UUID", UUIDUtil.CODEC, entity.getUUID());
+        }
 
-        UUID uuid = entity.getUUID();
-        tag.putLong("UUIDMost", uuid.getMostSignificantBits());
-        tag.putLong("UUIDLeast", uuid.getLeastSignificantBits());
-
-        if (entity.hasCustomName()) {
-            ComponentSerialization.CODEC.encodeStart(com.mojang.serialization.JsonOps.INSTANCE, entity.getCustomName())
+        if (entity.hasCustomName() && entity.getCustomName() != null) {
+            ComponentSerialization.CODEC.encodeStart(ops, entity.getCustomName())
                 .result()
-                .ifPresent(json -> tag.putString("CustomName", json.toString()));
+                .ifPresent(t -> tag.put("CustomName", t));
             tag.putBoolean("CustomNameVisible", true);
         }
         if (entity.isInvisible()) tag.putBoolean("Invisible", true);
@@ -527,25 +636,8 @@ public class SwdSaveManager implements AutoCloseable {
         tag.putBoolean("OnGround", entity.onGround());
 
         if (entity instanceof net.minecraft.world.entity.LivingEntity living) {
-            ListTag armorItems = new ListTag();
-            for (EquipmentSlot slot : new EquipmentSlot[]{
-                EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD
-            }) {
-                ItemStack stack = living.getItemBySlot(slot);
-                if (!stack.isEmpty()) {
-                    ItemStack.CODEC.encodeStart(ops, stack).result().ifPresent(armorItems::add);
-                } else {
-                    armorItems.add(new CompoundTag());
-                }
-            }
-            if (!armorItems.isEmpty()) tag.put("ArmorItems", armorItems);
-
-            ListTag handItems = new ListTag();
-            ItemStack mainHand = living.getItemBySlot(EquipmentSlot.MAINHAND);
-            ItemStack offHand = living.getItemBySlot(EquipmentSlot.OFFHAND);
-            ItemStack.CODEC.encodeStart(ops, mainHand.isEmpty() ? ItemStack.EMPTY : mainHand).result().ifPresent(handItems::add);
-            ItemStack.CODEC.encodeStart(ops, offHand.isEmpty() ? ItemStack.EMPTY : offHand).result().ifPresent(handItems::add);
-            if (!handItems.isEmpty()) tag.put("HandItems", handItems);
+            Tag gear = encodeEquipment(living);
+            if (gear != null) tag.put("equipment", gear);
         }
     }
 
@@ -569,21 +661,10 @@ public class SwdSaveManager implements AutoCloseable {
 
         CompoundTag tag = new CompoundTag();
         tag.putString("id", typeId.toString());
-        tag.putDouble("x", entity.getX());
-        tag.putDouble("y", entity.getY());
-        tag.putDouble("z", entity.getZ());
-        tag.putFloat("Yaw", entity.getYRot());
-        tag.putFloat("Pitch", entity.getXRot());
-
-        UUID uuid = entity.getUUID();
-        tag.putLong("UUIDMost", uuid.getMostSignificantBits());
-        tag.putLong("UUIDLeast", uuid.getLeastSignificantBits());
-
-        if (entity.getCustomName() != null) {
-            ComponentSerialization.CODEC.encodeStart(com.mojang.serialization.JsonOps.INSTANCE, entity.getCustomName())
-                .result()
-                .ifPresent(json -> tag.putString("CustomName", json.toString()));
-        }
+        tag.store("Pos", Vec3.CODEC, entity.position());
+        tag.store("Motion", Vec3.CODEC, Vec3.ZERO);
+        tag.store("Rotation", Vec2.CODEC, new Vec2(entity.getYRot(), entity.getXRot()));
+        tag.store("UUID", UUIDUtil.CODEC, entity.getUUID());
         return tag;
     }
 
@@ -611,15 +692,12 @@ public class SwdSaveManager implements AutoCloseable {
             Files.createDirectories(playersDir);
             Path file = playersDir.resolve(uuid + ".dat");
 
-            CompoundTag player;
-            if (Files.exists(file)) {
-                player = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
-            } else {
-                player = new CompoundTag();
-            }
+            CompoundTag player = readOrCreateTag(file);
             player.put("Inventory", encodePlayerInventory(inv));
+            Tag gear = encodeEquipment(inv.player);
+            if (gear != null) player.put("equipment", gear);
             player.putInt("DataVersion", DATA_VERSION);
-            NbtIo.writeCompressed(player, file);
+            writeCompressedTag(player, file);
         } catch (IOException e) {
             System.err.println("Failed to write player inventory: " + e.getMessage());
         }
@@ -641,21 +719,19 @@ public class SwdSaveManager implements AutoCloseable {
                 });
         }
 
-        for (EquipmentSlot slot : new EquipmentSlot[]{
-            EquipmentSlot.FEET, EquipmentSlot.LEGS, EquipmentSlot.CHEST, EquipmentSlot.HEAD, EquipmentSlot.OFFHAND
-        }) {
-            ItemStack stack = inv.player.getItemBySlot(slot);
-            if (stack.isEmpty()) continue;
-            int nbtSlot = slot == EquipmentSlot.OFFHAND ? -106 : 100 + slot.getIndex();
-            ItemStack.CODEC.encodeStart(ops, stack)
-                .result()
-                .ifPresent(tag -> {
-                    CompoundTag c = (CompoundTag) tag;
-                    c.putByte("Slot", (byte) nbtSlot);
-                    list.add(c);
-                });
-        }
         return list;
+    }
+
+    private Tag encodeEquipment(net.minecraft.world.entity.LivingEntity living) {
+        EntityEquipment gear = new EntityEquipment();
+        for (EquipmentSlot slot : EquipmentSlot.VALUES) {
+            ItemStack stack = living.getItemBySlot(slot);
+            if (stack.isEmpty()) continue;
+            gear.set(slot, stack);
+        }
+        if (gear.isEmpty()) return null;
+
+        return EntityEquipment.CODEC.encodeStart(ops, gear).result().orElse(null);
     }
 
     public void cacheBlockInventory(BlockPos pos, List<ItemStack> items) {
@@ -671,7 +747,6 @@ public class SwdSaveManager implements AutoCloseable {
     }
 
     public void cacheEnderChest(UUID uuid, List<ItemStack> items) {
-        enderChestCache.put(uuid, new ArrayList<>(items));
         writePlayerEnderChest(uuid, items);
     }
 
@@ -681,15 +756,10 @@ public class SwdSaveManager implements AutoCloseable {
             Files.createDirectories(playersDir);
             Path file = playersDir.resolve(uuid + ".dat");
 
-            CompoundTag player;
-            if (Files.exists(file)) {
-                player = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap());
-            } else {
-                player = new CompoundTag();
-            }
+            CompoundTag player = readOrCreateTag(file);
             player.put("EnderItems", encodeItems(items));
             player.putInt("DataVersion", DATA_VERSION);
-            NbtIo.writeCompressed(player, file);
+            writeCompressedTag(player, file);
         } catch (IOException e) {
             System.err.println("Failed to write player ender chest: " + e.getMessage());
         }
@@ -727,8 +797,8 @@ public class SwdSaveManager implements AutoCloseable {
         if (cachePlayerUuid == null) cachePlayerUuid = mc.player.getUUID();
 
         boolean changed = false;
-        boolean hadProgressUpdates = !packet.getProgress().isEmpty();
-        boolean hadRemovals = !packet.getRemoved().isEmpty();
+        boolean hadProgressUpdates = !PacketCompat.advancementsProgress(packet).isEmpty();
+        boolean hadRemovals = !PacketCompat.advancementsRemoved(packet).isEmpty();
 
         synchronized (metaLock) {
             if (cachedAdvancements == null) cachedAdvancements = new JsonObject();
@@ -741,14 +811,14 @@ public class SwdSaveManager implements AutoCloseable {
                 if (hadProgressUpdates || hadRemovals) changed = true;
             }
 
-            for (Identifier removedId : packet.getRemoved()) {
+            for (Identifier removedId : PacketCompat.advancementsRemoved(packet)) {
                 String key = removedId.toString();
                 cachedAdvancements.remove(key);
                 removedAdvancements.add(key);
                 changed = true;
             }
 
-            for (Map.Entry<Identifier, AdvancementProgress> e : packet.getProgress().entrySet()) {
+            for (Map.Entry<Identifier, AdvancementProgress> e : PacketCompat.advancementsProgress(packet).entrySet()) {
                 String key = e.getKey().toString();
                 JsonObject incoming = buildAdvancementJson(e.getValue());
                 JsonObject existing = getJsonObject(cachedAdvancements, key);
@@ -806,14 +876,13 @@ public class SwdSaveManager implements AutoCloseable {
             if (target == null && mc.player != null) target = mc.player.getUUID();
             if (target == null) return;
 
-            Path playersPath = path;
             try {
                 if (statsDirty || force) {
-                    writeStatsFile(playersPath.resolve("stats").resolve(target + ".json"));
+                    writeStatsFile(path.resolve("stats").resolve(target + ".json"));
                     statsDirty = false;
                 }
                 if (advancementsDirty || force) {
-                    writeAdvancementsFile(playersPath.resolve("advancements").resolve(target + ".json"));
+                    writeAdvancementsFile(path.resolve("advancements").resolve(target + ".json"));
                     advancementsDirty = false;
                 }
                 lastMetaFlushTimeMs = now;
@@ -962,7 +1031,9 @@ public class SwdSaveManager implements AutoCloseable {
 
     private void writeJsonObject(Path file, JsonObject json) throws IOException {
         Files.createDirectories(file.getParent());
-        Files.writeString(file, GSON.toJson(json));
+        Path temp = file.resolveSibling(file.getFileName() + ".tmp");
+        Files.writeString(temp, GSON.toJson(json));
+        moveIntoPlace(temp, file);
     }
 
     @Override

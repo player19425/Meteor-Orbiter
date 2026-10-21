@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(PlayerInfo.class)
 public abstract class PlayerListEntrySpoofMixin {
-    @Inject(method = "getGameMode", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getGameMode", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$getGameMode(CallbackInfoReturnable<GameType> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.visualCreativeEnabled()) return;

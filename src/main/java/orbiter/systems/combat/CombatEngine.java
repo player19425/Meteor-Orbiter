@@ -7,6 +7,7 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.util.Mth;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +41,10 @@ public class CombatEngine {
 
     public boolean isFrozen() {
         return arbiter.isFrozen();
+    }
+
+    public boolean mayAct(Module module) {
+        return arbiter.mayAct(module);
     }
 
     public void freeze(Module owner) {
@@ -80,9 +85,11 @@ public class CombatEngine {
         rotations.step(mc.level.getGameTime());
         rotations.apply();
 
-        if (request.mode() == CombatRequest.Mode.Silent && SilentRotationHandler.isActive() && mc.getConnection() != null) {
+        if (request.mode() == CombatRequest.Mode.Silent && mc.getConnection() != null) {
             mc.getConnection().send(new ServerboundMovePlayerPacket.Rot(
-                mc.player.getYRot(), mc.player.getXRot(), mc.player.onGround(), mc.player.horizontalCollision));
+                Mth.wrapDegrees(SilentRotationHandler.pendingYaw()),
+                Mth.clamp(SilentRotationHandler.pendingPitch(), -90f, 90f),
+                mc.player.onGround(), mc.player.horizontalCollision));
         }
     }
 

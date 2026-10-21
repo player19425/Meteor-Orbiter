@@ -2,10 +2,10 @@ package orbiter.util;
 
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.systems.modules.render.Freecam;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
+import orbiter.compat.ClientCompat;
 
 import java.util.Locale;
 
@@ -26,19 +26,19 @@ public final class CameraPosition {
     public static Vec3 pos() {
         Freecam fc = activeFreecam();
         if (fc != null) return new Vec3(fc.pos.x, fc.pos.y, fc.pos.z);
-        return Minecraft.getInstance().gameRenderer.mainCamera().position();
+        return ClientCompat.mainCamera().position();
     }
 
     public static float yaw() {
         Freecam fc = activeFreecam();
         if (fc != null) return Mth.wrapDegrees(fc.yaw);
-        return Mth.wrapDegrees(Minecraft.getInstance().gameRenderer.mainCamera().yRot());
+        return Mth.wrapDegrees(ClientCompat.mainCamera().yRot());
     }
 
     public static float pitch() {
         Freecam fc = activeFreecam();
         if (fc != null) return Mth.wrapDegrees(fc.pitch);
-        return Mth.wrapDegrees(Minecraft.getInstance().gameRenderer.mainCamera().xRot());
+        return Mth.wrapDegrees(ClientCompat.mainCamera().xRot());
     }
 
     public static String coords() {

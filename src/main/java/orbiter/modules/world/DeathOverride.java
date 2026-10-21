@@ -1,7 +1,5 @@
 package orbiter.modules.world;
 
-import orbiter.Orbiter;
-import orbiter.modules.world.CreativeSafetyModule;
 import meteordevelopment.meteorclient.events.game.GameJoinedEvent;
 import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.events.game.OpenScreenEvent;
@@ -14,6 +12,7 @@ import net.minecraft.network.protocol.game.ServerboundClientCommandPacket;
 import net.minecraft.client.gui.screens.DeathScreen;
 import orbiter.util.CommandUtils;
 import orbiter.util.FastSend;
+import orbiter.compat.ClientCompat;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -28,7 +27,7 @@ public class DeathOverride extends CreativeSafetyModule {
 
     private final Setting<Boolean> requireTrigger = sgGeneral.add(new BoolSetting.Builder()
             .name("require-death-streak")
-            .description("Only override deaths after enough deaths inside the time window. When off, every death is overridden.")
+            .description("Off means every death engages the override, not only a streak.")
             .defaultValue(true)
             .build());
 
@@ -52,7 +51,7 @@ public class DeathOverride extends CreativeSafetyModule {
 
     private final Setting<RespawnMode> respawnMode = sgGeneral.add(new EnumSetting.Builder<RespawnMode>()
             .name("respawn-mode")
-            .description("Hold blocks the server's respawn packet so your world never reloads and you stay a free camera ghost until you disable the module. Spam lets respawns through and sends your own respawn requests at an interval.")
+            .description("Hold never lets the world reload. Spam respawns at your own interval.")
             .defaultValue(RespawnMode.Hold)
             .build());
 
@@ -67,7 +66,7 @@ public class DeathOverride extends CreativeSafetyModule {
 
     private final Setting<Boolean> useFreecam = sgGeneral.add(new BoolSetting.Builder()
             .name("freecam")
-            .description("Move the camera around freely while the override is engaged. Chat and commands stay usable.")
+            .description("Lets the camera move freely while engaged. Chat and commands stay usable.")
             .defaultValue(true)
             .build());
 
@@ -86,7 +85,7 @@ public class DeathOverride extends CreativeSafetyModule {
 
     public DeathOverride() {
         super("death-override",
-                "Removes DieScreen incase of kill commandblock.");
+                "Holds the death screen or spams respawn after repeated deaths.");
         instance = this;
     }
 
@@ -96,6 +95,8 @@ public class DeathOverride extends CreativeSafetyModule {
 
     @Override
     public void onActivate() {
+        safetyActivate();
+
         deathTimes.clear();
         engaged = false;
         freecamStartedByUs = false;
@@ -106,6 +107,8 @@ public class DeathOverride extends CreativeSafetyModule {
 
     @Override
     public void onDeactivate() {
+        safetyDeactivate();
+
         boolean wasHolding = engaged && respawnMode.get() == RespawnMode.Hold;
         release(true);
 
@@ -132,15 +135,18 @@ public class DeathOverride extends CreativeSafetyModule {
 
     @EventHandler
     private void onGameLeft(GameLeftEvent event) {
+        release(false);
         resetEngageState();
     }
 
     @EventHandler
     private void onGameJoined(GameJoinedEvent event) {
+        release(false);
         resetEngageState();
     }
 
     private void resetEngageState() {
+        deathTimes.clear();
         engaged = false;
         freecamStartedByUs = false;
         savedShowDeathScreen = null;
@@ -158,14 +164,14 @@ public class DeathOverride extends CreativeSafetyModule {
             long now = System.currentTimeMillis();
             deathTimes.addLast(now);
             prune(now);
-            if (!engaged && shouldEngage()) engage(now);
+            if (!engaged && shouldEngage()) engage();
         }
         wasDead = dead;
 
         if (!engaged) return;
 
         if (mc.player.shouldShowDeathScreen()) mc.player.setShowDeathScreen(false);
-        if (mc.gui.screen() instanceof DeathScreen) mc.gui.setScreen(null);
+        if (ClientCompat.screen() instanceof DeathScreen) ClientCompat.setScreen(null);
 
         if (!dead) {
             if (respawnMode.get() == RespawnMode.Spam) release(true);
@@ -187,7 +193,7 @@ public class DeathOverride extends CreativeSafetyModule {
         return deathTimes.size() >= triggerDeaths.get();
     }
 
-    private void engage(long now) {
+    private void engage() {
         engaged = true;
         spamCounter = 0;
 

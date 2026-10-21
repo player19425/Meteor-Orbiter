@@ -351,7 +351,7 @@ public class PeakPluginScanner extends Module {
         "auraskills", "aureliumskills",
         "betonquest", "quests", "questing",
         "discordsrv",
-        "combatlogx", "combatlog", "combattag",
+        "combatlog", "combattag",
         "chunky",
         "cardinal-components", "cca",
         "shopx", "bettershop", "bettershops", "guishop", "simpleshopgui",
@@ -462,12 +462,14 @@ public class PeakPluginScanner extends Module {
         final String query;
         final ProbeKind kind;
         final String hint;
+        int completionId;
         int attempts;
 
         ProbeSpec(String query, ProbeKind kind, String hint) {
             this.query = query;
             this.kind = kind;
             this.hint = hint;
+            this.completionId = -1;
             this.attempts = 0;
         }
     }
@@ -558,13 +560,15 @@ public class PeakPluginScanner extends Module {
     private String serverVersion;
     private int protocolVersion;
     private int totalCommandsScanned;
+    private long scanTimestampMs;
 
     private volatile boolean waitingForPluginList;
     private int querySentTick;
     private static final Pattern PLUGIN_LIST_PATTERN = Pattern.compile(
-        "(?:plugins|running plugins|server plugins|\\d+ plugins)[^:]*?:\\s*(.+)",
+        "\\bplugins?\\s*\\(\\s*\\d+\\s*\\)\\s*:\\s*(.+)",
         Pattern.CASE_INSENSITIVE);
-    private static final Pattern PLUGIN_NAME_PATTERN = Pattern.compile("[A-Za-z0-9_+\\-. ]+");
+    private static final Pattern PLUGIN_NAME_PATTERN = Pattern.compile("[A-Za-z0-9_+\\-.]+");
+    private static final Pattern COLOR_CODE = Pattern.compile("§[0-9A-Za-z]");
 
     public PeakPluginScanner() {
         super(Orbiter.CATEGORY, "peak-plugin-scanner",
@@ -623,6 +627,7 @@ public class PeakPluginScanner extends Module {
         serverVersion = null;
         protocolVersion = 0;
         totalCommandsScanned = 0;
+        scanTimestampMs = 0;
         waitingForPluginList = false;
         querySentTick = 0;
         RawPacketCapture.resetStats();
@@ -717,6 +722,7 @@ public class PeakPluginScanner extends Module {
     private void executeScan() {
         if (scanned) return;
         scanned = true;
+        scanTimestampMs = System.currentTimeMillis();
 
         fetchServerInfo();
 
@@ -778,6 +784,8 @@ public class PeakPluginScanner extends Module {
                     addDetection(label, "Feature", "Cmd: /" + name, Confidence.FEATURE);
                 }
 
+                if (VANILLA_COMMAND_ROOTS.contains(token)) continue;
+
                 PluginDatabase.PluginEntry entry = PluginDatabase.lookupCommand(name);
                 if (entry != null) {
                     addDetection(entry.name(), entry.category(), "Cmd: /" + name, Confidence.EXACT);
@@ -794,8 +802,7 @@ public class PeakPluginScanner extends Module {
     private void inferPluginsFromObservedCommands() {
         for (String command : observedPluginCommands) {
             String clean = command.toLowerCase(Locale.ROOT);
-            String root = clean.contains(" ") ? clean.substring(0, clean.indexOf(' ')) : clean;
-            if (VANILLA_COMMAND_ROOTS.contains(root)) continue;
+            if (VANILLA_COMMAND_ROOTS.contains(clean)) continue;
 
             String plugin = null;
             if (isKnownPluginNamespace(clean)) {
@@ -861,32 +868,16 @@ public class PeakPluginScanner extends Module {
     private void addProbe(ProbeSpec spec) {
         int limit = maxProbes.get();
         if (limit > 0 && totalProbesSent + probeQueue.size() >= limit) return;
+        spec.completionId = nextCompletionId;
         probeMap.put(nextCompletionId, spec);
         probeQueue.addLast(spec);
         nextCompletionId++;
     }
 
     private void sendNextProbe() {
-        if (probeQueue.isEmpty()) {
-            finishProbing();
-            return;
-        }
-
         ProbeSpec spec = probeQueue.pollFirst();
         if (spec == null) {
             finishProbing();
-            return;
-        }
-
-        int probeId = -1;
-        for (Map.Entry<Integer, ProbeSpec> entry : probeMap.entrySet()) {
-            if (entry.getValue() == spec) {
-                probeId = entry.getKey();
-                break;
-            }
-        }
-        if (probeId < 0) {
-
             return;
         }
 
@@ -896,7 +887,7 @@ public class PeakPluginScanner extends Module {
         }
 
         try {
-            mc.getConnection().send(new ServerboundCommandSuggestionPacket(probeId, spec.query));
+            mc.getConnection().send(new ServerboundCommandSuggestionPacket(spec.completionId, spec.query));
             totalProbesSent++;
             sentProbes++;
         } catch (Exception e) {
@@ -967,13 +958,10 @@ public class PeakPluginScanner extends Module {
                         addCommandToPlugin(displayKey(pluginKey), normalizedToken);
                     }
                 }
-            } else if (probe.kind == ProbeKind.PLUGIN_LIST || probe.kind == ProbeKind.VERSION) {
+            } else if (probe.kind == ProbeKind.VERSION && probe.query.indexOf(' ') >= 0) {
 
                 if (isLikelyPluginNameCandidate(text)) {
-                    String pluginName = text.trim();
-                    Confidence conf = probe.kind == ProbeKind.PLUGIN_LIST ? Confidence.STRONG : Confidence.FEATURE;
-                    String basis = probe.kind == ProbeKind.PLUGIN_LIST ? "PluginList" : "VersionHint";
-                    addDetection(pluginName, basis, "Probe response from " + probe.query, conf);
+                    addDetection(text.trim(), "VersionHint", "Probe response from " + probe.query, Confidence.FEATURE);
                 }
             } else if (probe.kind == ProbeKind.HELP && probe.hint != null) {
 
@@ -1106,9 +1094,11 @@ public class PeakPluginScanner extends Module {
             return;
         }
 
-        Matcher matcher = PLUGIN_LIST_PATTERN.matcher(message);
+        String plain = COLOR_CODE.matcher(message).replaceAll(" ");
+
+        Matcher matcher = PLUGIN_LIST_PATTERN.matcher(plain);
         if (!matcher.find()) {
-            if (message.length() < 5 || message.length() > 5000) {
+            if (plain.length() < 5 || plain.length() > 5000) {
                 waitingForPluginList = false;
             }
             return;
@@ -1122,9 +1112,7 @@ public class PeakPluginScanner extends Module {
             String pluginName = nameMatcher.group().trim();
             if (pluginName.length() < 2) continue;
             String ln = pluginName.toLowerCase(Locale.ROOT);
-            if (ln.equals("and") || ln.equals("none") || ln.equals("plugins")
-                || ln.equals("showing") || ln.equals("running") || ln.equals("server")
-                || ln.equals("total") || ln.equals("no") || ln.equals("has")) continue;
+            if (ln.equals("none") || ln.equals("total") || ln.equals("plugins")) continue;
             addDetection(pluginName, "PluginList", "/plugins response", Confidence.STRONG);
             found++;
         }
@@ -1221,7 +1209,7 @@ public class PeakPluginScanner extends Module {
 
     private String addObservedPluginCommand(String raw) {
         String token = normalizeCommandToken(raw);
-        if (!isTrackableCommandToken(token)) return token;
+        if (!isTrackableCommandToken(token)) return "";
         observedPluginCommands.add(token);
         return token;
     }
@@ -1331,15 +1319,25 @@ public class PeakPluginScanner extends Module {
             };
             mc.player.sendSystemMessage(txt(color + "── " + entry.getKey().name() + " (" + entry.getValue().size() + ") ──"));
 
-            StringBuilder sb = new StringBuilder("§7  ");
-            for (int i = 0; i < entry.getValue().size(); i++) {
-                if (i > 0) sb.append("§7, ");
-                sb.append("§f").append(entry.getValue().get(i).name);
-            }
-            mc.player.sendSystemMessage(txt(sb.toString()));
+            List<String> names = new ArrayList<>(entry.getValue().size());
+            for (DetectedPlugin dp : entry.getValue()) names.add(dp.name);
+            sendChunked(names);
         }
 
         mc.player.sendSystemMessage(txt("§e═══════════════════════════════════"));
+    }
+
+    private void sendChunked(List<String> names) {
+        StringBuilder sb = new StringBuilder("§7  ");
+        for (int i = 0; i < names.size(); i++) {
+            String piece = (i > 0 ? "§7, " : "") + "§f" + names.get(i);
+            if (i > 0 && sb.length() + piece.length() > 200) {
+                mc.player.sendSystemMessage(txt(sb.toString()));
+                sb = new StringBuilder("§7  ");
+            }
+            sb.append(piece);
+        }
+        if (sb.length() > 4) mc.player.sendSystemMessage(txt(sb.toString()));
     }
 
     public void copyToClipboard() {
@@ -1396,16 +1394,9 @@ public class PeakPluginScanner extends Module {
         List<DetectedPlugin> sorted = new ArrayList<>(detectedPlugins.values());
         sorted.sort((a, b) -> a.name.compareToIgnoreCase(b.name));
 
-        StringBuilder sb = new StringBuilder("§7  ");
-        for (int i = 0; i < sorted.size(); i++) {
-            if (i > 0) sb.append("§7, ");
-            sb.append("§f").append(sorted.get(i).name);
-            if (sb.length() > 200) {
-                mc.player.sendSystemMessage(txt(sb.toString()));
-                sb = new StringBuilder("§7  ");
-            }
-        }
-        if (sb.length() > 4) mc.player.sendSystemMessage(txt(sb.toString()));
+        List<String> names = new ArrayList<>(sorted.size());
+        for (DetectedPlugin dp : sorted) names.add(dp.name);
+        sendChunked(names);
     }
 
     public void exportToFile() {
@@ -1527,6 +1518,7 @@ public class PeakPluginScanner extends Module {
         if (System.currentTimeMillis() - cached.scannedAtMs > maxAgeMs) return false;
 
         seedFromCache(cached);
+        scanTimestampMs = cached.scannedAtMs;
         if (mc.player != null) {
             mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Loaded §f" + detectedPlugins.size()
                 + " §7plugins from cache (§f" + address + "§7). Live evidence still being collected."));
@@ -1535,7 +1527,6 @@ public class PeakPluginScanner extends Module {
     }
 
     private void seedFromCache(PeakScanCache.Entry entry) {
-        detectedPlugins.clear();
         for (PeakScanCache.PluginData data : entry.plugins) {
             if (data == null || data.name == null || data.name.isBlank()) continue;
             Confidence conf = Confidence.UNKNOWN;
@@ -1543,9 +1534,15 @@ public class PeakPluginScanner extends Module {
                 conf = Confidence.valueOf(data.confidence);
             } catch (Exception ignored) {
             }
-            DetectedPlugin dp = new DetectedPlugin(data.name, data.category, data.evidence, conf);
-            if (data.commands != null) dp.commands.addAll(data.commands);
-            detectedPlugins.put(canonicalize(data.name), dp);
+            String category = data.category == null || data.category.isBlank() ? "Cache" : data.category;
+            String evidence = data.evidence == null || data.evidence.isBlank() ? "Cached scan" : data.evidence;
+            addDetection(data.name, category, evidence, conf);
+
+            if (data.commands == null) continue;
+            String key = canonicalize(data.name);
+            for (String command : data.commands) {
+                addCommandToPlugin(key, command);
+            }
         }
     }
 
@@ -1560,7 +1557,7 @@ public class PeakPluginScanner extends Module {
         entry.brand = serverBrand == null ? "" : serverBrand;
         entry.version = serverVersion == null ? "" : serverVersion;
         entry.status = probing ? "IN_PROGRESS" : scanned ? "COMPLETE" : "PENDING";
-        entry.scannedAtMs = System.currentTimeMillis();
+        entry.scannedAtMs = scanTimestampMs > 0 ? scanTimestampMs : System.currentTimeMillis();
         entry.totalProbes = totalProbesQueued;
         entry.sentProbes = sentProbes;
 

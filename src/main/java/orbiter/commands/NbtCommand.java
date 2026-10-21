@@ -27,11 +27,11 @@ public class NbtCommand extends Command {
 
             RegistryOps<net.minecraft.nbt.Tag> ops = RegistryOps.create(NbtOps.INSTANCE, mc.level.registryAccess());
             ItemStack.CODEC.encodeStart(ops, stack)
-                .resultOrPartial(err -> info("Failed to encode item: " + err))
+                .resultOrPartial(err -> info("Failed to encode item: %s", err))
                 .ifPresent(tag -> {
                     CompoundTag compound = (CompoundTag) tag;
                     mc.keyboardHandler.setClipboard(compound.toString());
-                    info("Copied " + stack.getHoverName().getString() + " NBT to clipboard.");
+                    info("Copied %s NBT to clipboard.", stack.getHoverName().getString());
                 });
 
             return SINGLE_SUCCESS;

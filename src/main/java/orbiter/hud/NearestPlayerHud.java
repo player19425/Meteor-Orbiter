@@ -12,6 +12,8 @@ import net.minecraft.world.entity.player.Player;
 public class NearestPlayerHud extends HudElement {
     public static final HudElementInfo<NearestPlayerHud> INFO = new HudElementInfo<>(Orbiter.HUD_GROUP, "nearest-player", "Shows the nearest player and their distance.", NearestPlayerHud::new);
 
+    private static final String NO_PLAYERS = "No players nearby";
+
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
 
     private final Setting<SettingColor> textColor = sgGeneral.add(new ColorSetting.Builder()
@@ -50,14 +52,20 @@ public class NearestPlayerHud extends HudElement {
 
     @Override
     public void render(HudRenderer renderer) {
+        String text = nearestPlayerText();
+
+        double s = scale.get();
+        double w = renderer.textWidth(text, shadow.get(), s);
+        double h = renderer.textHeight(shadow.get(), s);
+        setSize(w, h);
+
+        SettingColor color = rainbow.get() ? BaseServerInfoHud.rainbowColor() : textColor.get();
+        renderer.text(text, x, y, color, shadow.get(), s);
+    }
+
+    private String nearestPlayerText() {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || mc.level == null) {
-            String none = "No players nearby";
-            double s = scale.get();
-            setSize(renderer.textWidth(none, shadow.get(), s), renderer.textHeight(shadow.get(), s));
-            renderer.text(none, x, y, textColor.get(), shadow.get(), s);
-            return;
-        }
+        if (mc.player == null || mc.level == null) return NO_PLAYERS;
 
         Player nearest = null;
         double nearestDist = Double.MAX_VALUE;
@@ -70,21 +78,8 @@ public class NearestPlayerHud extends HudElement {
             }
         }
 
-        String text;
-        if (nearest == null) {
-            text = "No players nearby";
-        } else {
-            double dist = Math.sqrt(nearestDist);
-            text = String.format("%s is %.1f blocks near", nearest.getName().getString(), dist);
-        }
-
-        double s = scale.get();
-        double w = renderer.textWidth(text, shadow.get(), s);
-        double h = renderer.textHeight(shadow.get(), s);
-        setSize(w, h);
-
-        SettingColor color = rainbow.get() ? BaseServerInfoHud.rainbowColor() : textColor.get();
-        renderer.text(text, x, y, color, shadow.get(), s);
+        if (nearest == null) return NO_PLAYERS;
+        return String.format("%s is %.1f blocks near", nearest.getName().getString(), Math.sqrt(nearestDist));
     }
 
 }

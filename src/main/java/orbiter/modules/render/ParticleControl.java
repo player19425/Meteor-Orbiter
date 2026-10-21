@@ -9,6 +9,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import orbiter.modules.world.CreativeSafetyModule;
 import orbiter.util.CommandUtils;
+import orbiter.util.GlobalSendLimiter;
 
 import java.util.Locale;
 
@@ -53,14 +54,14 @@ public final class ParticleControl extends CreativeSafetyModule {
     private final Setting<Double> radius = sgGeneral.add(new DoubleSetting.Builder()
         .name("radius").description("Shape radius.").defaultValue(2.0).min(0.25).sliderRange(0.25, 10.0).build());
     private final Setting<Double> quality = sgGeneral.add(new DoubleSetting.Builder()
-        .name("quality").description("Virtual geometry resolution. Higher values improve temporal sampling without directly increasing commands.")
+        .name("quality").description("Virtual geometry resolution, higher values sample the shape more evenly.")
         .defaultValue(1.0).min(0.1).sliderRange(0.1, 4.0).build());
     private final Setting<Double> animationSpeed = sgGeneral.add(new DoubleSetting.Builder()
         .name("animation-speed").description("Overall animation speed multiplier.").defaultValue(1.0).min(0.0).sliderRange(0.0, 5.0).build());
     private final Setting<Boolean> forceParticles = sgGeneral.add(new BoolSetting.Builder()
         .name("force-particles").description("Use the force particle visibility mode.").defaultValue(true).build());
     private final Setting<String> viewers = sgGeneral.add(new StringSetting.Builder()
-        .name("viewers").description("Who can see the particles. Accepts a player name or a safe player selector such as @a or @a[tag=show].")
+        .name("viewers").description("Who sees the particles: a player name, or a selector like @a or @a[tag=show].")
         .defaultValue("@a").build());
 
     private final Setting<CenterTargetMode> centerTargetMode = sgTarget.add(new EnumSetting.Builder<CenterTargetMode>()
@@ -70,7 +71,7 @@ public final class ParticleControl extends CreativeSafetyModule {
         .name("center-player-name").description("Exact player name used as the animation center.").defaultValue("")
         .visible(() -> centerTargetMode.get() == CenterTargetMode.PlayerName).build());
     private final Setting<String> centerSelector = sgTarget.add(new StringSetting.Builder()
-        .name("center-selector").description("Player selector used as the animation center. Multiple matches create one shape per player.")
+        .name("center-selector").description("Player selector used as the animation center.")
         .defaultValue("@a[tag=particle-target]")
         .visible(() -> centerTargetMode.get() == CenterTargetMode.Selector).build());
     private final Setting<Double> nearestRange = sgTarget.add(new DoubleSetting.Builder()
@@ -98,10 +99,10 @@ public final class ParticleControl extends CreativeSafetyModule {
         .name("translate-z").description("Z offset from the selected animation center.").defaultValue(0.0).sliderRange(-10, 10).build());
 
     private final Setting<EmissionMode> emissionMode = sgRate.add(new EnumSetting.Builder<EmissionMode>()
-        .name("emission-mode").description("Batched emits several particles per anchor; Precise emits one exact particle per command.")
+        .name("emission-mode").description("Batched emits several particles per anchor, Precise emits one per command.")
         .defaultValue(EmissionMode.Batched).build());
     private final Setting<TrailMode> trailMode = sgRate.add(new EnumSetting.Builder<TrailMode>()
-        .name("trail-mode").description("Controls visual buildup. Crisp uses fewer particles and shorter client-visible trails.")
+        .name("trail-mode").description("Crisp cuts particles and spread the most, Native leaves them untouched.")
         .defaultValue(TrailMode.Crisp).build());
     private final Setting<Integer> particlesPerCommand = sgRate.add(new IntSetting.Builder()
         .name("particles-per-command").description("Particles emitted by each command in Batched mode.").defaultValue(4).min(2).sliderRange(2, 32)
@@ -112,7 +113,7 @@ public final class ParticleControl extends CreativeSafetyModule {
     private final Setting<Integer> maxCommandsPerBatch = sgRate.add(new IntSetting.Builder()
         .name("max-commands-per-batch").description("Hard limit for /particle commands sent in one update.").defaultValue(8).min(1).sliderRange(1, 32).build());
     private final Setting<Integer> delayTicks = sgRate.add(new IntSetting.Builder()
-        .name("delay-ticks").description("Ticks between command batches. Two ticks substantially lowers command traffic while retaining smooth trails.")
+        .name("delay-ticks").description("Ticks between batches, 2 halves the command traffic.")
         .defaultValue(2).min(1).sliderRange(1, 20).build());
 
     private static final double GOLDEN_FRACTION = 0.6180339887498949;
@@ -133,6 +134,12 @@ public final class ParticleControl extends CreativeSafetyModule {
         tickCounter = 0;
         fixedCenter = mc.player == null ? null : playerPosition();
         fixedCenterDimension = mc.player == null || mc.level == null ? null : mc.level.dimension();
+        safetyActivate();
+    }
+
+    @Override
+    public void onDeactivate() {
+        safetyDeactivate();
     }
 
     @EventHandler
@@ -185,6 +192,8 @@ public final class ParticleControl extends CreativeSafetyModule {
         }
 
         for (int n = 0; n < commands; n++) {
+            if (!GlobalSendLimiter.tryAcquireOne()) break;
+
             double distributed = fractional((n + samplePhase) / commands);
             int index = Math.min(pointCount - 1, (int) Math.floor(distributed * pointCount));
             Vec3 point = rotate(pointFor(shape.get(), index, pointCount, radius.get(), phase), ax, ay, az)
@@ -252,8 +261,9 @@ public final class ParticleControl extends CreativeSafetyModule {
     }
 
     private boolean isSelectorType(String value, char prefix, char type) {
-        return value.length() == 2 && value.charAt(0) == prefix && value.charAt(1) == type
-            || value.length() > 2 && value.charAt(0) == prefix && value.charAt(1) == type && value.charAt(2) == '[';
+        return (value.length() == 2 || value.length() > 2 && value.charAt(2) == '[')
+            && value.charAt(0) == prefix
+            && value.charAt(1) == type;
     }
 
     private String safeCenterSelector(String value) {
@@ -411,7 +421,7 @@ public final class ParticleControl extends CreativeSafetyModule {
 
     private Vec3 cubePoint(int index, int count, double r) {
         int edge = index % 12;
-        double u = (index / 12.0) / Math.max(1.0, count / 12.0 - 1.0);
+        double u = (index / 12.0) / Math.max(1.0, count / 12.0);
         u = fractional(u);
         double v = -r + 2 * r * u;
         return switch (edge) {

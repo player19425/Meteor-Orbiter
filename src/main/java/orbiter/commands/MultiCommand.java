@@ -2,6 +2,7 @@ package orbiter.commands;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import meteordevelopment.meteorclient.commands.Command;
@@ -60,7 +61,7 @@ public class MultiCommand extends Command {
         builder.then(literal("help")
             .executes(context -> {
                 for (String line : HELP_TEXT.split("\n")) {
-                    info(line);
+                    info("%s", line);
                 }
                 return SINGLE_SUCCESS;
             }));
@@ -101,7 +102,7 @@ public class MultiCommand extends Command {
 
             int selectorEnd = findSelectorEnd(segment);
             if (selectorEnd == -1) {
-                error("Invalid segment (no selector found): " + segment);
+                error("Invalid segment (no selector found): %s", segment);
                 continue;
             }
 
@@ -109,20 +110,20 @@ public class MultiCommand extends Command {
             String commandTemplate = segment.substring(selectorEnd).trim();
 
             if (commandTemplate.isEmpty()) {
-                error("Missing command after selector: " + selectorRaw);
+                error("Missing command after selector: %s", selectorRaw);
                 continue;
             }
 
             List<String> targets = resolveSelector(selectorRaw);
             if (targets.isEmpty()) {
-                info("No targets matched for selector: " + selectorRaw);
+                info("No targets matched for selector: %s", selectorRaw);
                 continue;
             }
 
             for (String playerName : targets) {
                 String finalCommand = buildCommand(commandTemplate, playerName);
                 if (finalCommand == null) {
-                    error("No {player} placeholder in command: " + commandTemplate);
+                    error("No {player} placeholder in command: %s", commandTemplate);
                     error("The {player} placeholder is required so the player name is placed at the correct argument position.");
                     break;
                 }
@@ -131,7 +132,7 @@ public class MultiCommand extends Command {
             }
         }
 
-        info("Sent §6" + totalCommands + "§r command(s).");
+        info("Sent §6%s§r command(s).", totalCommands);
     }
 
     private int findSelectorEnd(String segment) {
@@ -213,8 +214,7 @@ public class MultiCommand extends Command {
             int count = 1;
             if (selector.contains(":")) {
                 try {
-                    count = Integer.parseInt(selector.substring(selector.indexOf(':') + 1).trim());
-                    count = Math.max(1, count);
+                    count = Math.max(1, Integer.parseInt(selector.substring(selector.indexOf(':') + 1).trim()));
                 } catch (NumberFormatException ignored) {
                 }
             }
@@ -276,7 +276,7 @@ public class MultiCommand extends Command {
             .orElse(Collections.emptySet());
     }
 
-    private CompletableFuture<Suggestions> suggestInputs(com.mojang.brigadier.context.CommandContext<ClientSuggestionProvider> ctx, SuggestionsBuilder builder) {
+    private CompletableFuture<Suggestions> suggestInputs(CommandContext<ClientSuggestionProvider> ctx, SuggestionsBuilder builder) {
         String remaining = builder.getRemaining().toLowerCase();
 
         if (remaining.endsWith("{") || remaining.isEmpty() || remaining.endsWith(";")) {

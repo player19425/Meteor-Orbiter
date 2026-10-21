@@ -7,7 +7,6 @@ import orbiter.util.FastSend;
 import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
-import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.sounds.SoundEvent;
@@ -15,6 +14,7 @@ import net.minecraft.resources.Identifier;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
 
 public class PlaySoundSpam extends CreativeSafetyModule {
@@ -131,7 +131,7 @@ public class PlaySoundSpam extends CreativeSafetyModule {
             }
 
             double p = randomPitch.get() ? 0.5 + random.nextDouble() * 1.5 : pitch.get();
-            String sourceStr = soundSource.get().name().toLowerCase();
+            String sourceStr = soundSource.get().name().toLowerCase(Locale.ROOT);
 
             String cmd = CommandUtils.formatCommand("playsound %s %s %s ~ ~ ~ %.2f %.2f",
                     sound, sourceStr, target.get(), volume.get(), p);

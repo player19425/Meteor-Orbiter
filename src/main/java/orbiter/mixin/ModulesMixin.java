@@ -25,7 +25,7 @@ public abstract class ModulesMixin {
         return false;
     }
 
-    @ModifyReturnValue(method = "loopCategories", at = @At("RETURN"))
+    @ModifyReturnValue(method = "loopCategories", at = @At("RETURN"), require = 0)
     private static Iterable<Category> orbiter$filterHiddenCategories(Iterable<Category> original) {
         List<Category> filtered = new ArrayList<>();
         for (Category cat : original) {
@@ -35,14 +35,14 @@ public abstract class ModulesMixin {
     }
 
     @SuppressWarnings("unchecked")
-    @ModifyReturnValue(method = "searchTitles", at = @At("RETURN"))
+    @ModifyReturnValue(method = "searchTitles", at = @At("RETURN"), require = 0)
     private static List<?> orbiter$filterSearchTitles(List<?> original) {
         return original.stream()
             .filter(entry -> !orbiter$isHidden(((Module) ((Pair<?, ?>) entry).getFirst()).category))
             .collect(Collectors.toList());
     }
 
-    @ModifyReturnValue(method = "searchSettingTitles", at = @At("RETURN"))
+    @ModifyReturnValue(method = "searchSettingTitles", at = @At("RETURN"), require = 0)
     private static Set<Module> orbiter$filterSearchSettingTitles(Set<Module> original) {
         return original.stream()
             .filter(m -> !orbiter$isHidden(m.category))

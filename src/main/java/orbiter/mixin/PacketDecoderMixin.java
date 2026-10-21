@@ -15,7 +15,7 @@ import java.util.List;
 @Mixin(PacketDecoder.class)
 public abstract class PacketDecoderMixin<T extends PacketListener> {
 
-    @Inject(method = "decode", at = @At("HEAD"))
+    @Inject(method = "decode", at = @At("HEAD"), require = 0)
     private void orbiter$captureRawBytes(ChannelHandlerContext ctx, ByteBuf buf, List<Object> out, CallbackInfo ci) {
         try {
             if (RawPacketCapture.isCaptureDisabled()) return;

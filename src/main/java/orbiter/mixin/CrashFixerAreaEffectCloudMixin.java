@@ -13,6 +13,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public class CrashFixerAreaEffectCloudMixin {
 
     @Redirect(method = "clientTick",
+        require = 0,
               at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/AreaEffectCloud;getParticle()Lnet/minecraft/core/particles/ParticleOptions;"))
     private ParticleOptions orbiter$replaceElderGuardianParticle(AreaEffectCloud entity) {
         ParticleOptions effect = entity.getParticle();

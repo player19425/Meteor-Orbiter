@@ -8,6 +8,7 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.entity.player.Player;
 
@@ -19,12 +20,19 @@ public class TNTRain extends CreativeSafetyModule {
     private final SettingGroup sgPhysics = settings.createGroup("Physics");
     private final SettingGroup sgTarget = settings.createGroup("Target Mode");
 
+    private final Setting<Boolean> continuous = sgContinuous.add(new BoolSetting.Builder()
+            .name("continuous")
+            .description("Keep spawning instead of stopping at total-tnt.")
+            .defaultValue(false)
+            .build());
+
     private final Setting<Integer> totalTNT = sgGeneral.add(new IntSetting.Builder()
             .name("total-tnt")
-            .description("Total TNT entities to spawn (used in burst mode).")
+            .description("Total TNT entities to spawn. Burst mode only.")
             .defaultValue(50)
             .min(1)
             .sliderRange(1, 1000)
+            .visible(() -> !continuous.get())
             .build());
 
     private final Setting<Integer> radius = sgGeneral.add(new IntSetting.Builder()
@@ -51,27 +59,20 @@ public class TNTRain extends CreativeSafetyModule {
             .sliderRange(0, 200)
             .build());
 
-    private final Setting<Integer> commandsPerTick = sgGeneral.add(new IntSetting.Builder()
-            .name("commands-per-tick")
-            .description("Number of /summon commands per tick.")
-            .defaultValue(5)
-            .min(1)
-            .sliderRange(1, 50)
-            .build());
-
-    private final Setting<Boolean> continuous = sgContinuous.add(new BoolSetting.Builder()
-            .name("continuous")
-            .description("Keep spawning TNT continuously instead of a one-time burst.")
-            .defaultValue(false)
-            .build());
-
     private final Setting<Integer> tntPerSecond = sgContinuous.add(new IntSetting.Builder()
             .name("tnt-per-second")
-            .description("TNT to spawn per second in continuous mode.")
-            .defaultValue(10)
+            .description("Spawn rate for both modes. Over 20 risks a spam kick.")
+            .defaultValue(20)
             .min(1)
-            .sliderRange(1, 100)
-            .visible(continuous::get)
+            .sliderRange(1, 400)
+            .build());
+
+    private final Setting<Integer> rateJitter = sgContinuous.add(new IntSetting.Builder()
+            .name("rate-jitter")
+            .description("Randomly slow the rate down by up to this percent. 0 keeps it steady.")
+            .defaultValue(0)
+            .min(0)
+            .sliderRange(0, 90)
             .build());
 
     private final Setting<Integer> duration = sgContinuous.add(new IntSetting.Builder()
@@ -105,30 +106,6 @@ public class TNTRain extends CreativeSafetyModule {
             .min(0)
             .sliderRange(0, 200)
             .visible(randomFuse::get)
-            .build());
-
-    private final Setting<Boolean> randomRate = sgContinuous.add(new BoolSetting.Builder()
-            .name("random-rate")
-            .description("Randomize the spawn rate per second.")
-            .defaultValue(false)
-            .build());
-
-    private final Setting<Integer> minRate = sgContinuous.add(new IntSetting.Builder()
-            .name("min-rate")
-            .description("Minimum spawn rate when randomized.")
-            .defaultValue(1)
-            .min(1)
-            .sliderRange(1, 100)
-            .visible(randomRate::get)
-            .build());
-
-    private final Setting<Integer> maxRate = sgContinuous.add(new IntSetting.Builder()
-            .name("max-rate")
-            .description("Maximum spawn rate when randomized.")
-            .defaultValue(30)
-            .min(1)
-            .sliderRange(1, 100)
-            .visible(randomRate::get)
             .build());
 
     private final Setting<Boolean> randomMotion = sgPhysics.add(new BoolSetting.Builder()
@@ -201,7 +178,6 @@ public class TNTRain extends CreativeSafetyModule {
 
     private final Random random = new Random();
     private int spawnedCount = 0;
-    private int tickCounter = 0;
     private int elapsedTicks = 0;
 
     public TNTRain() {
@@ -210,9 +186,13 @@ public class TNTRain extends CreativeSafetyModule {
     }
 
     @Override
+    protected boolean supportsFrameBudget() {
+        return true;
+    }
+
+    @Override
     public void onActivate() {
         spawnedCount = 0;
-        tickCounter = 0;
         elapsedTicks = 0;
 
         if (mc.player == null) {
@@ -222,9 +202,8 @@ public class TNTRain extends CreativeSafetyModule {
 
         safetyActivate();
 
-        info("TNT Rain started! " + (continuous.get()
-                ? "Continuous mode at " + tntPerSecond.get() + "/sec"
-                : "Burst mode: " + totalTNT.get() + " TNT"));
+        info("TNT Rain started at " + tntPerSecond.get() + "/sec"
+                + (continuous.get() ? " until stopped." : " for " + totalTNT.get() + " TNT."));
     }
 
     @EventHandler
@@ -246,22 +225,19 @@ public class TNTRain extends CreativeSafetyModule {
             return;
         }
 
-        int toSpawn;
-        if (continuous.get()) {
-
-            int rate = tntPerSecond.get();
-            if (randomRate.get()) {
-                rate = minRate.get() + random.nextInt(Math.max(1, maxRate.get() - minRate.get() + 1));
-            }
-
-            double perTick = rate / 20.0;
-            toSpawn = (int) perTick;
-
-            if (random.nextDouble() < (perTick - toSpawn))
-                toSpawn++;
-        } else {
-            toSpawn = commandsPerTick.get();
+        int rate = tntPerSecond.get();
+        if (rateJitter.get() > 0) {
+            int slowest = (int) Math.round(rate * (1.0 - rateJitter.get() / 100.0));
+            slowest = Math.min(Math.max(1, slowest), rate);
+            rate = slowest + random.nextInt(rate - slowest + 1);
         }
+
+        double perTick = rate / 20.0;
+        int toSpawn = (int) perTick;
+        if (random.nextDouble() < (perTick - toSpawn))
+            toSpawn++;
+
+        if (!continuous.get()) toSpawn = Math.min(toSpawn, totalTNT.get() - spawnedCount);
 
         long deadline = sliceDeadline();
         for (int i = 0; i < toSpawn; i++) {
@@ -376,5 +352,11 @@ public class TNTRain extends CreativeSafetyModule {
         None,
         NearestPlayer,
         NamedPlayer
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        elapsedTicks = 0;
+        spawnedCount = 0;
     }
 }

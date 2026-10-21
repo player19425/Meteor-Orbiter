@@ -2,6 +2,9 @@ package orbiter.modules.render;
 
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -40,20 +43,20 @@ public final class BlockSpam extends CreativeSafetyModule {
     private final SettingGroup sgRate = settings.createGroup("Rate");
 
     private final Setting<Mode> mode = sgGeneral.add(new EnumSetting.Builder<Mode>()
-        .name("mode").description("Animation spawns blocks along a rotating shape like ParticleControl; Rain drops blocks from above that land and stay on the floor as normal blocks.")
+        .name("mode").description("Animation keeps a shape in the air, Rain drops blocks that land on the floor.")
         .defaultValue(Mode.Rain).build());
     private final Setting<Delivery> delivery = sgGeneral.add(new EnumSetting.Builder<Delivery>()
-        .name("delivery").description("FallingBlock summons falling block entities; Setblock places blocks directly with /setblock.")
+        .name("delivery").description("FallingBlock uses entities, Setblock places the block directly.")
         .defaultValue(Delivery.FallingBlock).build());
     private final Setting<BlockPickMode> blockSource = sgGeneral.add(new EnumSetting.Builder<BlockPickMode>()
-        .name("block-source").description("Single uses the block setting; List picks from the block list; AllBlocks picks every valid block; Containers picks chests, shulkers, barrels and similar storage; Colorful picks every block that comes in the 16 dye colors; Colorful Wool is Colorful limited to wool and carpets.")
+        .name("block-source").description("Where each block comes from: one block, a list, the registry, storage blocks, or dye colours.")
         .defaultValue(BlockPickMode.Single).build());
     private final Setting<String> block = sgGeneral.add(new StringSetting.Builder()
-        .name("block").description("Block to spam. Accepts ids with or without the minecraft: prefix and optional properties, e.g. minecraft:stone or minecraft:oak_stairs[facing=north].")
+        .name("block").description("Block id, with optional [property=value] state. The minecraft: prefix is implied.")
         .defaultValue("minecraft:stone")
         .visible(() -> blockSource.get() == BlockPickMode.Single).build());
     private final Setting<List<String>> blockList = sgGeneral.add(new StringListSetting.Builder()
-        .name("block-list").description("Block pool used when block-source is List. Falls back to the block setting when empty.")
+        .name("block-list").description("Pool used by block-source List, falls back to block when empty.")
         .defaultValue(List.of("minecraft:stone", "minecraft:obsidian", "minecraft:netherite_block", "minecraft:tnt"))
         .visible(() -> blockSource.get() == BlockPickMode.List).build());
 
@@ -64,7 +67,7 @@ public final class BlockSpam extends CreativeSafetyModule {
         .name("radius").description("Shape radius.").defaultValue(2.0).min(0.5).sliderRange(0.5, 10.0)
         .visible(() -> mode.get() == Mode.Animation).build());
     private final Setting<Double> quality = sgAnimation.add(new DoubleSetting.Builder()
-        .name("quality").description("Virtual geometry resolution. Higher values produce denser block shapes.")
+        .name("quality").description("Virtual geometry resolution, higher values are denser.")
         .defaultValue(1.0).min(0.1).sliderRange(0.1, 4.0)
         .visible(() -> mode.get() == Mode.Animation).build());
     private final Setting<Double> animationSpeed = sgAnimation.add(new DoubleSetting.Builder()
@@ -98,7 +101,7 @@ public final class BlockSpam extends CreativeSafetyModule {
         .name("center-player-name").description("Exact player name used as the block center.").defaultValue("")
         .visible(() -> centerTargetMode.get() == CenterTargetMode.PlayerName).build());
     private final Setting<String> centerSelector = sgTarget.add(new StringSetting.Builder()
-        .name("center-selector").description("Player selector used as the block center. Multiple matches create one shape per player.")
+        .name("center-selector").description("Player selector used as the block center.")
         .defaultValue("@a[tag=block-target]")
         .visible(() -> centerTargetMode.get() == CenterTargetMode.Selector).build());
     private final Setting<Double> nearestRange = sgTarget.add(new DoubleSetting.Builder()
@@ -116,7 +119,7 @@ public final class BlockSpam extends CreativeSafetyModule {
         .defaultValue(true)
         .visible(() -> mode.get() == Mode.Rain).build());
     private final Setting<MotionMode> motionMode = sgRain.add(new EnumSetting.Builder<MotionMode>()
-        .name("motion-mode").description("Random picks a random direction each block; Custom uses the exact X/Y/Z values below.")
+        .name("motion-mode").description("Random picks a direction per block, Custom uses the exact values below.")
         .defaultValue(MotionMode.Random)
         .visible(() -> mode.get() == Mode.Rain && motion.get()).build());
     private final Setting<Double> motionSpeed = sgRain.add(new DoubleSetting.Builder()
@@ -124,7 +127,7 @@ public final class BlockSpam extends CreativeSafetyModule {
         .defaultValue(0.15).min(0.0).sliderRange(0.0, 1.0)
         .visible(() -> mode.get() == Mode.Rain && motion.get() && motionMode.get() == MotionMode.Random).build());
     private final Setting<Double> motionVertical = sgRain.add(new DoubleSetting.Builder()
-        .name("motion-vertical").description("Vertical motion speed used by Random mode. Negative pushes blocks down faster, positive launches them up.")
+        .name("motion-vertical").description("Vertical motion used by Random mode.")
         .defaultValue(0.0).sliderRange(-2.0, 2.0)
         .visible(() -> mode.get() == Mode.Rain && motion.get() && motionMode.get() == MotionMode.Random).build());
     private final Setting<Double> customMotionX = sgRain.add(new DoubleSetting.Builder()
@@ -141,10 +144,10 @@ public final class BlockSpam extends CreativeSafetyModule {
         .visible(() -> mode.get() == Mode.Rain && motion.get() && motionMode.get() == MotionMode.Custom).build());
 
     private final Setting<Integer> maxCommandsPerBatch = sgRate.add(new IntSetting.Builder()
-        .name("max-commands-per-batch").description("Commands sent per batch. In Rain mode this is how many blocks rain per batch; in Animation it caps shape points per batch.")
+        .name("max-commands-per-batch").description("Commands per batch: blocks rained, or shape points sampled.")
         .defaultValue(10).min(1).sliderRange(1, 512).build());
     private final Setting<Integer> delayTicks = sgRate.add(new IntSetting.Builder()
-        .name("delay-ticks").description("Ticks between command batches. 1 sends a batch every tick (20 batches per second).")
+        .name("delay-ticks").description("Ticks between batches, 1 sends one every tick.")
         .defaultValue(1).min(1).sliderRange(1, 20).build());
 
     private static final double GOLDEN_FRACTION = 0.6180339887498949;
@@ -153,9 +156,15 @@ public final class BlockSpam extends CreativeSafetyModule {
     private double samplePhase;
     private int tickCounter;
     private Vec3 fixedCenter;
+    private ResourceKey<Level> fixedCenterDimension;
 
     public BlockSpam() {
         super("block-spam", "let the blocks rain.");
+    }
+
+    @Override
+    protected boolean supportsFrameBudget() {
+        return true;
     }
 
     @Override
@@ -164,12 +173,19 @@ public final class BlockSpam extends CreativeSafetyModule {
         samplePhase = 0;
         tickCounter = 0;
         fixedCenter = mc.player == null ? null : playerPosition();
+        fixedCenterDimension = mc.player == null || mc.level == null ? null : mc.level.dimension();
         safetyActivate();
     }
 
     @Override
     public void onDeactivate() {
         safetyDeactivate();
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        fixedCenter = null;
+        fixedCenterDimension = null;
     }
 
     @EventHandler
@@ -182,6 +198,11 @@ public final class BlockSpam extends CreativeSafetyModule {
             rainTick(sliceDeadline());
         } else {
             animationTick(sliceDeadline());
+        }
+        ResourceKey<Level> dimension = mc.level.dimension();
+        if (!dimension.equals(fixedCenterDimension)) {
+            fixedCenterDimension = dimension;
+            fixedCenter = playerPosition();
         }
     }
 
@@ -216,13 +237,15 @@ public final class BlockSpam extends CreativeSafetyModule {
     }
 
     private void rainTick(long deadline) {
-        if (centerTargetMode.get() == CenterTargetMode.FixedPosition && fixedCenter == null) fixedCenter = playerPosition();
+        boolean fixed = centerTargetMode.get() == CenterTargetMode.FixedPosition;
+        if (fixed && fixedCenter == null) fixedCenter = playerPosition();
 
         double spread = rainSpread.get();
         int count = maxCommandsPerBatch.get();
 
         if (delivery.get() == Delivery.FallingBlock) {
             String target = resolveTargetString();
+            if (target == null && !fixed) return;
             boolean withMotion = motion.get();
             for (int i = 0; i < count; i++) {
                 if ((i & 7) == 0 && System.nanoTime() >= deadline) break;
@@ -237,7 +260,7 @@ public final class BlockSpam extends CreativeSafetyModule {
             }
             StringBuilder sb = new StringBuilder(96);
             for (int i = 0; i < count; i++) {
-                if ((i & 7) == 7 && System.nanoTime() >= deadline) break;
+                if ((i & 7) == 0 && System.nanoTime() >= deadline) break;
                 if (!GlobalSendLimiter.tryAcquireOne()) break;
                 double rx = randomOffset(spread);
                 double rz = randomOffset(spread);
@@ -559,8 +582,9 @@ public final class BlockSpam extends CreativeSafetyModule {
     }
 
     private boolean isSelectorType(String value, char prefix, char type) {
-        return value.length() == 2 && value.charAt(0) == prefix && value.charAt(1) == type
-            || value.length() > 2 && value.charAt(0) == prefix && value.charAt(1) == type && value.charAt(2) == '[';
+        return (value.length() == 2 || value.length() > 2 && value.charAt(2) == '[')
+            && value.charAt(0) == prefix
+            && value.charAt(1) == type;
     }
 
     private String safeCenterSelector(String value) {
@@ -718,7 +742,7 @@ public final class BlockSpam extends CreativeSafetyModule {
 
     private Vec3 cubePoint(int index, int count, double r) {
         int edge = index % 12;
-        double u = (index / 12.0) / Math.max(1.0, count / 12.0 - 1.0);
+        double u = (index / 12.0) / Math.max(1.0, count / 12.0);
         u = fractional(u);
         double v = -r + 2 * r * u;
         return switch (edge) {

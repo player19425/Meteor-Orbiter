@@ -8,7 +8,7 @@ import net.minecraft.world.entity.EquipmentSlotGroup;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EntityTypes;
+import orbiter.compat.TypeCompat;
 import net.minecraft.world.item.component.TypedEntityData;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -38,10 +38,11 @@ public class VerifyProtectCommand extends Command {
             if (mc.player == null) return SINGLE_SUCCESS;
 
             ServerProtect module = Modules.get().get(ServerProtect.class);
-            info("§eServerProtect status: §7active=" + (module != null && module.isActive())
-                + ", CrashFixer delegated=" + OrbiterMixinPlugin.isCrashFixerDelegated()
-                + ", external packet protection=" + OrbiterMixinPlugin.isExternalPacketProtectionPresent());
-            info("§eDialog suppression remaining: §7" + (ServerProtect.dialogSuppressionRemainingMs() / 1000L) + " seconds");
+            info("§eServerProtect status: §7active=%s, CrashFixer delegated=%s, external packet protection=%s",
+                module != null && module.isActive(),
+                OrbiterMixinPlugin.isCrashFixerDelegated(),
+                OrbiterMixinPlugin.isExternalPacketProtectionPresent());
+            info("§eDialog suppression remaining: §7%s seconds", ServerProtect.dialogSuppressionRemainingMs() / 1000L);
             if (module != null && module.isLegacyEntityRemovalEnabled()) {
                 info("§cWARNING: legacy destructive entity-data removal is enabled.");
             }
@@ -140,7 +141,7 @@ public class VerifyProtectCommand extends Command {
                 info("§c[FAIL] §7Safe item view modified the source stack");
             }
 
-            info("\u00a7eResult: " + passed + "/" + total + " tests passed");
+            info("\u00a7eResult: %s/%s tests passed", passed, total);
             if (passed == total) {
                 info("\u00a7aAll detection checks passed.");
             } else {
@@ -175,7 +176,7 @@ public class VerifyProtectCommand extends Command {
         CompoundTag nbt = new CompoundTag();
         nbt.putDouble("AbsorptionAmount", Double.POSITIVE_INFINITY);
         nbt.putString("id", "minecraft:cave_spider");
-        TypedEntityData<EntityType<?>> data = TypedEntityData.of(EntityTypes.CAVE_SPIDER, nbt);
+        TypedEntityData<EntityType<?>> data = TypedEntityData.of(TypeCompat.CAVE_SPIDER, nbt);
         egg.set(DataComponents.ENTITY_DATA, data);
         return egg;
     }
@@ -201,7 +202,7 @@ public class VerifyProtectCommand extends Command {
         CompoundTag particle = new CompoundTag();
         particle.putString("type", "minecraft:elder_guardian");
         nbt.put("Particle", particle);
-        TypedEntityData<EntityType<?>> data = TypedEntityData.of(EntityTypes.CAVE_SPIDER, nbt);
+        TypedEntityData<EntityType<?>> data = TypedEntityData.of(TypeCompat.CAVE_SPIDER, nbt);
         egg.set(DataComponents.ENTITY_DATA, data);
 
         ItemAttributeModifiers.Builder attrs = ItemAttributeModifiers.builder();
@@ -233,7 +234,7 @@ public class VerifyProtectCommand extends Command {
         nbt.putFloat("Health", 20.0f);
         nbt.putBoolean("NoAI", true);
         nbt.putBoolean("Glowing", true);
-        egg.set(DataComponents.ENTITY_DATA, TypedEntityData.of(EntityTypes.ZOMBIE, nbt));
+        egg.set(DataComponents.ENTITY_DATA, TypedEntityData.of(TypeCompat.ZOMBIE, nbt));
         return egg;
     }
 

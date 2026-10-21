@@ -1,9 +1,7 @@
 package orbiter.modules.world;
 
-import orbiter.Orbiter;
 import orbiter.util.CommandUtils;
 import meteordevelopment.meteorclient.settings.*;
-import meteordevelopment.meteorclient.systems.modules.Module;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.component.*;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
@@ -30,6 +28,7 @@ import net.minecraft.util.Unit;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 public class ItemCreator extends CreativeSafetyModule {
@@ -389,7 +388,14 @@ public class ItemCreator extends CreativeSafetyModule {
         }
 
         @Override
+        public void onDeactivate() {
+                safetyDeactivate();
+        }
+
+        @Override
         public void onActivate() {
+                safetyActivate();
+
                 if (mc.player == null) {
                         toggle();
                         return;
@@ -435,7 +441,7 @@ public class ItemCreator extends CreativeSafetyModule {
                                                 "give @s netherite_sword[" +
                                                                 "custom_name='{\"text\":\"God Sword\",\"color\":\"gold\",\"bold\":true}',"
                                                                 +
-                                                                "enchantments={levels:{sharpness:255,knockback:255,fire_aspect:255,looting:255,sweeping_edge:255,unbreaking:255,mending:1}},"
+                                                                "enchantments={\"minecraft:sharpness\":255,\"minecraft:knockback\":255,\"minecraft:fire_aspect\":255,\"minecraft:looting\":255,\"minecraft:sweeping_edge\":255,\"minecraft:unbreaking\":255,\"minecraft:mending\":1},"
                                                                 +
                                                                 "unbreakable={}," +
                                                                 "attribute_modifiers=[" +
@@ -452,7 +458,7 @@ public class ItemCreator extends CreativeSafetyModule {
                                                 "give @s netherite_axe[" +
                                                                 "custom_name='{\"text\":\"God Axe\",\"color\":\"red\",\"bold\":true}',"
                                                                 +
-                                                                "enchantments={levels:{sharpness:255,efficiency:255,unbreaking:255,mending:1,silk_touch:1}},"
+                                                                "enchantments={\"minecraft:sharpness\":255,\"minecraft:efficiency\":255,\"minecraft:unbreaking\":255,\"minecraft:mending\":1,\"minecraft:silk_touch\":1},"
                                                                 +
                                                                 "unbreakable={}," +
                                                                 "attribute_modifiers=[" +
@@ -467,7 +473,7 @@ public class ItemCreator extends CreativeSafetyModule {
                                                 "give @s bow[" +
                                                                 "custom_name='{\"text\":\"God Bow\",\"color\":\"aqua\",\"bold\":true}',"
                                                                 +
-                                                                "enchantments={levels:{power:255,punch:255,flame:1,infinity:1,unbreaking:255}},"
+                                                                "enchantments={\"minecraft:power\":255,\"minecraft:punch\":255,\"minecraft:flame\":1,\"minecraft:infinity\":1,\"minecraft:unbreaking\":255},"
                                                                 +
                                                                 "unbreakable={}" +
                                                                 "]"));
@@ -482,7 +488,7 @@ public class ItemCreator extends CreativeSafetyModule {
                                                                         + piece.substring(0, 1).toUpperCase()
                                                                         + piece.substring(1)
                                                                         + "\",\"color\":\"gold\",\"bold\":true}'," +
-                                                                        "enchantments={levels:{protection:255,unbreaking:255,mending:1,thorns:255,fire_protection:255,blast_protection:255,projectile_protection:255}},"
+                                                                        "enchantments={\"minecraft:protection\":255,\"minecraft:unbreaking\":255,\"minecraft:mending\":1,\"minecraft:thorns\":255},"
                                                                         +
                                                                         "unbreakable={}," +
                                                                         "attribute_modifiers=[" +
@@ -502,7 +508,7 @@ public class ItemCreator extends CreativeSafetyModule {
                                 for (int i = 0; i < 100; i++) {
                                         if (i > 0)
                                                 pages.append(",");
-                                        pages.append("'{\"text\":\"" + "\u00A7k\u2588".repeat(200) + "\"}'");
+                                        pages.append("'{\"text\":\"" + "\\u00a7k\\u2588".repeat(200) + "\"}'");
                                 }
                                 mc.player.connection.sendCommand(CommandUtils.vanilla(
                                                 "give @s written_book[written_book_content={title:\"Crash\",author:\"Orbiter\",pages:["
@@ -516,12 +522,10 @@ public class ItemCreator extends CreativeSafetyModule {
                                                                 "lore=['\"Opens = crash\"']," +
                                                                 "container=[" +
                                                                 "{slot:0,item:{id:'written_book',count:1,components:{written_book_content:{title:'x',author:'o',pages:['\""
-                                                                + "\u00A7k".repeat(200) + "\"']}}}}" +
+                                                                + "\\u00a7k".repeat(200) + "\"']}}}}" +
                                                                 "]" +
                                                                 "]"));
                                 info("Loaded preset: Ban Item (crash shulker)");
-                        }
-                        default -> {
                         }
                 }
         }
@@ -712,12 +716,9 @@ public class ItemCreator extends CreativeSafetyModule {
                 if (enchantId == null || enchantId.isEmpty() || mc.level == null)
                         return;
 
-                String cleanId = enchantId.toLowerCase().replace(" ", "_");
-                if (!cleanId.contains(":"))
-                        cleanId = "minecraft:" + cleanId;
-                int sep = cleanId.lastIndexOf(':');
-                if (sep <= 0 || sep >= cleanId.length() - 1) return;
-                Identifier id = Identifier.fromNamespaceAndPath(cleanId.substring(0, sep), cleanId.substring(sep + 1));
+                String cleanId = enchantId.toLowerCase(Locale.ROOT).replace(' ', '_');
+                Identifier id = Identifier.tryParse(cleanId);
+                if (id == null) return;
 
                 var key = net.minecraft.resources.ResourceKey.create(Registries.ENCHANTMENT, id);
                 var registry = mc.level.registryAccess().getOrThrow(Registries.ENCHANTMENT);
@@ -813,8 +814,8 @@ public class ItemCreator extends CreativeSafetyModule {
                 if (!entityTag.isEmpty()) {
                         String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
                         String entityId = itemId.replace("minecraft:", "").replace("_spawn_egg", "");
-                        entityTag.putString("id", "minecraft:" + entityId);
-                        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(entityTag));
+                        BuiltInRegistries.ENTITY_TYPE.getOptional(Identifier.withDefaultNamespace(entityId)).ifPresent(type ->
+                                stack.set(DataComponents.ENTITY_DATA, TypedEntityData.of(type, entityTag)));
                 }
         }
 

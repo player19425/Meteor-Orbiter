@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(GuiRenderer.class)
 public abstract class DrawContextItemScaleMixin {
-    @WrapMethod(method = "submitBlitFromItemAtlas(Lnet/minecraft/client/renderer/state/gui/GuiItemRenderState;Lnet/minecraft/client/gui/render/GuiItemAtlas$SlotView;)V")
+    @WrapMethod(method = "submitBlitFromItemAtlas(Lnet/minecraft/client/renderer/state/gui/GuiItemRenderState;Lnet/minecraft/client/gui/render/GuiItemAtlas$SlotView;)V", require = 0)
     private void orbiter$scaleItem(GuiItemRenderState state, GuiItemAtlas.SlotView slot, Operation<Void> original) {
         ClientSideThings module = ClientSpoofState.module();
 

@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ClientPacketListener.class)
 public abstract class ServerProtectRecipeBookMixin {
 
-    @Inject(method = "handleRecipeBookAdd", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "handleRecipeBookAdd", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$sanitizeRecipeBook(ClientboundRecipeBookAddPacket packet, CallbackInfo ci) {
         ServerProtect module = ServerProtect.get();
         if (module == null || !module.isActive()) return;

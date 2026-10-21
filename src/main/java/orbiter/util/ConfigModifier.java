@@ -18,14 +18,16 @@ public class ConfigModifier {
 
     public static synchronized ConfigModifier get() {
         if (INSTANCE == null) INSTANCE = new ConfigModifier();
-        if (INSTANCE.stupidModules == null || INSTANCE.wipModules == null || INSTANCE.updateChecker == null) INSTANCE.tryInit();
+        if (INSTANCE.stupidModules == null || INSTANCE.wipModules == null || INSTANCE.updateChecker == null
+                || INSTANCE.updateAuto == null || INSTANCE.updateIgnoredVersion == null) INSTANCE.tryInit();
         return INSTANCE;
     }
 
     private ConfigModifier() {}
 
     @SuppressWarnings("unchecked")
-    private synchronized void tryInit() {        Config config = Config.get();
+    private synchronized void tryInit() {
+        Config config = Config.get();
         if (config == null || config.settings == null) return;
 
         for (SettingGroup group : config.settings.groups) {
@@ -44,7 +46,7 @@ public class ConfigModifier {
         if (updateChecker == null) updateChecker = findBool(sgOrbiter, "update-checker",
             "Check for new Orbiter releases on startup and notify you.", true);
         if (updateAuto == null) updateAuto = findBool(sgOrbiter, "update-auto",
-            "Automatically download and install new Orbiter releases when detected. Requires restart after install.", false);
+            "Installs the new release by itself the moment it is detected.", false);
 
         if (updateIgnoredVersion == null) {
             for (Setting<?> setting : sgOrbiter) {

@@ -1,10 +1,10 @@
 package orbiter.modules.world;
 
-import orbiter.Orbiter;
 import orbiter.util.CommandUtils;
+import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
-import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.level.block.entity.CommandBlockEntity;
 import net.minecraft.network.protocol.game.ServerboundSetCommandBlockPacket;
@@ -23,7 +23,7 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
 
     private final Setting<Integer> amount = sgGeneral.add(new IntSetting.Builder()
             .name("amount")
-            .description("Number of command blocks to place. Commands repeat when there are more blocks than command slots.")
+            .description("How many command blocks to place.")
             .defaultValue(1)
             .min(1)
             .sliderRange(1, 100)
@@ -37,7 +37,7 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
 
     private final Setting<Integer> commandSlots = sgCommands.add(new IntSetting.Builder()
             .name("command-slots")
-            .description("Number of command slots to show. The more slots, the more command blocks get their own command.")
+            .description("Slots to show. Empty slots repeat command-1 on later blocks.")
             .defaultValue(10)
             .min(1)
             .sliderRange(1, 100)
@@ -95,14 +95,13 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
 
     private final Setting<Boolean> chainAutoLink = sgFlags.add(new BoolSetting.Builder()
             .name("chain-auto-link")
-            .description(
-                    "For chain blocks: set first as impulse and rest as chain blocks pointing in the right direction.")
+            .description("First block stays impulse, the rest become chain blocks.")
             .defaultValue(false)
             .build());
 
     private final Setting<Boolean> quickRepeat = sgFlags.add(new BoolSetting.Builder()
             .name("quick-repeat")
-            .description("Convenience: auto-sets block type to Repeat and Always Active on every block placed.")
+            .description("Sets block type to Repeat and Always Active on every block.")
             .defaultValue(false)
             .build());
 
@@ -120,6 +119,8 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
 
     @Override
     public void onActivate() {
+        safetyActivate();
+
         if (mc.player == null) {
             toggle();
             return;
@@ -166,6 +167,8 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
                 return;
             tickCounter = 0;
 
+            if (!GlobalSendLimiter.tryAcquireOne()) return;
+
             BlockPos pos = positions.get(placedCount);
 
             CmdBlockType actualType = blockType.get();
@@ -178,7 +181,7 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
             String blockId = getBlockId(actualType);
             String facingState = getFacingState();
 
-            String cmd = String.format("setblock %d %d %d %s[facing=%s]",
+            String cmd = CommandUtils.formatCommand("setblock %d %d %d %s[facing=%s]",
                     pos.getX(), pos.getY(), pos.getZ(), blockId, facingState);
             mc.player.connection.sendCommand(CommandUtils.vanilla(cmd));
 
@@ -225,6 +228,7 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
 
     @Override
     public void onDeactivate() {
+        safetyDeactivate();
         positions = null;
     }
 
@@ -292,5 +296,14 @@ public class CommandBlockPlacer extends CreativeSafetyModule {
         West,
         Up,
         Down
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        positions = null;
+        placedCount = 0;
+        tickCounter = 0;
+        phase = 0;
+        phaseTickCounter = 0;
     }
 }

@@ -1,6 +1,7 @@
 package orbiter.modules.misc;
 
 import orbiter.Orbiter;
+import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.events.game.OpenScreenEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -12,9 +13,12 @@ import net.minecraft.client.gui.screens.DisconnectedScreen;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
 
 public class SpamPlus extends Module {
+    private static final int MAX_MESSAGE_LENGTH = 256;
+
     private final SettingGroup sgGeneral = settings.createGroup("General");
     private final SettingGroup sgBypass = settings.createGroup("Bypass");
     private final SettingGroup sgSplit = settings.createGroup("Split");
@@ -59,7 +63,7 @@ public class SpamPlus extends Module {
 
     private final Setting<String> commandPrefix = sgGeneral.add(new StringSetting.Builder()
         .name("command-prefix")
-        .description("If set, every message is sent as <prefix><message> (e.g. '/msg bob ' to private message, '/team chat ' to use team chat). Kept raw, spaces allowed.")
+        .description("Sent before every message, for example '/msg bob '.")
         .defaultValue("")
         .build()
     );
@@ -293,11 +297,10 @@ public class SpamPlus extends Module {
     }
 
     private void tickNormal() {
+        if (orderedMessages.isEmpty()) rebuildOrderedMessages();
         if (orderedMessages.isEmpty()) return;
 
-        String msg = getNextMessage();
-        sendMessage(msg);
-        timer = nextDelay();
+        if (!sendMessage(getNextMessage())) timer = nextDelay();
     }
 
     private void tickStupid() {
@@ -315,18 +318,18 @@ public class SpamPlus extends Module {
             for (int i = 0; i < repeat; i++) {
                 sb.append(current);
                 if (i < repeat - 1) sb.append(' ');
-                if (sb.length() > 256) break;
+                if (sb.length() > MAX_MESSAGE_LENGTH) break;
             }
             current = sb.toString();
-            if (current.length() > 256) {
-                int cut = 256;
+            if (current.length() > MAX_MESSAGE_LENGTH) {
+                int cut = MAX_MESSAGE_LENGTH;
                 if (Character.isHighSurrogate(current.charAt(cut - 1))) cut--;
                 current = current.substring(0, cut);
                 break;
             }
         }
 
-        sendMessage(current);
+        if (!sendMessage(current)) timer = nextDelay();
 
         if (stupidExpand.get()) {
             stupidStep++;
@@ -339,39 +342,36 @@ public class SpamPlus extends Module {
             stupidStep = 0;
             advanceMessage();
         }
-
-        timer = nextDelay();
     }
 
     private void tickLadder() {
         if (orderedMessages.isEmpty()) return;
 
         String base = orderedMessages.get(messageIndex);
-        String suffix = ladderChar.get().repeat(ladderIndex);
-        String msg = base + suffix;
+        String msg = base + ladderChar.get().repeat(ladderIndex);
 
-        if (ladderSeparate.get()) {
-            sendMessage(msg);
-        }
+        boolean splitStarted = false;
+        if (ladderSeparate.get()) splitStarted = sendMessage(msg);
 
         ladderIndex++;
 
         if (ladderIndex >= ladderCount.get()) {
-
-            if (!ladderSeparate.get()) {
-                StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < ladderCount.get(); i++) {
-                    sb.append(base).append(ladderChar.get().repeat(i));
-                    if (i < ladderCount.get() - 1) sb.append("\n");
-                }
-                sendMessage(sb.toString());
-            }
-
+            if (!ladderSeparate.get()) splitStarted = sendMessage(joinLadderSteps(base));
             ladderIndex = 0;
             advanceMessage();
         }
 
-        timer = nextDelay();
+        if (!splitStarted) timer = nextDelay();
+    }
+
+    private String joinLadderSteps(String base) {
+        int count = ladderCount.get();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < count; i++) {
+            sb.append(base).append(ladderChar.get().repeat(i));
+            if (i < count - 1) sb.append("\n");
+        }
+        return sb.toString();
     }
 
     private String getNextMessage() {
@@ -403,20 +403,19 @@ public class SpamPlus extends Module {
         if (random.get()) Collections.shuffle(orderedMessages, rng);
     }
 
-    private void sendMessage(String msg) {
-        if (mc.player == null || mc.getConnection() == null) return;
-
+    private boolean sendMessage(String msg) {
         if (commandPrefix.get() != null && !commandPrefix.get().isEmpty()) msg = commandPrefix.get() + msg;
         if (messageSuffix.get() != null && !messageSuffix.get().isEmpty()) msg = msg + messageSuffix.get();
-        if (uppercase.get()) msg = msg.toUpperCase();
+        if (uppercase.get()) msg = msg.toUpperCase(Locale.ROOT);
         if (bypass.get()) msg = msg + " " + randomBypassSuffix();
 
         if (autoSplit.get() && msg.length() > splitLength.get()) {
             startSplit(msg);
-        } else {
-            if (msg.length() > 256) msg = msg.substring(0, 256);
-            ChatUtils.sendPlayerMsg(msg, false);
+            return true;
         }
+
+        sendNow(msg);
+        return false;
     }
 
     private void startSplit(String msg) {
@@ -428,23 +427,34 @@ public class SpamPlus extends Module {
     private void sendSplitPart() {
         if (pendingSplitText == null) return;
 
-        int start = splitNum * splitLength.get();
-        int end = Math.min(start + splitLength.get(), pendingSplitText.length());
-        String part = pendingSplitText.substring(start, end);
+        int chunk = Math.min(splitLength.get(), MAX_MESSAGE_LENGTH);
+        int start = splitNum * chunk;
+        int end = Math.min(start + chunk, pendingSplitText.length());
+        int totalParts = (int) Math.ceil((double) pendingSplitText.length() / chunk);
 
-        ChatUtils.sendPlayerMsg(part, false);
+        if (start < end && !sendNow(pendingSplitText.substring(start, end))) {
+            timer = 1;
+            return;
+        }
 
         splitNum++;
-        int totalParts = (int) Math.ceil((double) pendingSplitText.length() / splitLength.get());
 
         if (splitNum >= totalParts) {
-
             pendingSplitText = null;
             splitNum = 0;
             timer = nextDelay();
         } else {
             timer = splitDelay.get();
         }
+    }
+
+    private boolean sendNow(String msg) {
+        if (mc.player == null || mc.getConnection() == null) return false;
+        if (msg.length() > MAX_MESSAGE_LENGTH) msg = msg.substring(0, MAX_MESSAGE_LENGTH);
+        if (!GlobalSendLimiter.tryAcquireOne()) return false;
+
+        ChatUtils.sendPlayerMsg(msg, false);
+        return true;
     }
 
     private int nextDelay() {

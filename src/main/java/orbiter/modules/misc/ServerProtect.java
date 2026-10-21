@@ -2,6 +2,8 @@ package orbiter.modules.misc;
 
 import orbiter.mixin.ServerProtectCommandTreeAccessor;
 import orbiter.Orbiter;
+import orbiter.compat.ItemCompat;
+import orbiter.compat.PacketCompat;
 import meteordevelopment.meteorclient.events.game.SendMessageEvent;
 import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.meteorclient.utils.world.TickRate;
@@ -13,7 +15,7 @@ import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EntityTypes;
+import orbiter.compat.TypeCompat;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.player.Player;
@@ -38,11 +40,11 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ServerProtect extends Module {
@@ -144,7 +146,7 @@ public class ServerProtect extends Module {
 
     private final Setting<Boolean> sanitizeNames = sgItems.add(new BoolSetting.Builder()
         .name("sanitize-names")
-        .description("Inspect custom names too (not just lore) for nested translate bombs and obfuscation abuse.")
+        .description("Custom names get the same translate and obfuscation checks as lore.")
         .defaultValue(true)
         .visible(sanitizeItems::get)
         .build());
@@ -160,8 +162,7 @@ public class ServerProtect extends Module {
 
     private final Setting<Boolean> stripEntityData = sgItems.add(new BoolSetting.Builder()
         .name("legacy-remove-malicious-entity-data")
-        .description("Legacy destructive fallback. Removes entity/block data only after it fails the malicious NBT scanner. "
-            + "Disabled by default because custom spawn eggs legitimately use entity_data.")
+        .description("Destructive fallback: drop entity data the NBT scanner flags.")
         .defaultValue(false)
         .visible(sanitizeItems::get)
         .build());
@@ -180,14 +181,13 @@ public class ServerProtect extends Module {
 
     private final Setting<Boolean> packetItemGuard = sgItems.add(new BoolSetting.Builder()
         .name("packet-item-guard")
-        .description("Scan incoming screen-handler slot packets for crash items before the client accepts them.")
+        .description("Scan incoming slot packets for crash items before showing them.")
         .defaultValue(true)
         .build());
 
     private final Setting<Integer> maxTextDepth = sgItems.add(new IntSetting.Builder()
         .name("max-text-depth")
-        .description("Maximum nesting depth of translated Component (with/extra siblings). "
-            + "Nested translate bombs crash the client by expanding exponentially.")
+        .description("Nesting depth limit for translated text and extra siblings.")
         .defaultValue(32)
         .min(4)
         .sliderRange(4, 256)
@@ -196,7 +196,7 @@ public class ServerProtect extends Module {
 
     private final Setting<Integer> maxTranslateExpansion = sgItems.add(new IntSetting.Builder()
         .name("max-translate-expansion")
-        .description("Maximum combined number of %s placeholder repetitions allowed across nested translates.")
+        .description("Total %s placeholders allowed across nested translates.")
         .defaultValue(32)
         .min(8)
         .sliderRange(8, 4096)
@@ -271,7 +271,7 @@ public class ServerProtect extends Module {
 
     private final Setting<Integer> maxSpawnsPerTick = sgEntities.add(new IntSetting.Builder()
         .name("max-entity-spawns-per-tick")
-        .description("Maximum entity spawn packets per tick. Higher values let entity spam through before cleanup.")
+        .description("Entity spawn packets accepted per tick. Higher lets more spam through.")
         .defaultValue(20)
         .min(5)
         .sliderRange(5, 200)
@@ -280,7 +280,7 @@ public class ServerProtect extends Module {
 
     private final Setting<Integer> maxAreaEffectCloud = sgEntities.add(new IntSetting.Builder()
         .name("max-area-effect-cloud")
-        .description("Maximum area_effect_cloud entities allowed in the world. Crashers use these with Radius:Infinity. Elder guardian and lingering potion clouds are legit, so they only get cancelled past this limit.")
+        .description("area_effect_cloud entities kept locally, guardian and potion clouds included.")
         .defaultValue(10)
         .min(1)
         .sliderRange(1, 50)
@@ -321,7 +321,7 @@ public class ServerProtect extends Module {
 
     private final Setting<Boolean> blockBadEffects = sgSpam.add(new BoolSetting.Builder()
         .name("block-mining-fatigue-and-darkness")
-        .description("Cancel mining fatigue and darkness effect packets. Off by default because elder guardians and wardens apply both legitimately.")
+        .description("Cancel mining fatigue and darkness, which guardians and wardens apply too.")
         .defaultValue(false)
         .build());
 
@@ -362,7 +362,7 @@ public class ServerProtect extends Module {
 
     private final Setting<Boolean> blockLargeChat = sgOthers.add(new BoolSetting.Builder()
         .name("block-large-incoming-chat")
-        .description("Block incoming chat/tellraw messages over the char limit. Scans for translate bombs before resolving text.")
+        .description("Drop incoming chat over the length limit or with translate bombs.")
         .defaultValue(true)
         .build());
 
@@ -439,13 +439,13 @@ public class ServerProtect extends Module {
 
     private final Setting<Boolean> dialogEmergencyButton = sgDialogs.add(new BoolSetting.Builder()
         .name("dialog-emergency-button")
-        .description("Add a local close button that suppresses all dialogs temporarily without firing server actions.")
+        .description("Adds a close button that drops later dialogs without firing any action.")
         .defaultValue(true)
         .build());
 
     private final Setting<Integer> dialogSuppressMinutes = sgDialogs.add(new IntSetting.Builder()
         .name("dialog-suppress-minutes")
-        .description("Minutes the emergency button suppresses new dialogs. Disconnecting resets it immediately.")
+        .description("Minutes the close button blocks dialogs. Disconnect resets it.")
         .defaultValue(15)
         .min(1)
         .sliderRange(1, 60)
@@ -454,7 +454,7 @@ public class ServerProtect extends Module {
 
     private final Setting<Boolean> guardCommandTree = sgAdv.add(new BoolSetting.Builder()
         .name("command-tree-guard")
-        .description("Cancel command-tree packets that are absurdly large/deep. DISABLED by default because Paper servers with many plugins legitimately have 30k+ nodes.")
+        .description("Cancel huge command trees. Off by default, plugin servers have 30k+ nodes.")
         .defaultValue(false)
         .build());
 
@@ -469,7 +469,7 @@ public class ServerProtect extends Module {
 
     private final Setting<Boolean> guardEntityNames = sgAdv.add(new BoolSetting.Builder()
         .name("entity-name-guard")
-        .description("Sanitize translate bombs / excessive text in any entity custom name (not just armor stands).")
+        .description("Block translate bombs and oversized text in any entity name.")
         .defaultValue(true)
         .build());
 
@@ -481,7 +481,7 @@ public class ServerProtect extends Module {
 
     private final Setting<Boolean> guardTeams = sgAdv.add(new BoolSetting.Builder()
         .name("team-scoreboard-guard")
-        .description("Sanitize translate bombs in team prefix/suffix and scoreboard objective display names.")
+        .description("Block translate bombs in team names and objective display names.")
         .defaultValue(true)
         .build());
 
@@ -511,7 +511,7 @@ public class ServerProtect extends Module {
 
     private final Setting<Boolean> guardSigns = sgAdv.add(new BoolSetting.Builder()
         .name("sign-content-guard")
-        .description("Sanitize sign block-entity updates that carry translate bombs in front/back text.")
+        .description("Block translate bombs in sign front/back text.")
         .defaultValue(true)
         .build());
 
@@ -562,20 +562,20 @@ public class ServerProtect extends Module {
     private int chatCountThisTick;
     private int titleCountThisSecond;
     private long lastTitleResetTime;
-    private final Set<UUID> bossBarIds = new HashSet<>();
+    private final Set<UUID> bossBarIds = ConcurrentHashMap.newKeySet();
     private long lastBossBarSweep;
     private int mapUpdateCountThisTick;
     private volatile int itemEntityCount;
     private final AtomicInteger entitySpawnsThisTick = new AtomicInteger();
-    private final Map<EntityType<?>, Integer> entityTypeCounts = new HashMap<>();
+    private final Map<EntityType<?>, Integer> entityTypeCounts = new ConcurrentHashMap<>();
 
     private final AtomicInteger blockedCountThisTick = new AtomicInteger();
-    private long lastBlockedTick;
+    private volatile long lastBlockedTick;
     private int lowFpsTicks;
     private int lowTpsTicks;
     private int highEntityTicks;
     private long lastCheckerActionTick;
-    private long lastNotificationTick;
+    private volatile long lastNotificationTick;
 
     private static volatile long dialogsSuppressedUntilMs;
 
@@ -591,6 +591,7 @@ public class ServerProtect extends Module {
         titleCountThisSecond = 0;
         lastTitleResetTime = System.currentTimeMillis();
         bossBarIds.clear();
+        lastBossBarSweep = 0;
         itemEntityCount = 0;
         entityTypeCounts.clear();
         blockedCountThisTick.set(0);
@@ -606,6 +607,7 @@ public class ServerProtect extends Module {
     @Override
     public void onDeactivate() {
         bossBarIds.clear();
+        lastBossBarSweep = 0;
         itemEntityCount = 0;
         entityTypeCounts.clear();
     }
@@ -705,7 +707,11 @@ public class ServerProtect extends Module {
         }
 
         if (checkPosition.get() && event.packet instanceof ClientboundPlayerPositionPacket pkt) {
-            if (!isValidPosition(pkt)) { event.cancel(); return; }
+            if (!isValidPosition(pkt)) {
+                if (mc.player.connection != null) PacketCompat.acceptTeleport(mc.player.connection, mc.player, pkt.id());
+                event.cancel();
+                return;
+            }
         }
 
         if (soundLimit.get() && event.packet instanceof ClientboundSoundPacket) {
@@ -737,8 +743,8 @@ public class ServerProtect extends Module {
                 if (removed[0]) {
                     bossBarIds.remove(barId);
                 } else if (!bossBarIds.contains(barId)) {
-                    if (bossBarIds.size() >= Math.max(1, maxBossBars.get())) {
-                        notifyBlocked("boss bar limit of " + Math.max(1, maxBossBars.get()) + " reached");
+                    if (bossBarIds.size() >= maxBossBars.get()) {
+                        notifyBlocked("boss bar limit of " + maxBossBars.get() + " reached");
                         event.cancel();
                         return;
                     }
@@ -759,44 +765,29 @@ public class ServerProtect extends Module {
             }
         }
 
-        if (hideScoreboard.get() && event.packet instanceof net.minecraft.network.protocol.game.ClientboundSetDisplayObjectivePacket) {
-            event.cancel();
-            return;
+        if (hideScoreboard.get() && event.packet instanceof ClientboundSetDisplayObjectivePacket pkt) {
+            if (!pkt.getObjectiveName().isEmpty()) {
+                event.cancel();
+                return;
+            }
         }
 
         if (blockLargeChat.get()) {
-            if (event.packet instanceof ClientboundSystemChatPacket || event.packet instanceof ClientboundPlayerChatPacket) {
+            Component chatContent = null;
+            if (event.packet instanceof ClientboundSystemChatPacket sysChat) chatContent = sysChat.content();
+            else if (event.packet instanceof ClientboundDisguisedChatPacket disguised) chatContent = disguised.message();
+
+            if (chatContent != null) {
                 chatCountThisTick++;
                 if (chatCountThisTick > maxChatsPerTick.get()) {
                     notifyProtection("Chat rate limit triggered.");
                     event.cancel();
                     return;
                 }
-            }
-
-            if (event.packet instanceof net.minecraft.network.protocol.game.ClientboundSystemChatPacket pkt) {
-                String raw = pkt.content().getString();
-                if (raw.length() > maxIncomingChatLength.get()) {
-                    event.cancel(); return;
-                }
-                if (raw.length() > 500 && isAbusiveText(pkt.content())) {
-                    event.cancel(); return;
-                }
-            }
-            if (event.packet instanceof net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket pkt) {
-                String raw = pkt.message().getString();
-                if (raw.length() > maxIncomingChatLength.get()) {
-                    event.cancel(); return;
-                }
-                if (raw.length() > 500 && isAbusiveText(pkt.message())) {
-                    event.cancel(); return;
-                }
-            }
-
-            if (event.packet instanceof net.minecraft.network.protocol.game.ClientboundPlayerChatPacket pkt) {
-                net.minecraft.network.chat.Component unsigned = pkt.unsignedContent();
-                if (unsigned != null && isAbusiveText(unsigned)) {
-                    event.cancel(); return;
+                String raw = chatContent.getString();
+                if (raw.length() > maxIncomingChatLength.get() || (raw.length() > 500 && isAbusiveText(chatContent))) {
+                    event.cancel();
+                    return;
                 }
             }
         }
@@ -815,7 +806,6 @@ public class ServerProtect extends Module {
         if (shouldPacketItemGuard() && event.packet instanceof ClientboundContainerSetSlotPacket pkt) {
             ItemStack stack = pkt.getItem();
             if (stack != null && !stack.isEmpty() && isMaliciousItem(stack)) {
-
                 notifyBlocked("safe local view for slot " + pkt.getSlot());
             }
         }
@@ -837,41 +827,33 @@ public class ServerProtect extends Module {
             EntityType<?> type = pkt.getType();
             int spawns = entitySpawnsThisTick.incrementAndGet();
 
-            if (spawns > 100) {
+            if (entityLimit.get() && spawns > maxSpawnsPerTick.get()) {
                 event.cancel();
                 return;
             }
 
-            if (type == EntityTypes.AREA_EFFECT_CLOUD && entityLimit.get()) {
-                int current = entityTypeCounts.getOrDefault(EntityTypes.AREA_EFFECT_CLOUD, 0);
-                if (current >= Math.max(1, maxAreaEffectCloud.get())) {
+            if (entityLimit.get() && type == TypeCompat.AREA_EFFECT_CLOUD) {
+                int current = entityTypeCounts.getOrDefault(TypeCompat.AREA_EFFECT_CLOUD, 0);
+                if (current >= maxAreaEffectCloud.get()) {
                     notifyBlocked("area effect cloud limit of " + maxAreaEffectCloud.get() + " reached");
                     event.cancel();
                     return;
                 }
             }
 
-            if (entityLimit.get() && spawns > maxSpawnsPerTick.get()) {
-                event.cancel();
-                return;
-            }
-
-            if (entityLimit.get()) {
-                if (limitTnt.get() && type == EntityTypes.TNT) {
-                    int current = entityTypeCounts.getOrDefault(EntityTypes.TNT, 0);
-                    if (current >= maxTnt.get()) { event.cancel(); return; }
-                }
+            if (entityLimit.get() && limitTnt.get() && type == TypeCompat.TNT) {
+                int current = entityTypeCounts.getOrDefault(TypeCompat.TNT, 0);
+                if (current >= maxTnt.get()) { event.cancel(); return; }
             }
         }
 
         if (floorItemLimit.get() && event.packet instanceof ClientboundAddEntityPacket pkt) {
-            if (pkt.getType() == EntityTypes.ITEM) {
+            if (pkt.getType() == TypeCompat.ITEM) {
                 if (itemEntityCount >= maxFloorItems.get()) { event.cancel(); return; }
             }
         }
 
         if (guardCommandTree.get() && event.packet instanceof ClientboundCommandsPacket pkt) {
-
             ServerProtectCommandTreeAccessor acc = (ServerProtectCommandTreeAccessor) pkt;
             if (acc.orbiter$getEntries() != null && acc.orbiter$getEntries().size() > maxCommandNodes.get()) {
                 notifyBlocked("oversized command tree (" + acc.orbiter$getEntries().size() + " nodes)");
@@ -890,9 +872,9 @@ public class ServerProtect extends Module {
         if (guardTeams.get() && event.packet instanceof ClientboundSetPlayerTeamPacket pkt) {
             if (pkt.getParameters().isPresent()) {
                 ClientboundSetPlayerTeamPacket.Parameters team = pkt.getParameters().get();
-                if (isAbusiveText(team.displayName())
-                    || isAbusiveText(team.playerPrefix())
-                    || isAbusiveText(team.playerSuffix())) {
+                if (isAbusiveText(PacketCompat.teamDisplayName(team))
+                    || isAbusiveText(PacketCompat.teamPlayerPrefix(team))
+                    || isAbusiveText(PacketCompat.teamPlayerSuffix(team))) {
                     event.cancel();
                     return;
                 }
@@ -925,8 +907,8 @@ public class ServerProtect extends Module {
         }
 
         if (guardSigns.get() && event.packet instanceof ClientboundBlockEntityDataPacket pkt) {
-            if (pkt.getType() == net.minecraft.world.level.block.entity.BlockEntityTypes.SIGN
-                || pkt.getType() == net.minecraft.world.level.block.entity.BlockEntityTypes.HANGING_SIGN) {
+            if (pkt.getType() == TypeCompat.SIGN
+                || pkt.getType() == TypeCompat.HANGING_SIGN) {
                 CompoundTag nbt = pkt.getTag();
                 if (nbt != null && (hasMaliciousSignText(nbt, "front_text") || hasMaliciousSignText(nbt, "back_text"))) {
                     event.cancel();
@@ -946,7 +928,6 @@ public class ServerProtect extends Module {
             net.minecraft.world.item.trading.MerchantOffers offers = pkt.getOffers();
             if (offers != null) {
                 for (net.minecraft.world.item.trading.MerchantOffer offer : offers) {
-
                     if (isMaliciousItem(offer.getResult())) {
                         event.cancel();
                         return;
@@ -968,7 +949,6 @@ public class ServerProtect extends Module {
         if (guardPlayerList.get() && event.packet instanceof ClientboundPlayerInfoUpdatePacket pkt) {
             for (ClientboundPlayerInfoUpdatePacket.Entry entry : pkt.entries()) {
                 if (entry.displayName() != null && isAbusiveText(entry.displayName())) {
-
                     event.cancel();
                     return;
                 }
@@ -986,18 +966,15 @@ public class ServerProtect extends Module {
                     event.cancel();
                     return;
                 }
-
                 if (val instanceof Float f && (!Float.isFinite(f) || Math.abs(f) > 1e9)) {
                     event.cancel();
                     return;
                 }
-
                 if (val instanceof Double d && (!Double.isFinite(d) || Math.abs(d) > 1e9)) {
                     event.cancel();
                     return;
                 }
-
-                if (val instanceof Integer i && (Math.abs(i) > 1e9)) {
+                if (val instanceof Integer i && Math.abs((long) i) > 1e9) {
                     event.cancel();
                     return;
                 }
@@ -1023,7 +1000,7 @@ public class ServerProtect extends Module {
         entitySpawnsThisTick.set(0);
 
         long gameTime = mc.level.getGameTime();
-        if (gameTime - lastBossBarSweep >= 600) {
+        if (gameTime < lastBossBarSweep || gameTime - lastBossBarSweep >= 600) {
             bossBarIds.clear();
             lastBossBarSweep = gameTime;
         }
@@ -1051,32 +1028,26 @@ public class ServerProtect extends Module {
 
         if (entityLimit.get()) tickEntityLimiting(perType, allEntities);
         tickHealthCheckers(allEntities.size());
-
     }
 
     private void tickEntityLimiting(Map<EntityType<?>, List<Entity>> perType, List<Entity> allEntities) {
         List<Entity> invalid = new ArrayList<>();
-        List<Entity> nonPlayers = new ArrayList<>();
+        List<Entity> valid = new ArrayList<>();
         for (Entity entity : allEntities) {
             if (entity instanceof Player) continue;
-            nonPlayers.add(entity);
-            if (!isValidClientEntity(entity)) invalid.add(entity);
+            if (isValidClientEntity(entity)) valid.add(entity);
+            else invalid.add(entity);
         }
         for (Entity entity : invalid) entity.discard();
 
-        int totalExcess = nonPlayers.size() - invalid.size() - maxTotalEntities.get();
+        int totalExcess = valid.size() - maxTotalEntities.get();
         if (totalExcess > 0) {
-            Collections.shuffle(nonPlayers);
-            for (Entity entity : nonPlayers) {
-                if (totalExcess <= 0) break;
-                if (invalid.contains(entity) || entity instanceof Player) continue;
-                entity.discard();
-                totalExcess--;
-            }
+            Collections.shuffle(valid);
+            for (int i = 0; i < totalExcess; i++) valid.get(i).discard();
             notifyProtection("Local entity limit triggered.");
         }
         if (limitTnt.get()) {
-            List<Entity> tntList = perType.getOrDefault(EntityTypes.TNT, List.of());
+            List<Entity> tntList = perType.getOrDefault(TypeCompat.TNT, List.of());
             int excess = tntList.size() - maxTnt.get();
             if (excess > 0) {
                 Collections.shuffle(tntList);
@@ -1172,14 +1143,16 @@ public class ServerProtect extends Module {
     }
 
     private boolean isValidParticle(ClientboundLevelParticlesPacket pkt) {
-        if (pkt.getCount() < 0 || pkt.getCount() > maxParticleCount.get()) return false;
+        if (PacketCompat.particleCount(pkt) < 0 || PacketCompat.particleCount(pkt) > maxParticleCount.get()) return false;
         double max = maxWorldPos.get();
-        if (!isFinite(pkt.getX()) || !isFinite(pkt.getY()) || !isFinite(pkt.getZ())) return false;
-        if (Math.abs(pkt.getX()) > max || Math.abs(pkt.getY()) > max || Math.abs(pkt.getZ()) > max) return false;
+        if (!isFinite(PacketCompat.particleX(pkt)) || !isFinite(PacketCompat.particleY(pkt)) || !isFinite(PacketCompat.particleZ(pkt))) return false;
+        if (Math.abs(PacketCompat.particleX(pkt)) > max || Math.abs(PacketCompat.particleY(pkt)) > max || Math.abs(PacketCompat.particleZ(pkt)) > max) return false;
         double speed = maxParticleSpeed.get();
-        return isFinite(pkt.getXDist()) && isFinite(pkt.getYDist()) && isFinite(pkt.getZDist()) && isFinite(pkt.getMaxSpeed())
-            && Math.abs(pkt.getXDist()) <= speed && Math.abs(pkt.getYDist()) <= speed
-            && Math.abs(pkt.getZDist()) <= speed && Math.abs(pkt.getMaxSpeed()) <= speed;
+        return isFinite(PacketCompat.particleXDist(pkt)) && isFinite(PacketCompat.particleYDist(pkt)) && isFinite(PacketCompat.particleZDist(pkt))
+            && isFinite(PacketCompat.particleXMaxSpeed(pkt)) && isFinite(PacketCompat.particleYMaxSpeed(pkt)) && isFinite(PacketCompat.particleZMaxSpeed(pkt))
+            && Math.abs(PacketCompat.particleXDist(pkt)) <= speed && Math.abs(PacketCompat.particleYDist(pkt)) <= speed
+            && Math.abs(PacketCompat.particleZDist(pkt)) <= speed && Math.abs(PacketCompat.particleXMaxSpeed(pkt)) <= speed
+            && Math.abs(PacketCompat.particleYMaxSpeed(pkt)) <= speed && Math.abs(PacketCompat.particleZMaxSpeed(pkt)) <= speed;
     }
 
     private boolean isValidPosition(ClientboundPlayerPositionPacket pkt) {
@@ -1235,7 +1208,7 @@ public class ServerProtect extends Module {
         .name("max-particles-per-packet").description("Max particles per single packet.").defaultValue(128).min(10).sliderRange(10, 1000).build());
 
     private final Setting<Boolean> soundThrottle = sgCrashFixer.add(new BoolSetting.Builder()
-        .name("sound-throttle").description("4-layer sound spam throttle (per-tick, per-window, per-ID, per-category).").defaultValue(true).build());
+        .name("sound-throttle").description("Sound spam throttle (per-tick, per-window, per-ID, per-category).").defaultValue(true).build());
     private final Setting<Integer> soundMaxPerTick = sgCrashFixer.add(new IntSetting.Builder()
         .name("sound-max-per-tick").defaultValue(256).min(10).sliderRange(10, 1000).build());
     private final Setting<Integer> soundMaxBlocksPerTick = sgCrashFixer.add(new IntSetting.Builder()
@@ -1265,7 +1238,7 @@ public class ServerProtect extends Module {
         .name("translation-max-expanded-chars").defaultValue(4096).min(256).sliderRange(256, 50000).build());
 
     private final Setting<Boolean> entityNameSanitizer = sgCrashFixer.add(new BoolSetting.Builder()
-        .name("entity-name-sanitizer").description("Advanced local fallback for structurally malicious entity names. Disabled to preserve plugin holograms.").defaultValue(false).build());
+        .name("entity-name-sanitizer").description("Replaces entity names the checks reject, which kills plugin holograms.").defaultValue(false).build());
     private final Setting<Integer> nameMaxChars = sgCrashFixer.add(new IntSetting.Builder()
         .name("name-max-chars").defaultValue(96).min(16).sliderRange(16, 1000).build());
     private final Setting<Integer> nameMaxNodes = sgCrashFixer.add(new IntSetting.Builder()
@@ -1280,7 +1253,7 @@ public class ServerProtect extends Module {
         .name("name-max-complex-nodes").defaultValue(8).min(1).sliderRange(1, 100).build());
 
     private final Setting<Boolean> textDisplaySanitizer = sgCrashFixer.add(new BoolSetting.Builder()
-        .name("text-display-sanitizer").description("Advanced local fallback for structurally malicious text displays. Disabled to preserve plugin holograms.").defaultValue(false).build());
+        .name("text-display-sanitizer").description("Replaces text display content the checks reject, which kills holograms.").defaultValue(false).build());
     private final Setting<Integer> textDisplayMaxChars = sgCrashFixer.add(new IntSetting.Builder()
         .name("textdisplay-max-chars").defaultValue(2048).min(64).sliderRange(64, 20000).build());
     private final Setting<Integer> textDisplayMaxNodes = sgCrashFixer.add(new IntSetting.Builder()
@@ -1392,16 +1365,15 @@ public class ServerProtect extends Module {
         net.minecraft.world.item.component.WritableBookContent writable = stack.get(DataComponents.WRITABLE_BOOK_CONTENT);
         if (writable != null && writable.pages() != null) {
             for (var page : writable.pages()) {
-
-                String s = page.raw();
-                if (s != null && (countFormatArgs(s) > 0 || s.length() > 800)) return true;
+                String text = page.raw();
+                if (text != null && (countFormatArgs(text) > 0 || text.length() > 800)) return true;
             }
         }
 
         if (depth < 4) {
             BundleContents bundle = stack.get(DataComponents.BUNDLE_CONTENTS);
             if (bundle != null && !bundle.isEmpty()) {
-                for (ItemStack inner : bundle.itemCopyStream().toList()) {
+                for (ItemStack inner : ItemCompat.bundleCopies(bundle)) {
                     if (isMaliciousItem(inner, depth + 1, visited, nodes)) return true;
                 }
             }
@@ -1413,7 +1385,7 @@ public class ServerProtect extends Module {
             }
             ChargedProjectiles projectiles = stack.get(DataComponents.CHARGED_PROJECTILES);
             if (projectiles != null && !projectiles.isEmpty()) {
-                for (ItemStack inner : projectiles.itemCopies()) {
+                for (ItemStack inner : ItemCompat.chargedProjectiles(projectiles)) {
                     if (isMaliciousItem(inner, depth + 1, visited, nodes)) return true;
                 }
             }
@@ -1429,14 +1401,15 @@ public class ServerProtect extends Module {
     }
 
     public static boolean isAbusiveText(Component text) {
-        return isAbusiveText(text, 0, new int[]{0});
-    }
-
-    private static boolean isAbusiveText(Component text, int depth, int[] expansion) {
         if (text == null) return false;
         ServerProtect mod = ServerProtect.get();
-        int maxDepth = (mod != null) ? mod.getMaxTextDepth() : 32;
-        int maxExp = (mod != null) ? mod.getMaxTranslateExpansion() : 32;
+        int maxDepth = mod != null ? mod.getMaxTextDepth() : 32;
+        int maxExpansion = mod != null ? mod.getMaxTranslateExpansion() : 32;
+        return isAbusiveText(text, 0, new int[]{0}, maxDepth, maxExpansion);
+    }
+
+    private static boolean isAbusiveText(Component text, int depth, int[] expansion, int maxDepth, int maxExp) {
+        if (text == null) return false;
         if (depth > maxDepth) return true;
 
         if (text.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents tc) {
@@ -1449,7 +1422,7 @@ public class ServerProtect extends Module {
             if (args != null) {
                 for (Object arg : args) {
                     if (arg instanceof Component argText) {
-                        if (isAbusiveText(argText, depth + 1, expansion)) return true;
+                        if (isAbusiveText(argText, depth + 1, expansion, maxDepth, maxExp)) return true;
                     } else if (arg instanceof String s) {
                         int sub = countFormatArgs(s);
                         if (sub > 0) {
@@ -1467,20 +1440,21 @@ public class ServerProtect extends Module {
         net.minecraft.network.chat.Style style = text.getStyle();
         if (style != null) {
             net.minecraft.network.chat.HoverEvent hover = style.getHoverEvent();
-            if (hover != null && isAbusiveHover(hover, depth, expansion)) return true;
+            if (hover != null && isAbusiveHover(hover, depth, expansion, maxDepth, maxExp)) return true;
         }
 
         if (text.getSiblings() != null) {
             for (Component sib : text.getSiblings()) {
-                if (isAbusiveText(sib, depth + 1, expansion)) return true;
+                if (isAbusiveText(sib, depth + 1, expansion, maxDepth, maxExp)) return true;
             }
         }
         return false;
     }
 
-    private static boolean isAbusiveHover(net.minecraft.network.chat.HoverEvent hover, int depth, int[] expansion) {
+    private static boolean isAbusiveHover(net.minecraft.network.chat.HoverEvent hover, int depth, int[] expansion,
+                                          int maxDepth, int maxExp) {
         if (hover instanceof net.minecraft.network.chat.HoverEvent.ShowText st) {
-            if (isAbusiveText(st.value(), depth + 1, expansion)) return true;
+            if (isAbusiveText(st.value(), depth + 1, expansion, maxDepth, maxExp)) return true;
         } else if (hover instanceof net.minecraft.network.chat.HoverEvent.ShowItem si) {
             if (isMaliciousItem(si.item().create(), depth + 1,
                 java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>()), new int[]{0})) return true;
@@ -1489,7 +1463,7 @@ public class ServerProtect extends Module {
         if (hover instanceof net.minecraft.network.chat.HoverEvent.ShowEntity se) {
             net.minecraft.network.chat.HoverEvent.EntityTooltipInfo ec = se.entity();
             if (ec != null && ec.name != null && ec.name.isPresent()
-                && isAbusiveText(ec.name.get(), depth + 1, expansion)) return true;
+                && isAbusiveText(ec.name.get(), depth + 1, expansion, maxDepth, maxExp)) return true;
         }
         return false;
     }
@@ -1551,7 +1525,6 @@ public class ServerProtect extends Module {
                 if (key.equals("id") && child instanceof net.minecraft.nbt.StringTag ns) {
                     String v = ns.asString().orElse("");
                     if (v.equals("minecraft:ender_dragon")) {
-
                         expansion[0] += 64;
                         if (expansion[0] > 256) return true;
                     }
@@ -1570,16 +1543,13 @@ public class ServerProtect extends Module {
             }
         } else if (el instanceof net.minecraft.nbt.StringTag ns) {
             String s = ns.asString().orElse("");
-            if (s != null) {
-
-                if (s.length() > 10000) return true;
-                int pc = countFormatArgs(s);
-                if (pc > 0) {
-                    expansion[0] += pc * (depth + 1);
-                    if (expansion[0] > 256) return true;
-                }
-                if (s.contains("\u00a7k") && s.length() > 64) return true;
+            if (s.length() > 10000) return true;
+            int pc = countFormatArgs(s);
+            if (pc > 0) {
+                expansion[0] += pc * (depth + 1);
+                if (expansion[0] > 256) return true;
             }
+            if (s.contains("\u00a7k") && s.length() > 64) return true;
         }
         return false;
     }

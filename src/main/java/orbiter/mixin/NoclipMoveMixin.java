@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Entity.class)
 public abstract class NoclipMoveMixin {
-    @Inject(method = "move(Lnet/minecraft/world/entity/MoverType;Lnet/minecraft/world/phys/Vec3;)V", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "move(Lnet/minecraft/world/entity/MoverType;Lnet/minecraft/world/phys/Vec3;)V", at = @At("HEAD"), cancellable = true, require = 1)
     private void orbiter$noclipMove(MoverType type, Vec3 movement, CallbackInfo ci) {
         if (type != MoverType.SELF) return;
         Entity self = (Entity) (Object) this;
@@ -22,6 +22,8 @@ public abstract class NoclipMoveMixin {
         Vec3 resolved = Noclip.currentMotion(player);
         player.setPos(player.getX() + resolved.x, player.getY() + resolved.y, player.getZ() + resolved.z);
         player.setDeltaMovement(Vec3.ZERO);
+
+        player.setOnGround(false);
         ci.cancel();
     }
 }

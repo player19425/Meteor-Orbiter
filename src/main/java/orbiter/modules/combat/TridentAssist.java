@@ -5,23 +5,23 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.tags.FluidTags;
-import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.TridentItem;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.ClipContext;
+import orbiter.compat.EntityCompat;
 import orbiter.Orbiter;
 import orbiter.systems.combat.CombatEngine;
 import orbiter.systems.combat.CombatRequest;
@@ -41,6 +41,8 @@ public class TridentAssist extends Module {
     public enum RenderMode { Off, Line, Both }
     public enum EnchantMode { Off, Detect, Respect }
 
+    private static final int VANILLA_THROW_THRESHOLD_TICKS = TridentItem.THROW_THRESHOLD_TIME;
+
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgTarget = settings.createGroup("Targeting");
     private final SettingGroup sgAim = settings.createGroup("Aiming");
@@ -52,17 +54,8 @@ public class TridentAssist extends Module {
 
     private final Setting<ThrowMode> throwMode = sgGeneral.add(new EnumSetting.Builder<ThrowMode>()
         .name("throw-mode")
-        .description("Manual = throw on key release. Auto = throw when charged and aimed. AutoMelee = melee when close, throw when far.")
+        .description("Manual only aims, Auto throws once you are aimed and charged.")
         .defaultValue(ThrowMode.Auto)
-        .build()
-    );
-
-    private final Setting<Double> minChargePercent = sgGeneral.add(new DoubleSetting.Builder()
-        .name("min-charge-percent")
-        .description("Minimum charge (0.0-1.0) before throwing.")
-        .defaultValue(0.8)
-        .min(0.1)
-        .sliderRange(0.1, 1.0)
         .build()
     );
 
@@ -250,7 +243,7 @@ public class TridentAssist extends Module {
 
     private final Setting<Double> tridentSpeed = sgPhysics.add(new DoubleSetting.Builder()
         .name("trident-speed")
-        .description("Initial trident speed. Vanilla: 2.5 * charge = 2.5 at full charge")
+        .description("Throw power, the same whether the trident is charged or not. Vanilla: 2.5")
         .defaultValue(2.5)
         .min(0.5)
         .sliderRange(0.5, 5.0)
@@ -265,23 +258,25 @@ public class TridentAssist extends Module {
         .build()
     );
 
-    private final Setting<Boolean> waterNoDrag = sgPhysics.add(new BoolSetting.Builder()
-        .name("water-no-drag")
-        .description("Tridents don't slow in water (vanilla behavior).")
-        .defaultValue(true)
+    private final Setting<Double> tridentWaterDrag = sgPhysics.add(new DoubleSetting.Builder()
+        .name("trident-water-drag")
+        .description("Water inertia per tick. Vanilla ThrownTrident.WATER_INERTIA: 0.99")
+        .defaultValue(0.99)
+        .min(0.5)
+        .sliderRange(0.5, 1.0)
         .build()
     );
 
     private final Setting<EnchantMode> enchantMode = sgEnchant.add(new EnumSetting.Builder<EnchantMode>()
         .name("enchant-mode")
-        .description("Off = ignore enchantments. Detect = detect and log. Respect = don't throw if Riptide active.")
+        .description("Off ignores enchantments, otherwise a Riptide trident is never thrown.")
         .defaultValue(EnchantMode.Respect)
         .build()
     );
 
     private final Setting<Boolean> respectRiptide = sgEnchant.add(new BoolSetting.Builder()
         .name("respect-riptide")
-        .description("Don't throw if trident has Riptide (can't be thrown, launches player instead).")
+        .description("Riptide launches you instead of throwing the trident.")
         .defaultValue(true)
         .visible(() -> enchantMode.get() != EnchantMode.Off)
         .build()
@@ -295,7 +290,7 @@ public class TridentAssist extends Module {
 
     private final Setting<Boolean> meleeWhenClose = sgMelee.add(new BoolSetting.Builder()
         .name("melee-when-close")
-        .description("Switch to melee attack when target is within 3 blocks (trident melee range).")
+        .description("Swing instead of throwing once the target is inside melee-range.")
         .defaultValue(true)
         .build()
     );
@@ -330,7 +325,6 @@ public class TridentAssist extends Module {
     private int tickCounter = 0;
     private int attackCooldown = 0;
     private float currentCharge;
-    private float lastCalculatedYaw;
 
     private boolean hasRiptide = false;
     private boolean hasLoyalty = false;
@@ -349,20 +343,22 @@ public class TridentAssist extends Module {
             toggle();
             return;
         }
-        currentTarget = null;
-        lastTargetSwitchTime = 0;
-        trajectoryPoints.clear();
-        ComboTracker.clearAll();
-        tickCounter = 0;
-        attackCooldown = 0;
-        currentCharge = 0;
+        resetState();
     }
 
     @Override
     public void onDeactivate() {
-        currentTarget = null;
-        trajectoryPoints.clear();
+        resetState();
         ComboTracker.clearAll();
+    }
+
+    private void resetState() {
+        currentTarget = null;
+        lastTargetSwitchTime = 0;
+        trajectoryPoints.clear();
+        tickCounter = 0;
+        attackCooldown = 0;
+        currentCharge = 0;
     }
 
     @EventHandler(priority = EventPriority.HIGH)
@@ -381,7 +377,6 @@ public class TridentAssist extends Module {
 
         boolean canThrow = true;
         if (respectRiptide.get() && hasRiptide) {
-
             canThrow = false;
         }
 
@@ -410,7 +405,7 @@ public class TridentAssist extends Module {
 
         double distToTarget = mc.player.getEyePosition().distanceTo(currentTarget.getBoundingBox().getCenter());
 
-        if (meleeWhenClose.get() && distToTarget <= meleeRange.get()) {
+        if (shouldMelee(distToTarget)) {
             handleMeleeAttack(currentTarget);
             trajectoryPoints.clear();
             return;
@@ -420,13 +415,10 @@ public class TridentAssist extends Module {
             return;
         }
 
-        int maxUseTime = mc.player.getMainHandItem().getUseDuration(mc.player);
-        int elapsedTicks = isDrawing ? (maxUseTime - mc.player.getUseItemRemainingTicks()) : 0;
-        currentCharge = (float) elapsedTicks / 10.0f;
-        currentCharge = Math.min(currentCharge, 1.0f);
+        currentCharge = mc.player.getTicksUsingItem() >= VANILLA_THROW_THRESHOLD_TICKS ? 1.0f : 0.0f;
 
-        if (currentCharge < minChargePercent.get()) {
-
+        if (currentCharge < 1.0f) {
+            trajectoryPoints.clear();
             return;
         }
 
@@ -438,7 +430,6 @@ public class TridentAssist extends Module {
         }
 
         AimSolution solution = solveAim(origin, targetPos);
-        lastCalculatedYaw = solution.yaw;
 
         Vec3 aimPoint = origin.add(Vec3.directionFromRotation(solution.pitch, solution.yaw).scale(origin.distanceTo(targetPos)));
 
@@ -451,6 +442,10 @@ public class TridentAssist extends Module {
         }
     }
 
+    private boolean shouldMelee(double distance) {
+        return meleeWhenClose.get() && distance <= meleeRange.get();
+    }
+
     private void handleMeleeAttack(LivingEntity target) {
         if (CombatEngine.get().isFrozen()) return;
         if (attackCooldown > 0) return;
@@ -461,7 +456,7 @@ public class TridentAssist extends Module {
 
         if (mc.gameMode != null) {
             mc.gameMode.attack(mc.player, target);
-            mc.player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            EntityCompat.swingWithAttackAnimation(mc.player, net.minecraft.world.InteractionHand.MAIN_HAND);
             ComboTracker.registerHit(target.getUUID());
             attackCooldown = 12;
         }
@@ -576,18 +571,42 @@ public class TridentAssist extends Module {
         Vec3 targetVel = target.getDeltaMovement();
         if (targetVel.lengthSqr() < 0.001) return currentPos;
 
-        double dist = origin.distanceTo(currentPos);
         double speed = tridentSpeed.get() * currentCharge;
         if (speed < 0.1) return currentPos;
 
-        double flightTime = dist / speed;
-        flightTime = Math.min(flightTime, predictionSteps.get());
+        double flightTicks = flightTimeTicks(origin, currentPos, speed);
+        if (flightTicks <= 0) return currentPos;
 
-        Vec3 predicted = currentPos.add(targetVel.scale(flightTime));
+        Vec3 predicted = currentPos.add(targetVel.scale(flightTicks));
         if (mc.level != null && predicted.y < mc.level.getMinY()) {
             predicted = new Vec3(predicted.x, mc.level.getMinY(), predicted.z);
         }
         return predicted;
+    }
+
+    private double flightTimeTicks(Vec3 origin, Vec3 target, double speed) {
+        Vec3 toTarget = target.subtract(origin);
+        double horizontal = Math.sqrt(toTarget.x * toTarget.x + toTarget.z * toTarget.z);
+        float yaw = (float) (Math.toDegrees(Math.atan2(toTarget.z, toTarget.x)) - 90.0f);
+        float pitch = (float) -Math.toDegrees(Math.atan2(toTarget.y, horizontal));
+
+        double g = tridentGravity.get();
+        Vec3 pos = origin;
+        Vec3 vel = initialVelocity(yaw, pitch, speed);
+        double bestDist = pos.distanceToSqr(target);
+        double bestTick = 0;
+        int maxSteps = Math.min(predictionSteps.get(), 100);
+
+        for (int i = 1; i <= maxSteps; i++) {
+            Vec3 next = pos.add(vel);
+            double d = next.distanceToSqr(target);
+            if (d < bestDist) { bestDist = d; bestTick = i; }
+            pos = next;
+            vel = vel.scale(getDragAt(pos));
+            vel = vel.add(0, -g, 0);
+            if (pos.y < mc.level.getMinY() - 4) break;
+        }
+        return bestTick;
     }
 
     private AimSolution solveAim(Vec3 origin, Vec3 target) {
@@ -598,7 +617,6 @@ public class TridentAssist extends Module {
         double horizontalDist = Math.sqrt(dx * dx + dz * dz);
 
         float yaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0f);
-        lastCalculatedYaw = yaw;
 
         double speed = tridentSpeed.get() * currentCharge;
         double g = tridentGravity.get();
@@ -606,42 +624,39 @@ public class TridentAssist extends Module {
 
         float pitch;
         if (g <= 1.0E-4 || horizontalDist <= 1.0E-4 || speed < 0.1) {
-
             pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontalDist));
         } else {
             double disc = v2 * v2 - g * (g * horizontalDist * horizontalDist + 2 * dy * v2);
             if (disc < 0) {
-
                 pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontalDist));
             } else {
                 double tanTheta = (v2 - Math.sqrt(disc)) / (g * horizontalDist);
                 pitch = (float) -Math.toDegrees(Math.atan(tanTheta));
-
-                pitch = refinePitchWithSimulation(origin, target, pitch, speed, g);
+                pitch = refinePitchWithSimulation(origin, target, yaw, pitch, speed, g);
             }
         }
 
         return new AimSolution(yaw, pitch);
     }
 
-    private float refinePitchWithSimulation(Vec3 origin, Vec3 target, float initialPitch, double speed, double g) {
+    private float refinePitchWithSimulation(Vec3 origin, Vec3 target, float yaw, float initialPitch, double speed, double g) {
         float bestPitch = initialPitch;
-        double bestError = simulateError(origin, target, bestPitch, speed, g);
+        double bestError = simulateError(origin, target, yaw, bestPitch, speed, g);
 
         for (float p = initialPitch - 10.0f; p <= initialPitch + 10.0f; p += 2.0f) {
-            double err = simulateError(origin, target, p, speed, g);
+            double err = simulateError(origin, target, yaw, p, speed, g);
             if (err < bestError) { bestError = err; bestPitch = p; }
         }
         for (float p = bestPitch - 2.0f; p <= bestPitch + 2.0f; p += 0.25f) {
-            double err = simulateError(origin, target, p, speed, g);
+            double err = simulateError(origin, target, yaw, p, speed, g);
             if (err < bestError) { bestError = err; bestPitch = p; }
         }
         return bestPitch;
     }
 
-    private double simulateError(Vec3 origin, Vec3 target, float pitch, double speed, double g) {
+    private double simulateError(Vec3 origin, Vec3 target, float yaw, float pitch, double speed, double g) {
         Vec3 pos = origin;
-        Vec3 vel = Vec3.directionFromRotation(pitch, lastCalculatedYaw).scale(speed);
+        Vec3 vel = initialVelocity(yaw, pitch, speed);
         double bestDist = pos.distanceToSqr(target);
         int maxSteps = Math.min(simSteps.get(), 100);
 
@@ -662,7 +677,7 @@ public class TridentAssist extends Module {
         double speed = tridentSpeed.get() * currentCharge;
         double g = tridentGravity.get();
         Vec3 pos = origin;
-        Vec3 vel = Vec3.directionFromRotation(pitch, yaw).scale(speed);
+        Vec3 vel = initialVelocity(yaw, pitch, speed);
 
         out.add(pos);
 
@@ -688,10 +703,16 @@ public class TridentAssist extends Module {
     }
 
     private double getDragAt(Vec3 pos) {
-        if (waterNoDrag.get() && mc.level.getFluidState(BlockPos.containing(pos.x, pos.y, pos.z)).is(FluidTags.WATER)) {
-            return 1.0;
+        if (mc.level.getFluidState(BlockPos.containing(pos.x, pos.y, pos.z)).is(FluidTags.WATER)) {
+            return tridentWaterDrag.get();
         }
         return tridentDrag.get();
+    }
+
+    private Vec3 initialVelocity(float yaw, float pitch, double speed) {
+        Vec3 velocity = Vec3.directionFromRotation(pitch, yaw).scale(speed);
+        Vec3 known = mc.player.getKnownMovement();
+        return velocity.add(known.x, mc.player.onGround() ? 0.0 : known.y, known.z);
     }
 
     private void submitAim(Vec3 aimPoint) {
@@ -702,6 +723,7 @@ public class TridentAssist extends Module {
 
         CombatEngine.get().submit(CombatRequest.rotation(this, priority.get(), aimPoint, mode, buildProfile(), () -> {
             if (!isActive() || CombatEngine.get().isFrozen()) return;
+            if (mc.player == null || mc.gameMode == null) return;
             if (target == null || !target.isAlive() || !isValidTarget(target) || !isInRange(target)) return;
             if (!(mc.player.getMainHandItem().getItem() instanceof TridentItem)) return;
             if (!mc.player.isUsingItem()) return;
@@ -711,12 +733,10 @@ public class TridentAssist extends Module {
             ItemStack trident = mc.player.getMainHandItem();
             if (preventThrowAtLowDurability.get() && trident.getMaxDamage() - trident.getDamageValue() <= 1) return;
 
-            int maxUseTime = trident.getUseDuration(mc.player);
-            float chargeNow = Math.min((maxUseTime - mc.player.getUseItemRemainingTicks()) / 10.0f, 1.0f);
-            if (chargeNow < 0.95f) return;
+            if (mc.player.getTicksUsingItem() < VANILLA_THROW_THRESHOLD_TICKS) return;
 
             double meleeDistNow = mc.player.getEyePosition().distanceTo(target.getBoundingBox().getCenter());
-            if (meleeWhenClose.get() && meleeDistNow <= meleeRange.get()) return;
+            if (shouldMelee(meleeDistNow)) return;
 
             mc.gameMode.releaseUsingItem(mc.player);
             ComboTracker.registerHit(target.getUUID());
@@ -772,5 +792,10 @@ public class TridentAssist extends Module {
         if (combo > 0) sb.append(" | combo: ").append(combo);
 
         return sb.toString();
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        onDeactivate();
     }
 }

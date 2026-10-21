@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(Hud.class)
 public abstract class InGameHudHotbarMixin {
     @WrapOperation(
+        require = 0,
         method = "extractItemHotbar",
         at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Hud;extractSlot(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IILnet/minecraft/client/DeltaTracker;Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/item/ItemStack;I)V")
     )

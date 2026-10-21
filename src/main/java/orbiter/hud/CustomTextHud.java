@@ -17,7 +17,7 @@ public class CustomTextHud extends HudElement {
 
     private final Setting<String> text = sgGeneral.add(new StringSetting.Builder()
         .name("text")
-        .description("Custom text. Placeholders: {player}, {health}, {health%}, {armor}, {x}, {y}, {z}, {tps}, {ping}, {fps}, {dimension}")
+        .description("Placeholders: {player}, {health}, {health%}, {armor}, {x}, {y}, {z}, {tps}, {ping}, {fps}, {dimension}")
         .defaultValue("{player} | {health}/{health%}HP | {tps} TPS | {ping}ms")
         .build()
     );

@@ -5,8 +5,11 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
+import net.minecraft.core.BlockPos;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.component.ChargedProjectiles;
 import net.minecraft.world.entity.Entity;
@@ -14,12 +17,13 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.ClipContext;
+import orbiter.compat.ItemCompat;
 import orbiter.Orbiter;
 import orbiter.systems.combat.CombatEngine;
 import orbiter.systems.combat.CombatRequest;
@@ -42,6 +46,9 @@ public class CrossbowAssist extends Module {
     public enum FireMode { Manual, Auto, Burst }
     public enum RenderMode { Off, Line, Both }
 
+    private static final double FIREWORK_SPEED = 1.6;
+    private static final double BOLT_WATER_INERTIA = 0.6;
+
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgTarget = settings.createGroup("Targeting");
     private final SettingGroup sgAim = settings.createGroup("Aiming");
@@ -51,7 +58,7 @@ public class CrossbowAssist extends Module {
 
     private final Setting<FireMode> fireMode = sgGeneral.add(new EnumSetting.Builder<FireMode>()
         .name("fire-mode")
-        .description("Manual = only fire on key press. Auto = fire when aimed. Burst = fire repeatedly.")
+        .description("Manual needs a key press, Auto and Burst fire on their own.")
         .defaultValue(FireMode.Auto)
         .build()
     );
@@ -333,7 +340,6 @@ public class CrossbowAssist extends Module {
         hasFireworkLoaded = isFireworkLoaded();
 
         if (onlyWhenLoaded.get() && !isLoaded) {
-
             currentTarget = null;
             trajectoryPoints.clear();
             return;
@@ -406,15 +412,16 @@ public class CrossbowAssist extends Module {
         if (mc.player == null) return false;
         ChargedProjectiles charged = mc.player.getMainHandItem()
             .get(DataComponents.CHARGED_PROJECTILES);
-        return charged != null && !charged.itemCopies().isEmpty();
+        return charged != null && !charged.isEmpty();
     }
 
     private boolean isFireworkLoaded() {
         if (mc.player == null) return false;
         ChargedProjectiles charged = mc.player.getMainHandItem()
             .get(DataComponents.CHARGED_PROJECTILES);
-        if (charged == null || charged.itemCopies().isEmpty()) return false;
-        return charged.itemCopies().get(0).getItem() == Items.FIREWORK_ROCKET;
+        if (charged == null || charged.isEmpty()) return false;
+        List<ItemStack> projectiles = ItemCompat.chargedProjectiles(charged);
+        return !projectiles.isEmpty() && projectiles.get(0).getItem() == Items.FIREWORK_ROCKET;
     }
 
     private void trackVelocities() {
@@ -428,7 +435,6 @@ public class CrossbowAssist extends Module {
             Vec3 prevVel = prevVelocities.get(id);
 
             if (prevVel != null) {
-
                 Vec3 prevSmoothed = smoothedVelocities.getOrDefault(id, prevVel);
                 Vec3 smoothed = new Vec3(
                     prevSmoothed.x * (1 - VEL_SMOOTH_ALPHA) + currentVel.x * VEL_SMOOTH_ALPHA,
@@ -536,17 +542,53 @@ public class CrossbowAssist extends Module {
         Vec3 targetVel = smoothedVelocities.getOrDefault(target.getUUID(), target.getDeltaMovement());
         if (targetVel.lengthSqr() < 0.001) return currentPos;
 
-        double dist = origin.distanceTo(currentPos);
-        double speed = hasFireworkLoaded ? 1.6 : boltSpeed.get();
+        double flightTicks = flightTimeTicks(origin, currentPos, shotSpeed(), shotGravity());
+        if (flightTicks <= 0) return currentPos;
 
-        double flightTime = dist / speed;
-        flightTime = Math.min(flightTime, predictionSteps.get());
-
-        Vec3 predicted = currentPos.add(targetVel.scale(flightTime));
+        Vec3 predicted = currentPos.add(targetVel.scale(flightTicks));
         if (mc.level != null && predicted.y < mc.level.getMinY()) {
             predicted = new Vec3(predicted.x, mc.level.getMinY(), predicted.z);
         }
         return predicted;
+    }
+
+    private double flightTimeTicks(Vec3 origin, Vec3 target, double speed, double g) {
+        Vec3 toTarget = target.subtract(origin);
+        double horizontal = Math.sqrt(toTarget.x * toTarget.x + toTarget.z * toTarget.z);
+        float yaw = (float) (Math.toDegrees(Math.atan2(toTarget.z, toTarget.x)) - 90.0f);
+        float pitch = (float) -Math.toDegrees(Math.atan2(toTarget.y, horizontal));
+
+        Vec3 pos = origin;
+        Vec3 vel = Vec3.directionFromRotation(pitch, yaw).scale(speed);
+        double bestDist = pos.distanceToSqr(target);
+        double bestTick = 0;
+        int maxSteps = Math.min(predictionSteps.get(), 120);
+
+        for (int i = 1; i <= maxSteps; i++) {
+            Vec3 next = pos.add(vel);
+            double d = next.distanceToSqr(target);
+            if (d < bestDist) { bestDist = d; bestTick = i; }
+            pos = next;
+            vel = vel.scale(getDragAt(pos));
+            vel = vel.add(0, -g, 0);
+            if (pos.y < mc.level.getMinY() - 4) break;
+        }
+        return bestTick;
+    }
+
+    private double shotSpeed() {
+        return hasFireworkLoaded ? FIREWORK_SPEED : boltSpeed.get();
+    }
+
+    private double shotGravity() {
+        return hasFireworkLoaded ? 0.0 : boltGravity.get();
+    }
+
+    private double getDragAt(Vec3 pos) {
+        if (!hasFireworkLoaded && mc.level.getFluidState(BlockPos.containing(pos.x, pos.y, pos.z)).is(FluidTags.WATER)) {
+            return BOLT_WATER_INERTIA;
+        }
+        return boltDrag.get();
     }
 
     private AimSolution solveAim(Vec3 origin, Vec3 target) {
@@ -559,18 +601,16 @@ public class CrossbowAssist extends Module {
         float yaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0f);
         lastCalculatedYawForSim = yaw;
 
-        double speed = hasFireworkLoaded ? 1.6 : boltSpeed.get();
-        double g = hasFireworkLoaded ? 0.0 : boltGravity.get();
+        double speed = shotSpeed();
+        double g = shotGravity();
         double v2 = speed * speed;
 
         float pitch;
         if (g <= 1.0E-4 || horizontalDist <= 1.0E-4 || speed < 0.1) {
-
             pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontalDist));
         } else {
             double disc = v2 * v2 - g * (g * horizontalDist * horizontalDist + 2 * dy * v2);
             if (disc < 0) {
-
                 pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontalDist));
             } else {
                 double tanTheta = (v2 - Math.sqrt(disc)) / (g * horizontalDist);
@@ -611,7 +651,7 @@ public class CrossbowAssist extends Module {
             double d = next.distanceToSqr(target);
             if (d < bestDist) bestDist = d;
             pos = next;
-            vel = vel.scale(boltDrag.get());
+            vel = vel.scale(getDragAt(pos));
             vel = vel.add(0, -g, 0);
             if (pos.y < mc.level.getMinY() - 4) break;
         }
@@ -622,8 +662,8 @@ public class CrossbowAssist extends Module {
         out.clear();
         lastCalculatedYawForSim = yaw;
 
-        double speed = hasFireworkLoaded ? 1.6 : boltSpeed.get();
-        double g = hasFireworkLoaded ? 0.0 : boltGravity.get();
+        double speed = shotSpeed();
+        double g = shotGravity();
         Vec3 pos = origin;
         Vec3 vel = Vec3.directionFromRotation(pitch, yaw).scale(speed);
 
@@ -644,7 +684,7 @@ public class CrossbowAssist extends Module {
 
             out.add(next);
             pos = next;
-            vel = vel.scale(boltDrag.get());
+            vel = vel.scale(getDragAt(pos));
             vel = vel.add(0, -g, 0);
             if (pos.y < mc.level.getMinY() - 4) break;
         }
@@ -691,14 +731,15 @@ public class CrossbowAssist extends Module {
         if (mc.player == null) return "Off";
         boolean loaded = isCrossbowLoaded();
         if (!loaded) return "Not loaded";
-        if (currentTarget == null) return "Loaded • no target";
-
-        String name = currentTarget instanceof Player p
-            ? p.getName().getString()
-            : currentTarget.getName().getString();
+        if (currentTarget == null) return "Loaded, no target";
 
         int combo = ComboTracker.getCombo(currentTarget.getUUID());
         String comboStr = combo > 0 ? " | combo: " + combo : "";
-        return "\u2192 " + name + comboStr;
+        return "\u2192 " + currentTarget.getName().getString() + comboStr;
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        onDeactivate();
     }
 }

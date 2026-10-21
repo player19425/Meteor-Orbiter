@@ -26,7 +26,7 @@ public class CopyPosCommand extends Command {
             return SINGLE_SUCCESS;
         }
         mc.keyboardHandler.setClipboard(value);
-        info("Copied " + value);
+        info("Copied %s", value);
         return SINGLE_SUCCESS;
     }
 }

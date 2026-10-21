@@ -1,6 +1,7 @@
 package orbiter.mixin;
 
 import net.minecraft.client.Minecraft;
+import orbiter.compat.ClientCompat;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.layouts.HeaderAndFooterLayout;
 import net.minecraft.client.gui.screens.Screen;
@@ -21,7 +22,7 @@ public abstract class ServerProtectDialogScreenMixin {
     @Shadow
     public abstract Screen previousScreen();
 
-    @Inject(method = "updateHeaderAndFooter(Lnet/minecraft/client/gui/layouts/HeaderAndFooterLayout;Lnet/minecraft/client/gui/screens/dialog/DialogControlSet;Lnet/minecraft/server/dialog/Dialog;Lnet/minecraft/client/gui/screens/dialog/DialogConnectionAccess;)V", at = @At("RETURN"))
+    @Inject(method = "updateHeaderAndFooter(Lnet/minecraft/client/gui/layouts/HeaderAndFooterLayout;Lnet/minecraft/client/gui/screens/dialog/DialogControlSet;Lnet/minecraft/server/dialog/Dialog;Lnet/minecraft/client/gui/screens/dialog/DialogConnectionAccess;)V", at = @At("RETURN"), require = 0)
     private void orbiter$addEmergencyButton(HeaderAndFooterLayout layout, DialogControlSet controls, Dialog dialog, DialogConnectionAccess access, CallbackInfo ci) {
         ServerProtect module = ServerProtect.get();
         if (module == null || !module.shouldShowDialogEmergencyButton()) return;
@@ -30,12 +31,12 @@ public abstract class ServerProtectDialogScreenMixin {
             Component.literal("Close + block dialogs for 15 min"),
             ignored -> {
                 module.suppressDialogs();
-                Minecraft.getInstance().gui.setScreen(previousScreen());
+                ClientCompat.setScreen(previousScreen());
             }
         ).width(200).build());
         layout.addToHeader(Button.builder(
             Component.literal("Close once"),
-            ignored -> Minecraft.getInstance().gui.setScreen(previousScreen())
+            ignored -> ClientCompat.setScreen(previousScreen())
         ).width(100).build());
     }
 }

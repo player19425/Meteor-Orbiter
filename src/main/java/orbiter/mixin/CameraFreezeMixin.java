@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Entity.class)
 public abstract class CameraFreezeMixin {
-    @Inject(method = "turn(DD)V", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "turn(DD)V", at = @At("HEAD"), cancellable = true, require = 1)
     private void orbiter$freezeLook(double yawDelta, double pitchDelta, CallbackInfo ci) {
         if (!((Object) this instanceof LocalPlayer)) return;
         if (CombatEngine.get().isFrozen()) ci.cancel();

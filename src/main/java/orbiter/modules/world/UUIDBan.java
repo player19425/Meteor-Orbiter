@@ -4,9 +4,10 @@ import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.meteorclient.events.world.TickEvent;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EntityTypes;
+import orbiter.compat.TypeCompat;
 import net.minecraft.world.item.component.TypedEntityData;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -44,7 +45,7 @@ public class UUIDBan extends Module {
         .defaultValue(true).build());
 
     private final Setting<Delivery> delivery = sgEntity.add(new EnumSetting.Builder<Delivery>()
-        .name("delivery").description("How to spawn the ban entity. Summon Command applies the UUID on every server version; Spawn Egg only keeps the UUID on servers 1.21.4 and older (newer versions reset it).")
+        .name("delivery").description("Spawn Egg only keeps the UUID on servers 1.21.4 and older.")
         .defaultValue(Delivery.SummonCommand).build());
 
     private final Setting<Boolean> kickFirst = sgAction.add(new BoolSetting.Builder()
@@ -59,6 +60,7 @@ public class UUIDBan extends Module {
     private int tickCount = 0;
     private String resolvedName = null;
     private UUID resolvedUuid = null;
+    private int lookupGeneration = 0;
 
     public UUIDBan() {
         super(Orbiter.CATEGORY_OP, "UUID Ban (W.I.P)",
@@ -67,6 +69,7 @@ public class UUIDBan extends Module {
 
     @Override
     public void onActivate() {
+        int generation = ++lookupGeneration;
         waitingForTick = false;
         tickCount = 0;
         resolvedName = null;
@@ -105,7 +108,7 @@ public class UUIDBan extends Module {
 
             if (debug.get()) info("Resolving UUID for %s from Mojang...", name);
             MojangApiUtil.resolveAsync(name).thenAccept(uuidStr -> mc.execute(() -> {
-                if (!isActive() || mc.player == null || mc.player.connection == null) return;
+                if (generation != lookupGeneration || !isActive() || mc.player == null || mc.player.connection == null) return;
                 UUID uuid = MojangApiUtil.parseUuid(uuidStr);
                 if (uuid == null) {
                     warning("Could not resolve UUID for " + name + ".");
@@ -119,6 +122,7 @@ public class UUIDBan extends Module {
                 tickCount = 0;
             })).exceptionally(e -> {
                 mc.execute(() -> {
+                    if (generation != lookupGeneration) return;
                     warning("UUID lookup failed: " + e.getClass().getSimpleName());
                     if (isActive()) toggle();
                 });
@@ -129,6 +133,7 @@ public class UUIDBan extends Module {
 
     @Override
     public void onDeactivate() {
+        lookupGeneration++;
         waitingForTick = false;
         resolvedName = null;
         resolvedUuid = null;
@@ -205,18 +210,18 @@ public class UUIDBan extends Module {
         EntityType<?> type = resolveEntityType();
         ItemStack egg;
 
-        if (type != null && type != EntityTypes.ARMOR_STAND) {
+        if (type != null && type != TypeCompat.ARMOR_STAND) {
             Optional<Holder<Item>> eggHolder = SpawnEggItem.byId(type);
             if (eggHolder.isPresent()) {
                 egg = new ItemStack(eggHolder.get());
                 entityData.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(type).toString());
             } else {
                 egg = new ItemStack(Items.ARMOR_STAND);
-                type = EntityTypes.ARMOR_STAND;
+                type = TypeCompat.ARMOR_STAND;
             }
         } else {
             egg = new ItemStack(Items.ARMOR_STAND);
-            type = EntityTypes.ARMOR_STAND;
+            type = TypeCompat.ARMOR_STAND;
         }
 
         egg.set(DataComponents.CUSTOM_NAME, Component.literal("§c§lUUIDBan: " + name));
@@ -261,5 +266,14 @@ public class UUIDBan extends Module {
         if (mc.player == null || mc.player.connection == null) return;
         mc.player.connection.sendCommand(CommandUtils.vanilla("kill @e[tag=orbiter_uuidban]"));
         info("Cleaned up UUIDBan entities.");
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        lookupGeneration++;
+        waitingForTick = false;
+        resolvedName = null;
+        resolvedUuid = null;
+        tickCount = 0;
     }
 }

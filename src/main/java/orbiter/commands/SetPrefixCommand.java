@@ -16,12 +16,11 @@ public class SetPrefixCommand extends Command {
     public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.then(argument("prefix", StringArgumentType.greedyString())
             .executes(ctx -> {
-                String newPrefix = StringArgumentType.getString(ctx, "prefix");
-                if (newPrefix == null || newPrefix.trim().isEmpty()) {
+                String newPrefix = StringArgumentType.getString(ctx, "prefix").trim();
+                if (newPrefix.isEmpty()) {
                     error("Prefix cannot be empty.");
                     return SINGLE_SUCCESS;
                 }
-                newPrefix = newPrefix.trim();
 
                 Config.get().prefix.set(newPrefix);
                 Systems.save();

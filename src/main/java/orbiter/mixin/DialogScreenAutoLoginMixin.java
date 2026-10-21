@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(DialogScreen.class)
 public abstract class DialogScreenAutoLoginMixin {
-    @Inject(method = "init()V", at = @At("TAIL"))
+    @Inject(method = "init()V", at = @At("TAIL"), require = 0)
     private void orbiter$onDialogControlsReady(CallbackInfo ci) {
         DialogScreen<?> screen = (DialogScreen<?>) (Object) this;
         AutoLogin.onDialogLayout(screen);

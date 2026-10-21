@@ -4,8 +4,10 @@ import orbiter.Orbiter;
 import orbiter.modules.world.CreativeSafetyModule;
 import orbiter.util.CommandUtils;
 import orbiter.util.CommandBatcher;
+import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 
 import java.util.Random;
@@ -169,7 +171,9 @@ public class BossbarFlash extends CreativeSafetyModule {
             return;
 
         commandBatcher.setBudgetPerTick(maxCommandsPerTick.get());
-        commandBatcher.drain(c -> mc.player.connection.sendCommand(CommandUtils.vanilla(c)));
+        commandBatcher.drain(
+                c -> mc.player.connection.sendCommand(CommandUtils.vanilla(c)),
+                c -> GlobalSendLimiter.tryAcquireOne());
 
         tickCounter++;
         if (tickCounter < delay.get())
@@ -181,7 +185,7 @@ public class BossbarFlash extends CreativeSafetyModule {
             if (createdBars.length > slotCount) {
                 for (int i = slotCount; i < createdBars.length; i++) {
                     if (!createdBars[i]) continue;
-                    mc.player.connection.sendCommand(CommandUtils.vanilla("bossbar remove orbiter:bar_" + i));
+                    commandBatcher.offer(new CommandBatcher.Step(null, null, 0, "bossbar remove orbiter:bar_" + i));
                 }
             }
             createdBars = new boolean[slotCount];
@@ -202,7 +206,7 @@ public class BossbarFlash extends CreativeSafetyModule {
             if (state == null) states[barIndex] = state = new BossbarState();
 
             if (!createdBars[barIndex]) {
-                if (!orbiter.util.GlobalSendLimiter.tryAcquireOne()) break;
+                if (!GlobalSendLimiter.tryAcquireOne()) break;
                 mc.player.connection.sendCommand(CommandUtils.vanilla(
                         CommandUtils.formatCommand("bossbar add %s %s", barId, titleJson)));
                 createdBars[barIndex] = true;
@@ -233,8 +237,17 @@ public class BossbarFlash extends CreativeSafetyModule {
                 mc.player.connection.sendCommand(CommandUtils.vanilla("bossbar remove orbiter:bar_" + i));
                 removed++;
             }
-            if (removed > 0) info("Cleaned up " + removed + " tracked boss bars.");
+            if (removed > 0) info("Removed " + removed + " tracked boss bars.");
         }
+        createdBars = new boolean[Math.max(1, maxBars.get())];
+        states = new BossbarState[createdBars.length];
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        commandBatcher.clear();
+        tickCounter = 0;
+        barCounter = 0;
         createdBars = new boolean[Math.max(1, maxBars.get())];
         states = new BossbarState[createdBars.length];
     }
@@ -360,7 +373,7 @@ public class BossbarFlash extends CreativeSafetyModule {
                 if (next == 'r') {
                     flush.run();
                     color[0] = null;
-                    java.util.Arrays.fill(flags, 0);
+                    Arrays.fill(flags, 0);
                     i++;
                     continue;
                 }

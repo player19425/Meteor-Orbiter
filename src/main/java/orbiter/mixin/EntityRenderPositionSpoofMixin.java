@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(EntityRenderer.class)
 public abstract class EntityRenderPositionSpoofMixin {
-    @Inject(method = "extractRenderState", at = @At("RETURN"))
+    @Inject(method = "extractRenderState", at = @At("RETURN"), require = 0)
     private void orbiter$offsetRenderState(Entity entity, EntityRenderState state, float tickProgress, CallbackInfo ci) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldSpoofPosition() || entity != Minecraft.getInstance().player) return;

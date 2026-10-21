@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(LivingEntity.class)
 public abstract class LivingEntitySpoofMixin {
-    @Inject(method = "getHealth", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getHealth", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$getHealth(CallbackInfoReturnable<Float> cir) {
         if (!ClientSpoofState.isHudRenderScope()) return;
         ClientSideThings module = ClientSpoofState.module();
@@ -26,7 +26,7 @@ public abstract class LivingEntitySpoofMixin {
         }
     }
 
-    @Inject(method = "getArmorValue", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getArmorValue", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$getArmor(CallbackInfoReturnable<Integer> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldFakeArmor()) return;
@@ -38,7 +38,7 @@ public abstract class LivingEntitySpoofMixin {
         }
     }
 
-    @Inject(method = "getItemBySlot", at = @At("RETURN"), cancellable = true)
+    @Inject(method = "getItemBySlot", at = @At("RETURN"), cancellable = true, require = 0)
     private void orbiter$getItemBySlot(EquipmentSlot slot, CallbackInfoReturnable<ItemStack> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null) return;

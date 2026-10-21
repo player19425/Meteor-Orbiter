@@ -30,11 +30,13 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import orbiter.Orbiter;
+import orbiter.compat.EntityCompat;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -106,13 +108,13 @@ public class BedDefender extends Module {
 
     private final Setting<BedFilter> bedFilter = sgFilter.add(new EnumSetting.Builder<BedFilter>()
         .name("bed-filter")
-        .description("AnyBed defends every bed. ColorList only the colors listed. ClosestToLeather matches your worn leather armor color.")
+        .description("ClosestToLeather matches your worn leather armor instead.")
         .defaultValue(BedFilter.AnyBed)
         .build());
 
     private final Setting<String> bedColors = sgFilter.add(new StringSetting.Builder()
         .name("bed-colors")
-        .description("Comma separated dye colors used by the ColorList filter. Example: red, white, blue.")
+        .description("Dye colors the ColorList filter accepts, for example red, white, blue.")
         .defaultValue("red, white")
         .visible(() -> bedFilter.get() == BedFilter.ColorList)
         .build());
@@ -143,7 +145,7 @@ public class BedDefender extends Module {
     private final Setting<Integer> blocksPerBed = sgLayout.add(new IntSetting.Builder()
         .name("blocks-per-bed")
         .description("Maximum blocks placed per bed ring.")
-        .defaultValue(10)
+        .defaultValue(14)
         .min(1).max(14).sliderRange(1, 14)
         .build());
 
@@ -157,27 +159,36 @@ public class BedDefender extends Module {
     private final Setting<Boolean> coverTop = sgLayout.add(new BoolSetting.Builder()
         .name("cover-top")
         .description("Also place blocks directly on top of the bed halves.")
-        .defaultValue(false)
+        .defaultValue(true)
         .build());
 
     private static final double REACH = 4.5;
     private static final double REACH_SQ = REACH * REACH;
     private static final int COLOR_DIST_SQ = 2500;
+    private static final int STALL_LIMIT = 10;
+    private static final int TOTAL_FAIL_LIMIT = 20;
+    private static final int GRACE_TICKS = 2;
+    private static final int SNEAK_SETTLE_TICKS = 3;
 
     private final Map<BlockPos, BlockPos> footByHead = new HashMap<>();
     private final List<BlockPos> bedHeads = new ArrayList<>();
     private final Set<BlockPos> renderBeds = new HashSet<>();
-    private final Set<BlockPos> defendedThisSession = new HashSet<>();
-    private final Set<BlockPos> stalledPositions = new HashSet<>();
+    private final Set<BlockPos> defendedThisSession = new LinkedHashSet<>();
+    private final Set<BlockPos> cooledBeds = new HashSet<>();
     private final Set<DyeColor> colorCache = new HashSet<>();
     private final List<BlockPos> pendingCandidates = new ArrayList<>();
+    private final Map<BlockPos, Integer> passFails = new HashMap<>();
+    private final Map<BlockPos, Integer> totalFails = new HashMap<>();
 
     private String colorKeyCache = null;
     private BlockPos currentBed = null;
     private boolean currentRingFailed = false;
+    private boolean lastConsumed = false;
+    private boolean sneakHeld = false;
+    private boolean sneakRequested = false;
+    private int sneakArmTimer = 0;
     private int scanTimer = 0;
     private int placeTimer = 0;
-    private int stallCount = 0;
     private long lastNoSource = 0;
 
     public BedDefender() {
@@ -191,6 +202,7 @@ public class BedDefender extends Module {
 
     @Override
     public void onDeactivate() {
+        releaseSneak();
         restoreSlot();
         resetSessionState();
     }
@@ -201,8 +213,11 @@ public class BedDefender extends Module {
     }
 
     private void resetSessionState() {
+        releaseSneak();
         defendedThisSession.clear();
-        stalledPositions.clear();
+        cooledBeds.clear();
+        passFails.clear();
+        totalFails.clear();
         colorKeyCache = null;
         colorCache.clear();
         resetWorkState();
@@ -215,6 +230,8 @@ public class BedDefender extends Module {
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.level == null || mc.gameMode == null) return;
 
+        if (sneakArmTimer > 0) sneakArmTimer--;
+
         scanTimer++;
         placeTimer++;
         if (scanTimer >= scanInterval.get()) {
@@ -226,10 +243,12 @@ public class BedDefender extends Module {
             currentBed = null;
             pendingCandidates.clear();
             currentRingFailed = false;
+            releaseSneak();
         }
 
         if (currentBed == null) pickNextBed();
         if (currentBed == null) {
+            releaseSneak();
             restoreSlot();
             return;
         }
@@ -239,15 +258,14 @@ public class BedDefender extends Module {
 
         if (pendingCandidates.isEmpty()) {
             if (!currentRingFailed) defendedThisSession.add(currentBed);
+            else cooledBeds.add(currentBed);
             currentBed = null;
+            releaseSneak();
             return;
         }
 
-        BlockPos target = pendingCandidates.get(0);
-        if (!mc.level.getBlockState(target).canBeReplaced()) {
-            pendingCandidates.remove(0);
-            return;
-        }
+        BlockPos target = findPlaceable();
+        if (target == null) return;
 
         int slot = resolveSourceSlot();
         if (slot < 0) {
@@ -259,18 +277,33 @@ public class BedDefender extends Module {
             return;
         }
 
+        if (sneakArmTimer > 0) return;
+
         switchTo(slot);
 
         if (placeAt(target)) {
-            pendingCandidates.remove(0);
-            stallCount = 0;
-        } else if (++stallCount >= 10) {
-            stallCount = 0;
-            pendingCandidates.remove(0);
-            stalledPositions.add(target);
-            currentRingFailed = true;
+            pendingCandidates.remove(target);
+            passFails.remove(target);
+        } else {
+            totalFails.merge(target, 1, Integer::sum);
+            if (sneakRequested) {
+                sneakRequested = false;
+                holdSneak();
+                sneakArmTimer = SNEAK_SETTLE_TICKS;
+            } else if (lastConsumed) {
+                placeTimer = -GRACE_TICKS;
+            } else {
+                passFails.merge(target, 1, Integer::sum);
+                if (passFails.getOrDefault(target, 0) >= STALL_LIMIT
+                    || totalFails.getOrDefault(target, 0) >= TOTAL_FAIL_LIMIT) {
+                    pendingCandidates.remove(target);
+                    currentRingFailed = true;
+                }
+            }
         }
         restoreSlot();
+
+        if (sneakHeld && !hasTopPending()) releaseSneak();
     }
 
     @EventHandler
@@ -292,14 +325,28 @@ public class BedDefender extends Module {
         pendingCandidates.clear();
         scanTimer = 0;
         placeTimer = 0;
-        stallCount = 0;
         lastNoSource = 0;
         currentRingFailed = false;
+    }
+
+    private BlockPos findPlaceable() {
+        Iterator<BlockPos> iterator = pendingCandidates.iterator();
+        while (iterator.hasNext()) {
+            BlockPos pos = iterator.next();
+            if (!mc.level.getBlockState(pos).canBeReplaced()) {
+                iterator.remove();
+                continue;
+            }
+            if (eyeDistSq(pos) <= REACH_SQ) return pos;
+        }
+        return null;
     }
 
     private void scanBeds() {
         footByHead.clear();
         renderBeds.clear();
+        cooledBeds.clear();
+        passFails.clear();
 
         int r = (int) Math.ceil(range.get());
         BlockPos center = mc.player.blockPosition();
@@ -424,30 +471,33 @@ public class BedDefender extends Module {
     private void pickNextBed() {
         if (bedHeads.isEmpty()) return;
 
-        if (placeMode.get() == PlaceMode.FirstBedPerJoin && !defendedThisSession.isEmpty()) {
-            BlockPos head = defendedThisSession.iterator().next();
-            if (!bedExists(head)) return;
-            List<BlockPos> ring = buildRing(head);
-            if (ring.isEmpty()) return;
-            currentBed = head;
-            stallCount = 0;
-            currentRingFailed = false;
-            pendingCandidates.addAll(ring);
-            return;
-        }
+        if (requeueGaps()) return;
 
-        if (placeMode.get() == PlaceMode.NearestBed && !defendedThisSession.isEmpty()) return;
+        if (placeMode.get() != PlaceMode.AllBeds && !defendedThisSession.isEmpty()) return;
 
         for (BlockPos head : bedHeads) {
-            if (defendedThisSession.contains(head)) continue;
+            if (defendedThisSession.contains(head) || cooledBeds.contains(head)) continue;
             List<BlockPos> ring = buildRing(head);
             if (ring.isEmpty()) continue;
             currentBed = head;
-            stallCount = 0;
             currentRingFailed = false;
             pendingCandidates.addAll(ring);
             return;
         }
+    }
+
+    private boolean requeueGaps() {
+        if (defendedThisSession.isEmpty()) return false;
+        for (BlockPos head : defendedThisSession) {
+            if (!bedExists(head)) continue;
+            List<BlockPos> gaps = buildRing(head);
+            if (gaps.isEmpty()) continue;
+            currentBed = head;
+            currentRingFailed = false;
+            pendingCandidates.addAll(gaps);
+            return true;
+        }
+        return false;
     }
 
     private List<BlockPos> buildRing(BlockPos head) {
@@ -460,17 +510,22 @@ public class BedDefender extends Module {
 
         BlockPos feet = mc.player.blockPosition();
 
-        List<BlockPos> ring = new ArrayList<>();
+        List<BlockPos> sides = new ArrayList<>();
+        List<BlockPos> tops = new ArrayList<>();
         for (BlockPos pos : candidates) {
             if (pos.equals(feet) || pos.equals(feet.above())) continue;
-            if (stalledPositions.contains(pos)) continue;
-            if (eyeDistSq(pos) > REACH_SQ) continue;
-            BlockState state = mc.level.getBlockState(pos);
-            if (!state.canBeReplaced()) continue;
-            ring.add(pos);
+            if (totalFails.getOrDefault(pos, 0) >= TOTAL_FAIL_LIMIT) continue;
+            if (!mc.level.getBlockState(pos).canBeReplaced()) continue;
+            if (pos.getY() > head.getY()) tops.add(pos);
+            else sides.add(pos);
         }
 
-        ring.sort(Comparator.comparingDouble(pos -> ringOrderDist(pos, head, foot)));
+        Comparator<BlockPos> order = Comparator.comparingDouble(pos -> ringOrderDist(pos, head, foot));
+        sides.sort(order);
+        tops.sort(order);
+
+        List<BlockPos> ring = new ArrayList<>(sides);
+        ring.addAll(tops);
 
         int cap = blocksPerBed.get();
         if (ring.size() > cap) return new ArrayList<>(ring.subList(0, cap));
@@ -497,17 +552,29 @@ public class BedDefender extends Module {
     }
 
     private boolean placeAt(BlockPos target) {
-        Direction[] priorities = {Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST, Direction.UP};
+        lastConsumed = false;
 
         BlockPos below = target.below();
         BlockState belowState = mc.level.getBlockState(below);
-        if (!belowState.canBeReplaced()
-            && (belowState.getBlock() instanceof BedBlock
-            || belowState.isFaceSturdy(mc.level, below, Direction.UP))) {
-            Vec3 hitPos = Vec3.atCenterOf(below).add(0, 0.5, 0);
-            BlockHitResult hit = new BlockHitResult(hitPos, Direction.UP, below, false);
+        if (belowState.getBlock() instanceof BedBlock) {
+            if (placeViaNeighbors(target)) return true;
+            if (!mc.player.input.keyPresses.shift()) {
+                sneakRequested = true;
+                return false;
+            }
+            return interactBlock(target, new BlockHitResult(Vec3.atCenterOf(below).add(0, 0.5, 0), Direction.UP, below, false));
+        }
+
+        if (!belowState.canBeReplaced() && belowState.isFaceSturdy(mc.level, below, Direction.UP)) {
+            BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(below).add(0, 0.5, 0), Direction.UP, below, false);
             if (interactBlock(target, hit)) return true;
         }
+
+        return placeViaNeighbors(target);
+    }
+
+    private boolean placeViaNeighbors(BlockPos target) {
+        Direction[] priorities = {Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.WEST, Direction.EAST, Direction.UP};
 
         for (Direction dir : priorities) {
             BlockPos neighbor = target.offset(dir.getStepX(), dir.getStepY(), dir.getStepZ());
@@ -530,10 +597,31 @@ public class BedDefender extends Module {
         return false;
     }
 
+    private void holdSneak() {
+        if (sneakHeld) return;
+        mc.options.keyShift.setDown(true);
+        sneakHeld = true;
+    }
+
+    private void releaseSneak() {
+        if (!sneakHeld) return;
+        mc.options.keyShift.setDown(false);
+        sneakHeld = false;
+        sneakRequested = false;
+    }
+
+    private boolean hasTopPending() {
+        for (BlockPos pos : pendingCandidates) {
+            if (mc.level.getBlockState(pos.below()).getBlock() instanceof BedBlock) return true;
+        }
+        return false;
+    }
+
     private boolean interactBlock(BlockPos target, BlockHitResult hit) {
         InteractionResult result = mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
-        if (!result.consumesAction()) return false;
-        mc.player.swing(InteractionHand.MAIN_HAND);
+        lastConsumed = result.consumesAction();
+        if (!lastConsumed) return false;
+        EntityCompat.swing(mc.player, InteractionHand.MAIN_HAND);
         BlockState after = mc.level.getBlockState(target);
         return !after.isAir() && !after.canBeReplaced();
     }

@@ -62,7 +62,7 @@ public class WorldEditCommand extends Command {
     };
 
     public WorldEditCommand() {
-        super("we", "Expanded WorldEdit commands with dynamic autocomplete.", "worldedit");
+        super("we", "WorldEdit commands with block and item autocomplete.", "worldedit");
     }
 
     private WorldEditModule getModule() {

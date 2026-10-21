@@ -1,16 +1,15 @@
 package orbiter.modules.world;
 
-import orbiter.Orbiter;
 import orbiter.util.CommandUtils;
 import orbiter.util.FastSend;
 import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.EntityTypeListSetting;
 import meteordevelopment.meteorclient.settings.*;
-import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.EntityTypes;
+import orbiter.compat.TypeCompat;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.core.BlockPos;
@@ -95,7 +94,7 @@ public class EntitySpammer extends CreativeSafetyModule {
     private final Setting<Set<EntityType<?>>> entityTypes = sgGeneral.add(new EntityTypeListSetting.Builder()
         .name("entity-type")
         .description("Entity types to spawn, animate, or dominate. Selected types are cycled.")
-        .defaultValue(EntityTypes.ZOMBIE)
+        .defaultValue(TypeCompat.ZOMBIE)
         .build());
 
     private final Setting<TargetMode> targetMode = sgTarget.add(new EnumSetting.Builder<TargetMode>()
@@ -389,6 +388,11 @@ public class EntitySpammer extends CreativeSafetyModule {
     }
 
     @Override
+    protected boolean supportsFrameBudget() {
+        return true;
+    }
+
+    @Override
     public void onActivate() {
         tickCounter = 0;
         spawnedCount = 0;
@@ -416,6 +420,8 @@ public class EntitySpammer extends CreativeSafetyModule {
     @Override
     public void onDeactivate() {
         safetyDeactivate();
+        fillPositions = null;
+        fillIndex = 0;
         info("Entity Spammer stopped. Total spawned: " + spawnedCount);
     }
 
@@ -477,9 +483,10 @@ public class EntitySpammer extends CreativeSafetyModule {
 
     private boolean doSpawn() {
         double x, y, z;
+        int slot = formationIndex;
 
         if (formation.get() != Formation.None) {
-            double[] pos = getFormationPosition(formationIndex++);
+            double[] pos = getFormationPosition(slot);
             x = pos[0];
             y = pos[1];
             z = pos[2];
@@ -511,6 +518,7 @@ public class EntitySpammer extends CreativeSafetyModule {
             : CommandUtils.formatCommand("execute at %s run summon %s ~%.2f ~%.2f ~%.2f {%s}", target, entity, x, y, z, nbt);
 
         FastSend.command(CommandUtils.vanilla(cmd));
+        formationIndex = slot + 1;
         spawnedCount++;
         return true;
     }
@@ -749,8 +757,12 @@ public class EntitySpammer extends CreativeSafetyModule {
                 return rejectTarget("Target selector contains unsupported characters.");
             }
         }
+        boolean bare = trimmed.length() == 2;
+        if (!bare && (trimmed.charAt(2) != '[' || trimmed.charAt(trimmed.length() - 1) != ']')) {
+            return rejectTarget("Target selector must be @a, @p, @r or a bracket closed @a[...] form.");
+        }
         if (lower.startsWith("@a") && !lower.contains("limit=")) {
-            trimmed = trimmed.equalsIgnoreCase("@a")
+            trimmed = bare
                 ? "@a[limit=" + maxTargets.get() + "]"
                 : trimmed.substring(0, trimmed.length() - 1) + ",limit=" + maxTargets.get() + "]";
         }
@@ -770,8 +782,8 @@ public class EntitySpammer extends CreativeSafetyModule {
     }
 
     private void applyProfile() {
-        if (profile.get() == Profile.TargetedOrbit) {
-            if (mode.get() == SpammerMode.Spawn) mode.set(SpammerMode.Animate);
+        if (profile.get() == Profile.TargetedOrbit && mode.get() == SpammerMode.Spawn) {
+            mode.set(SpammerMode.Animate);
         }
     }
 
@@ -803,12 +815,7 @@ public class EntitySpammer extends CreativeSafetyModule {
         if (mode.get() == SpammerMode.Dominate || mode.get() == SpammerMode.All) {
             int total = domAmount.get();
             if (total > 0 && positions.size() > total) {
-
-                List<BlockPos> limited = new ArrayList<>();
-                for (int i = 0; i < total; i++) {
-                    limited.add(positions.get(i % positions.size()));
-                }
-                return limited;
+                return new ArrayList<>(positions.subList(0, total));
             }
         }
 
@@ -846,7 +853,8 @@ public class EntitySpammer extends CreativeSafetyModule {
                 yield new double[]{Math.cos(a) * sr, index * 0.1, Math.sin(a) * sr};
             }
             case Grid -> {
-                int gridSize = (int) Math.ceil(Math.sqrt(spawnAmount.get() > 0 ? spawnAmount.get() : 100));
+                int target = spawnAmount.get() > 0 ? spawnAmount.get() : 100;
+                int gridSize = (int) Math.ceil(Math.sqrt(target));
                 int gx = index % gridSize;
                 int gz = index / gridSize;
                 double startX = -(gridSize * spacing) / 2.0;
@@ -855,5 +863,13 @@ public class EntitySpammer extends CreativeSafetyModule {
             }
             default -> new double[]{0, 0, 0};
         };
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        fillPositions = null;
+        fillIndex = 0;
+        spawnedCount = 0;
+        tickCounter = 0;
     }
 }

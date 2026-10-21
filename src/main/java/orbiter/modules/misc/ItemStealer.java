@@ -1,7 +1,7 @@
 package orbiter.modules.misc;
 
 import orbiter.Orbiter;
-import orbiter.commands.GivePresetItemsCommand;
+import orbiter.compat.ClientCompat;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
@@ -12,10 +12,12 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import meteordevelopment.meteorclient.settings.ItemListSetting;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtOps;
@@ -28,6 +30,7 @@ import net.minecraft.world.inventory.MerchantMenu;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.Container;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.item.trading.MerchantOffers;
@@ -53,21 +56,21 @@ public class ItemStealer extends Module {
 
     private final Setting<Boolean> pickBlockClone = sgGeneral.add(new BoolSetting.Builder()
         .name("pick-block-clone")
-        .description("Clone any item you middle-click (pick-block) in a GUI or the world. Does NOT send any packet to the server.")
+        .description("Clone the item you middle-click, in a GUI or in the world, without any packet.")
         .defaultValue(true)
         .build()
     );
 
     private final Setting<Boolean> rightClickClone = sgGeneral.add(new BoolSetting.Builder()
         .name("right-click-clone")
-        .description("Clone any item you right-click in a GUI. Works on Shopkeepers, chest shops, and any container GUI.")
+        .description("Clone the item you right-click in any GUI.")
         .defaultValue(true)
         .build()
     );
 
     private final Setting<Boolean> creativeGive = sgGeneral.add(new BoolSetting.Builder()
         .name("creative-give")
-        .description("When in creative mode, also send the cloned item via ServerboundSetCreativeModeSlotPacket so it actually appears in your inventory server-side.")
+        .description("Also send the clone to the server while in creative mode.")
         .defaultValue(true)
         .build()
     );
@@ -81,14 +84,14 @@ public class ItemStealer extends Module {
 
     private final Setting<Boolean> cloneOnAnyGui = sgGeneral.add(new BoolSetting.Builder()
         .name("clone-on-any-gui")
-        .description("Pick-block clone works on ANY AbstractContainerScreen, not just specific GUI types.")
+        .description("Pick-block clone works on any container GUI, not only the supported ones.")
         .defaultValue(true)
         .build()
     );
 
     private final Setting<Boolean> autoSteal = sgAutoSteal.add(new BoolSetting.Builder()
         .name("auto-steal")
-        .description("Automatically clone every visible slot in the open GUI on a configurable tick interval.")
+        .description("Clone every visible slot of the open GUI every few ticks.")
         .defaultValue(false)
         .build()
     );
@@ -121,14 +124,14 @@ public class ItemStealer extends Module {
 
     private final Setting<Boolean> shiftClickSteal = sgShiftSteal.add(new BoolSetting.Builder()
         .name("shift-click-clone")
-        .description("When shift-clicking items in any GUI, clone them client-side instead of moving them server-side.")
+        .description("Shift-clicking clones the item instead of moving it server-side.")
         .defaultValue(false)
         .build()
     );
 
     private final Setting<Boolean> shiftClickCancelPacket = sgShiftSteal.add(new BoolSetting.Builder()
         .name("cancel-shift-packet")
-        .description("Cancel the shift-click packet to the server so the item stays in the container. The clone is still created client-side.")
+        .description("Drop the shift-click packet, so the item stays in the container.")
         .defaultValue(true)
         .visible(shiftClickSteal::get)
         .build()
@@ -165,7 +168,7 @@ public class ItemStealer extends Module {
 
     private final Setting<Boolean> containerSnapshot = sgContainer.add(new BoolSetting.Builder()
         .name("container-snapshot")
-        .description("On opening any container GUI, snapshot all items to disk in the orbiter-stolen-items directory.")
+        .description("Write every item of the opened container to disk on open.")
         .defaultValue(false)
         .build()
     );
@@ -187,7 +190,7 @@ public class ItemStealer extends Module {
 
     private final Setting<String> filterNameRegex = sgFilters.add(new StringSetting.Builder()
         .name("name-regex")
-        .description("Regex pattern that item display names must match to be auto-cloned. Leave empty to disable name filter.")
+        .description("Regex the display name must match, empty disables the filter.")
         .defaultValue("")
         .visible(filterEnabled::get)
         .build()
@@ -195,7 +198,7 @@ public class ItemStealer extends Module {
 
     private final Setting<Boolean> filterItemType = sgFilters.add(new BoolSetting.Builder()
         .name("filter-item-type")
-        .description("Enable filtering by specific item type. Items must match the type list to be auto-cloned.")
+        .description("Only clone items from the filter-items list.")
         .defaultValue(false)
         .visible(filterEnabled::get)
         .build()
@@ -203,25 +206,25 @@ public class ItemStealer extends Module {
 
     private final Setting<List<Item>> filterItems = sgFilters.add(new ItemListSetting.Builder()
         .name("filter-items")
-        .description("Items that will be auto-cloned when the item type filter is enabled.")
         .visible(() -> filterEnabled.get() && filterItemType.get())
         .build()
     );
 
     private final Setting<Boolean> creativePresets = sgPersistence.add(new BoolSetting.Builder()
         .name("creative-presets")
-        .description("Add a button/shortcut to give preset items via GivePresetItemsCommand when in creative mode.")
+        .description("Shortcut to give the preset items while in creative mode.")
         .defaultValue(false)
         .build()
     );
 
+    private static final int MERCHANT_RESULT_SLOT = 2;
+
     private ItemStack lastClonedItem = null;
 
     private int pickBlockCooldown = 0;
-    private boolean bypassedThisClick = false;
     private int autoStealTimer = 0;
 
-    private boolean pendingShiftCancel = false;
+    private int pendingCancelSlot = -1;
 
     private final Map<String, HotbarPreset> hotbarPresets = new LinkedHashMap<>();
 
@@ -244,8 +247,7 @@ public class ItemStealer extends Module {
     @Override
     public void onActivate() {
         pickBlockCooldown = 0;
-        bypassedThisClick = false;
-        pendingShiftCancel = false;
+        pendingCancelSlot = -1;
         lastClonedItem = null;
         autoStealTimer = 0;
         lastContainerSnapshotId = "";
@@ -253,8 +255,7 @@ public class ItemStealer extends Module {
 
     @Override
     public void onDeactivate() {
-        pendingShiftCancel = false;
-        bypassedThisClick = false;
+        pendingCancelSlot = -1;
     }
 
     public ItemStack getLastClonedItem() {
@@ -270,7 +271,7 @@ public class ItemStealer extends Module {
         if (pickBlockClone.get() && pickBlockCooldown <= 0 && mc.options.keyPickItem.isDown()) {
             pickBlockCooldown = 4;
 
-            if (mc.gui.screen() instanceof AbstractContainerScreen<?>) return;
+            if (ClientCompat.screen() instanceof AbstractContainerScreen<?>) return;
 
             cloneWorldItem();
         }
@@ -283,20 +284,18 @@ public class ItemStealer extends Module {
             }
         }
 
-        if (villagerTradeDump.get() && mc.player != null) {
-            if (mc.player.containerMenu instanceof MerchantMenu merchant) {
-
-                String dumpId = "merchant@" + System.identityHashCode(merchant);
-                if (!dumpId.equals(lastContainerSnapshotId)) {
-                    lastContainerSnapshotId = dumpId;
-                    runTradeDump(merchant);
-                }
+        if (villagerTradeDump.get() && mc.player.containerMenu instanceof MerchantMenu merchant) {
+            String dumpId = "merchant@" + System.identityHashCode(merchant);
+            if (!dumpId.equals(lastContainerSnapshotId)) {
+                lastContainerSnapshotId = dumpId;
+                runTradeDump(merchant);
             }
         }
 
-        if (containerSnapshot.get() && mc.player != null && mc.gui.screen() instanceof AbstractContainerScreen<?> handled) {
+        if (containerSnapshot.get() && ClientCompat.screen() instanceof AbstractContainerScreen<?> handled
+                && !(mc.player.containerMenu instanceof MerchantMenu)) {
             String snapId = "container@" + System.identityHashCode(mc.player.containerMenu);
-            if (!snapId.equals(lastContainerSnapshotId) && !(mc.player.containerMenu instanceof MerchantMenu)) {
+            if (!snapId.equals(lastContainerSnapshotId)) {
                 lastContainerSnapshotId = snapId;
                 runContainerSnapshot(handled);
             }
@@ -344,18 +343,18 @@ public class ItemStealer extends Module {
     }
 
     private void runAutoSteal() {
-        if (!(mc.gui.screen() instanceof AbstractContainerScreen<?> handled)) return;
-        if (mc.player == null || mc.player.containerMenu == null) return;
+        if (!(ClientCompat.screen() instanceof AbstractContainerScreen<?>)) return;
+        if (mc.player.containerMenu == null) return;
 
         AbstractContainerMenu handler = mc.player.containerMenu;
-        int containerSlots = handler.slots.size() - 36;
-        if (containerSlots < 0) containerSlots = handler.slots.size();
+        Container playerInv = mc.player.getInventory();
+        int slotCount = handler.slots.size();
 
         int cloned = 0;
-        for (int i = 0; i < handler.slots.size(); i++) {
+        for (int i = 0; i < slotCount; i++) {
             Slot slot = handler.getSlot(i);
 
-            if (autoStealSkipPlayerInv.get() && i >= containerSlots) continue;
+            if (autoStealSkipPlayerInv.get() && slot.container == playerInv) continue;
 
             if (autoStealSkipEmpty.get() && !slot.hasItem()) continue;
 
@@ -379,8 +378,10 @@ public class ItemStealer extends Module {
         if (mc.player == null || mc.player.containerMenu == null) return 0;
 
         AbstractContainerMenu handler = mc.player.containerMenu;
+        int slotCount = handler.slots.size();
+
         int cloned = 0;
-        for (int i = 0; i < handler.slots.size(); i++) {
+        for (int i = 0; i < slotCount; i++) {
             Slot slot = handler.getSlot(i);
             if (!slot.hasItem()) continue;
 
@@ -403,8 +404,9 @@ public class ItemStealer extends Module {
         AbstractContainerMenu handler = mc.player.containerMenu;
         int lo = Math.max(0, start);
         int hi = Math.min(handler.slots.size() - 1, end);
-        int cloned = 0;
+        if (lo > hi) return 0;
 
+        int cloned = 0;
         for (int i = lo; i <= hi; i++) {
             Slot slot = handler.getSlot(i);
             if (!slot.hasItem()) continue;
@@ -428,9 +430,11 @@ public class ItemStealer extends Module {
         if (actionType != ContainerInput.QUICK_MOVE) return false;
 
         if (m.mc.player == null || m.mc.player.containerMenu == null) return false;
-        if (slotIndex < 0 || slotIndex >= m.mc.player.containerMenu.slots.size()) return false;
 
-        Slot slot = m.mc.player.containerMenu.getSlot(slotIndex);
+        AbstractContainerMenu handler = m.mc.player.containerMenu;
+        if (slotIndex < 0 || slotIndex >= handler.slots.size()) return false;
+
+        Slot slot = handler.getSlot(slotIndex);
         if (!slot.hasItem()) return false;
 
         ItemStack original = slot.getItem();
@@ -445,7 +449,7 @@ public class ItemStealer extends Module {
         if (m.notify.get()) m.info("Shift-clone: " + clone.getItemName().getString() + " x" + clone.getCount());
 
         if (m.shiftClickCancelPacket.get()) {
-            m.pendingShiftCancel = true;
+            m.pendingCancelSlot = slotIndex;
             return true;
         }
         return false;
@@ -498,12 +502,12 @@ public class ItemStealer extends Module {
 
     private void runContainerSnapshot(AbstractContainerScreen<?> handled) {
         try {
-            if (mc.player == null || mc.player.containerMenu == null) return;
+            if (mc.player.containerMenu == null) return;
 
             AbstractContainerMenu handler = mc.player.containerMenu;
+            int slotCount = handler.slots.size();
             String timestamp = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss").format(Instant.now());
             String screenName = handled.getClass().getSimpleName();
-            String snapshotId = "snapshot_" + screenName + "_" + timestamp;
 
             Path dir = storageDir().resolve("snapshots");
             Files.createDirectories(dir);
@@ -511,13 +515,13 @@ public class ItemStealer extends Module {
             CompoundTag root = new CompoundTag();
             root.putString("source", screenName);
             root.putString("timestamp", Instant.now().toString());
-            root.putInt("slotCount", handler.slots.size());
+            root.putInt("slotCount", slotCount);
 
             RegistryOps<Tag> ops = registryOps();
             if (ops == null) return;
 
             int savedCount = 0;
-            for (int i = 0; i < handler.slots.size(); i++) {
+            for (int i = 0; i < slotCount; i++) {
                 Slot slot = handler.getSlot(i);
                 if (!slot.hasItem()) continue;
 
@@ -536,7 +540,7 @@ public class ItemStealer extends Module {
             }
 
             root.putInt("savedCount", savedCount);
-            String filename = sanitizeId(snapshotId) + ".dat";
+            String filename = sanitizeId(screenName + "_" + timestamp) + ".dat";
             NbtIo.writeCompressed(root, dir.resolve(filename));
 
             if (containerSnapshotNotify.get()) {
@@ -554,19 +558,16 @@ public class ItemStealer extends Module {
         boolean nameOk = true;
         boolean typeOk = true;
 
-        String nameRegex = filterNameRegex.get();
-        if (nameRegex != null && !nameRegex.isEmpty()) {
+        if (!filterNameRegex.get().isEmpty()) {
             try {
-                Pattern pattern = Pattern.compile(nameRegex, Pattern.CASE_INSENSITIVE);
+                Pattern pattern = Pattern.compile(filterNameRegex.get(), Pattern.CASE_INSENSITIVE);
                 String displayName = stack.getItemName().getString();
-                String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+                String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
                 nameOk = pattern.matcher(displayName).find() || pattern.matcher(itemId).find();
             } catch (PatternSyntaxException e) {
-                warning("Invalid filter-name-regex: " + e.getMessage());
+                warning("Invalid name-regex: " + e.getMessage());
                 nameOk = false;
             }
-        } else {
-            nameOk = true;
         }
 
         if (filterItemType.get()) {
@@ -592,9 +593,7 @@ public class ItemStealer extends Module {
                     }
                 }
             }
-        } catch (Exception e) {
-
-        }
+        } catch (Exception ignored) {}
 
         return original.copy();
     }
@@ -606,17 +605,17 @@ public class ItemStealer extends Module {
 
     public boolean injectClonedIntoInventory(ItemStack stack) {
         LocalPlayer player = mc.player;
-        if (player == null || stack == null || stack.isEmpty()) return false;
+        if (player == null || mc.level == null || stack == null || stack.isEmpty()) return false;
 
         ItemStack clone = stack.copy();
+
+        if (creativeGive.get() && player.getAbilities().instabuild && mc.getConnection() != null) {
+            giveInCreative(clone.copy());
+        }
 
         if (!player.getInventory().add(clone)) {
             ItemEntity entity = new ItemEntity(mc.level, player.getX(), player.getY(), player.getZ(), clone);
             mc.level.addEntity(entity);
-        }
-
-        if (creativeGive.get() && player.getAbilities().instabuild && mc.getConnection() != null) {
-            giveInCreative(clone);
         }
 
         return true;
@@ -649,9 +648,9 @@ public class ItemStealer extends Module {
     }
 
     public static boolean bypassTrade(Slot slot) {
-        if (slot == null || slot.index != 2) return false;
+        if (slot == null || slot.index != MERCHANT_RESULT_SLOT) return false;
         Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || !(mc.player.containerMenu instanceof MerchantMenu)) return false;
+        if (mc.player == null || !(mc.player.containerMenu instanceof MerchantMenu merchant)) return false;
 
         ItemStealer m = get();
         if (m == null || !m.isActive()) return false;
@@ -659,61 +658,49 @@ public class ItemStealer extends Module {
         boolean pickPressed = mc.options.keyPickItem.isDown();
         if (!m.tradeBypass.get() && !(m.tradeBypassOnPick.get() && pickPressed)) return false;
 
-        MerchantMenu merchant = (MerchantMenu) mc.player.containerMenu;
-        ItemStack result = merchant.getSlot(2).getItem();
+        ItemStack result = merchant.getSlot(MERCHANT_RESULT_SLOT).getItem();
         if (result == null || result.isEmpty()) return false;
 
         ItemStack copy = m.perfectClone(result);
         m.injectClonedIntoInventory(copy);
         if (m.notify.get()) m.info("Trade bypassed: " + copy.getItemName().getString() + " x" + copy.getCount());
-        m.bypassedThisClick = true;
+        m.pendingCancelSlot = slot.index;
         return true;
     }
 
     @EventHandler
     private void onPacketSend(PacketEvent.Send event) {
+        if (!(event.packet instanceof ServerboundContainerClickPacket click)) return;
 
-        if (event.packet instanceof ServerboundContainerClickPacket click) {
-            if (pendingShiftCancel) {
-                pendingShiftCancel = false;
-                bypassedThisClick = false;
+        if (pendingCancelSlot >= 0) {
+            boolean sameSlot = click.slotNum() == pendingCancelSlot;
+            pendingCancelSlot = -1;
+            if (sameSlot) {
                 event.cancel();
                 return;
             }
-
-            if (bypassedThisClick) {
-                bypassedThisClick = false;
-                event.cancel();
-                return;
-            }
-
-            if (!tradeBypass.get() && !tradeBypassOnPick.get()) return;
-            if (mc.player == null) return;
-            if (!(mc.player.containerMenu instanceof MerchantMenu merchant)) return;
-            if (click.slotNum() != 2) return;
-
-            if (shiftClickSteal.get() && click.containerInput() == ContainerInput.QUICK_MOVE) {
-                ItemStack result = merchant.getSlot(2).getItem();
-                if (result != null && !result.isEmpty()) {
-                    ItemStack copy = perfectClone(result);
-                    injectClonedIntoInventory(copy);
-                    if (notify.get()) info("Shift-clone trade: " + copy.getItemName().getString() + " x" + copy.getCount());
-                    if (shiftClickCancelPacket.get()) {
-                        event.cancel();
-                    }
-                    return;
-                }
-            }
-
-            ItemStack result = merchant.getSlot(2).getItem();
-            if (result == null || result.isEmpty()) return;
-
-            ItemStack copy = perfectClone(result);
-            injectClonedIntoInventory(copy);
-            if (notify.get()) info("Trade bypassed: " + copy.getItemName().getString() + " x" + copy.getCount());
-
-            event.cancel();
         }
+
+        if (mc.player == null || !(mc.player.containerMenu instanceof MerchantMenu merchant)) return;
+        if (click.slotNum() != MERCHANT_RESULT_SLOT) return;
+
+        boolean pickPressed = mc.options.keyPickItem.isDown();
+        if (!tradeBypass.get() && !(tradeBypassOnPick.get() && pickPressed)) return;
+
+        ItemStack result = merchant.getSlot(MERCHANT_RESULT_SLOT).getItem();
+        if (result == null || result.isEmpty()) return;
+
+        boolean quickMove = shiftClickSteal.get() && click.containerInput() == ContainerInput.QUICK_MOVE;
+
+        ItemStack copy = perfectClone(result);
+        injectClonedIntoInventory(copy);
+        if (notify.get()) {
+            info((quickMove ? "Shift-clone trade: " : "Trade bypassed: ")
+                + copy.getItemName().getString() + " x" + copy.getCount());
+        }
+
+        if (quickMove && !shiftClickCancelPacket.get()) return;
+        event.cancel();
     }
 
     public boolean givePresetItem(String presetName) {
@@ -899,12 +886,12 @@ public class ItemStealer extends Module {
             CompoundTag tag = (CompoundTag) result.getOrThrow();
             CompoundTag wrapper = new CompoundTag();
             wrapper.put("item", tag);
-            wrapper.putString("savedAt", java.time.Instant.now().toString());
+            wrapper.putString("savedAt", Instant.now().toString());
             wrapper.putString("id", id);
             NbtIo.writeCompressed(wrapper, dir.resolve(sanitizeId(id) + ".dat"));
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
+            warning("Failed to save item: " + e.getMessage());
             return false;
         }
     }
@@ -996,7 +983,12 @@ public class ItemStealer extends Module {
     }
 
     public boolean isInGui() {
-        return mc.gui.screen() instanceof AbstractContainerScreen<?>;
+        return ClientCompat.screen() instanceof AbstractContainerScreen<?>;
     }
 
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        pendingCancelSlot = -1;
+        lastContainerSnapshotId = "";
+    }
 }

@@ -7,6 +7,6 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(Connection.class)
 public interface ConnectionChannelAccessor {
-    @Accessor("channel")
+    @Accessor(value = "channel")
     Channel orbiter$getChannel();
 }

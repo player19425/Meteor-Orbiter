@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Entity.class)
 public abstract class FluidPushMixin {
-    @Inject(method = "isPushedByFluid", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "isPushedByFluid", at = @At("HEAD"), cancellable = true, require = 1)
     private void orbiter$onIsPushedByFluid(CallbackInfoReturnable<Boolean> cir) {
         if (Modules.get() == null) return;
 

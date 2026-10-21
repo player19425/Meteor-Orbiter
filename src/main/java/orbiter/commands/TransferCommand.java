@@ -10,7 +10,7 @@ import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 public class TransferCommand extends Command {
 
     public TransferCommand() {
-        super("transfer", "Transfer to another server without disconnecting. Usage: .transfer <ip>");
+        super("transfer", "Transfers to another server without disconnecting.");
     }
 
     @Override
@@ -60,7 +60,7 @@ public class TransferCommand extends Command {
                 }
 
                 mc.getConnection().sendCommand("transfer " + host + " " + port);
-                info("Transferring to " + host + ":" + port + " ...");
+                info("Transferring to %s:%s ...", host, port);
                 return SINGLE_SUCCESS;
             }));
 
@@ -77,7 +77,7 @@ public class TransferCommand extends Command {
         try {
             parsed = Integer.parseInt(value);
         } catch (NumberFormatException e) {
-            error("Invalid port '" + value + "'.");
+            error("Invalid port '%s'.", value);
             return null;
         }
         if (parsed < 0 || parsed > 65535) {

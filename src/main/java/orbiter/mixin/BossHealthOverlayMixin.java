@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(BossHealthOverlay.class)
 public abstract class BossHealthOverlayMixin {
-    @WrapMethod(method = "update(Lnet/minecraft/network/protocol/game/ClientboundBossEventPacket;)V")
+    @WrapMethod(method = "update(Lnet/minecraft/network/protocol/game/ClientboundBossEventPacket;)V", require = 0)
     private void orbiter$tolerantUpdate(ClientboundBossEventPacket packet, Operation<Void> original) {
         try {
             original.call(packet);

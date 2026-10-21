@@ -21,6 +21,8 @@ public class RawPacketCapture {
     );
 
     private static final int MAX_PENDING_BYTES = 4 * 1024 * 1024;
+    private static final int MAX_CHANNELS_PER_PACKET = 512;
+    private static final int MAX_PACKETS_PER_PASS = 50;
 
     private static final ConcurrentLinkedQueue<byte[]> PENDING_BYTES = new ConcurrentLinkedQueue<>();
 
@@ -64,33 +66,35 @@ public class RawPacketCapture {
     }
 
     public static List<String> processPending() {
-        List<String> allDetected = new ArrayList<>();
+        Set<String> detected = new LinkedHashSet<>();
         byte[] raw;
         int processed = 0;
 
-        while ((raw = PENDING_BYTES.poll()) != null && processed < 50) {
+        while ((raw = PENDING_BYTES.poll()) != null && processed < MAX_PACKETS_PER_PASS) {
             pendingByteCount.addAndGet(-raw.length);
             processed++;
 
             List<String> registered = extractRegisteredChannels(raw);
             if (!registered.isEmpty()) {
                 totalRegistrationChannels.addAndGet(registered.size());
-                for (String ch : registered) {
-                    if (!isFilteredChannel(ch)) allDetected.add(ch);
-                }
+                addUnfiltered(detected, registered);
             } else {
                 List<String> embedded = extractChannelTokens(raw);
                 if (!embedded.isEmpty()) {
                     totalEmbeddedChannels.addAndGet(embedded.size());
-                    for (String ch : embedded) {
-                        if (!isFilteredChannel(ch)) allDetected.add(ch);
-                    }
+                    addUnfiltered(detected, embedded);
                 }
             }
         }
 
-        totalChannelsFound.addAndGet(allDetected.size());
-        return allDetected;
+        totalChannelsFound.addAndGet(detected.size());
+        return new ArrayList<>(detected);
+    }
+
+    private static void addUnfiltered(Set<String> target, List<String> channels) {
+        for (String channel : channels) {
+            if (!isFilteredChannel(channel)) target.add(channel);
+        }
     }
 
     public static void clearPending() {
@@ -121,6 +125,8 @@ public class RawPacketCapture {
                 if (normalized.contains(":") || isLegacyInterestingChannel(normalized)) {
                     channels.add(normalized);
                 }
+
+                if (channels.size() >= MAX_CHANNELS_PER_PACKET) break;
             }
         } catch (Exception ignored) {
         }
@@ -142,7 +148,7 @@ public class RawPacketCapture {
                     tokens.add(token);
                 }
 
-                if (tokens.size() >= 512) break;
+                if (tokens.size() >= MAX_CHANNELS_PER_PACKET) break;
             }
         } catch (Exception ignored) {
         }

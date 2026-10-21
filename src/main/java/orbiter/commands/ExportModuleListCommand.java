@@ -45,7 +45,7 @@ public class ExportModuleListCommand extends Command {
 
             String output = sb.toString();
             mc.keyboardHandler.setClipboard(output);
-            info("Copied " + lines.size() + " module names (all addons) to clipboard.");
+            info("Copied %s module names (all addons) to clipboard.", lines.size());
 
             return SINGLE_SUCCESS;
         });

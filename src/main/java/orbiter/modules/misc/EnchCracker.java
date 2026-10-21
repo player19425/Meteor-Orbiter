@@ -1,11 +1,15 @@
 package orbiter.modules.misc;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.LockSupport;
 import java.util.stream.StreamSupport;
 
 import meteordevelopment.meteorclient.events.world.TickEvent;
@@ -43,13 +47,13 @@ public class EnchCracker extends Module {
 
     private final Setting<String> target = sgGeneral.add(new StringSetting.Builder()
             .name("target-enchantment")
-            .description("Enchantment to highlight in the report, for example sharpness or silk touch.")
+            .description("Enchantment to highlight in the report, empty to list every row.")
             .defaultValue("")
             .build());
 
     private final Setting<Integer> filterPerTick = sgGeneral.add(new IntSetting.Builder()
             .name("filter-per-tick")
-            .description("How many seed candidates to test per tick while cracking. Lower this if the game stutters.")
+            .description("Seed candidates tested per tick, lower it if the game stutters.")
             .defaultValue(8192)
             .min(4096)
             .sliderRange(4096, 131072)
@@ -65,7 +69,7 @@ public class EnchCracker extends Module {
 
     private final Setting<Boolean> autoFullScan = sgGeneral.add(new BoolSetting.Builder()
             .name("auto-full-scan")
-            .description("Automatically start the full 2^32 scan when the synced seed is unusable. Very heavy: expect several minutes of CPU and lag.")
+            .description("Start the full 2^32 scan when the synced seed is unusable, very heavy.")
             .defaultValue(false)
             .build());
 
@@ -93,12 +97,13 @@ public class EnchCracker extends Module {
 
     private final AtomicLong fullCursor = new AtomicLong();
     private final AtomicInteger fullWorkersLeft = new AtomicInteger();
-    private final java.util.Set<Integer> fullFound = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
-    private final java.util.List<Thread> fullThreads = new ArrayList<>();
+    private final Set<Integer> fullFound = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final List<Thread> fullThreads = new ArrayList<>();
     private volatile boolean fullCancelled;
-    private int[] snapCosts = new int[3];
-    private int[] snapClue = new int[3];
-    private int[] snapLevel = new int[3];
+    private volatile int fullGeneration;
+    private final int[] snapCosts = new int[3];
+    private final int[] snapClue = new int[3];
+    private final int[] snapLevel = new int[3];
     private ItemStack snapItem = ItemStack.EMPTY;
     private int progressClock = 0;
 
@@ -110,8 +115,6 @@ public class EnchCracker extends Module {
     private final int[] obsLevel = {-1, -1, -1};
     private String obsItemKey = "";
     private int stableTicks = 0;
-    private int lastScanSize = -1;
-    private int stallTicks = 0;
     private int statusClock = 0;
 
     private int lastSeedSnapshot = Integer.MIN_VALUE;
@@ -292,7 +295,8 @@ public class EnchCracker extends Module {
         if (stableTicks < STABLE_TICKS) return;
         if (item.isEmpty()) return;
 
-        if (tablePos == null || !isValidTablePos()) {
+        if (!isValidTablePos()) {
+            tablePos = null;
             scanForTable();
             if (tablePos == null) {
                 if (statusClock <= 0) {
@@ -347,7 +351,6 @@ public class EnchCracker extends Module {
             possibleSeeds.add(chained);
             scanMode = ScanMode.MASKED;
             scanPhase = ScanPhase.SCANNING;
-            lastScanSize = -1;
             evaluateScanResult();
             return;
         }
@@ -360,8 +363,6 @@ public class EnchCracker extends Module {
             }
             scanPhase = ScanPhase.SCANNING;
             progressClock = 0;
-            stallTicks = 0;
-            lastScanSize = -1;
             info("Cracking seed: " + possibleSeeds.size() + " candidates (table power = " + power + " shelves).");
             return;
         }
@@ -394,7 +395,6 @@ public class EnchCracker extends Module {
         while (iterator.hasNext() && processed < filterPerTick.get()) {
             processed++;
             int candidate = iterator.next();
-            rand.setSeed(candidate);
             if (!candidateMatches(registry, idMap, rand, candidate, item,
                     menu.costs, menu.enchantClue, menu.levelClue, power)) {
                 iterator.remove();
@@ -453,6 +453,7 @@ public class EnchCracker extends Module {
         fullCursor.set(0);
         fullFound.clear();
         fullCancelled = false;
+        final int generation = ++fullGeneration;
         int cores = Math.max(1, Math.min(fullScanThreads.get(), Runtime.getRuntime().availableProcessors() - 1));
         fullWorkersLeft.set(cores);
 
@@ -460,20 +461,20 @@ public class EnchCracker extends Module {
             RandomSource rand = RandomSource.create();
             Thread worker = new Thread(() -> {
                 try {
-                    while (!fullCancelled) {
+                    while (!fullCancelled && fullGeneration == generation) {
                         long base = fullCursor.getAndAdd(FULL_CHUNK);
                         if (base >= FULL_TOTAL) break;
                         long end = Math.min(base + FULL_CHUNK, FULL_TOTAL);
-                        for (long s = base; s < end && !fullCancelled; s++) {
+                        for (long s = base; s < end && !fullCancelled && fullGeneration == generation; s++) {
                             int candidate = (int) s;
                             if (candidateMatches(registry, idMap, rand, candidate, snapRef, c, cl, lv, scanPower)) {
-                                fullFound.add(candidate);
+                                if (!fullCancelled && fullGeneration == generation) fullFound.add(candidate);
                             }
                         }
-                        java.util.concurrent.locks.LockSupport.parkNanos(400_000L);
+                        LockSupport.parkNanos(400_000L);
                     }
                 } finally {
-                    fullWorkersLeft.decrementAndGet();
+                    if (fullGeneration == generation) fullWorkersLeft.decrementAndGet();
                 }
             }, "orbiter-ench-scan");
             worker.setDaemon(true);
@@ -510,16 +511,22 @@ public class EnchCracker extends Module {
 
     private void stopFullScan() {
         fullCancelled = true;
+        fullGeneration++;
         if (!fullThreads.isEmpty()) {
+            long deadline = System.nanoTime() + 200_000_000L;
             for (Thread worker : fullThreads) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) break;
                 try {
-                    worker.join(200);
+                    worker.join(Math.max(1, remaining / 1_000_000L));
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
+                    break;
                 }
             }
             fullThreads.clear();
         }
+        fullWorkersLeft.set(0);
     }
 
     private void evaluateScanResult() {
@@ -548,13 +555,10 @@ public class EnchCracker extends Module {
                 statusClock = 100;
             }
         } else {
-            int size = possibleSeeds.size();
-            if (size != lastScanSize) {
-                lastScanSize = size;
-                stallTicks = 0;
-            }
             progressClock++;
-            if (progressClock % 100 == 0) info("Cracking seed: " + size + " possible seeds remaining.");
+            if (progressClock % 100 == 0) {
+                info("Cracking seed: " + possibleSeeds.size() + " possible seeds remaining.");
+            }
         }
     }
 
@@ -593,8 +597,6 @@ public class EnchCracker extends Module {
         trueSeed = -1;
         lockedPower = -1;
         stableTicks = 0;
-        lastScanSize = -1;
-        stallTicks = 0;
         tablePos = null;
     }
 

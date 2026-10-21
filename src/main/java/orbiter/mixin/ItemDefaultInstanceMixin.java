@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Item.class)
 public abstract class ItemDefaultInstanceMixin {
-    @Inject(method = "getDefaultInstance", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "getDefaultInstance", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$safeDefaultInstance(CallbackInfoReturnable<ItemStack> cir) {
         try {
             cir.setReturnValue(new ItemStack((ItemLike) (Object) this));

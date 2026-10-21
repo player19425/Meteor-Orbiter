@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 @Mixin(KeyBindsList.class)
 public abstract class ControlsListWidgetMixin {
     @Redirect(
+        require = 0,
         method = "<init>",
         at = @At(
             value = "FIELD",

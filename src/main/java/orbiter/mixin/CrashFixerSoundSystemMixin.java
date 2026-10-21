@@ -30,7 +30,7 @@ public class CrashFixerSoundSystemMixin {
     @Unique
     private int blockSoundsThisTick = 0;
 
-    @Inject(method = "tick", at = @At("HEAD"))
+    @Inject(method = "tick", at = @At("HEAD"), require = 0)
     private void orbiter$resetSoundCounters(CallbackInfo ci) {
         this.soundsThisTick = 0;
         this.blockSoundsThisTick = 0;
@@ -57,6 +57,7 @@ public class CrashFixerSoundSystemMixin {
     }
 
     @Inject(method = "play(Lnet/minecraft/client/resources/sounds/SoundInstance;)Lnet/minecraft/client/sounds/SoundEngine$PlayResult;",
+        require = 0,
             at = @At("HEAD"), cancellable = true)
     private void orbiter$throttleSoundPlays(SoundInstance sound, CallbackInfoReturnable<SoundEngine.PlayResult> cir) {
         ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);

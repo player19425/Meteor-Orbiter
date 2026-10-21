@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(MultiPlayerGameMode.class)
 public class EnchantTableUseMixin {
-    @Inject(method = "useItemOn", at = @At("HEAD"))
+    @Inject(method = "useItemOn", at = @At("HEAD"), require = 0)
     private void orbiter$captureTablePos(LocalPlayer player, InteractionHand hand, BlockHitResult hitResult, CallbackInfoReturnable<InteractionResult> cir) {
         BlockPos pos = hitResult.getBlockPos();
         if (player.level().getBlockState(pos).is(Blocks.ENCHANTING_TABLE)) {

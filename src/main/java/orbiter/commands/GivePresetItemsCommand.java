@@ -27,7 +27,6 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -52,6 +51,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
+import orbiter.compat.ItemCompat;
 
 import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 
@@ -72,6 +72,9 @@ public class GivePresetItemsCommand extends Command {
     private record ToolMat(String id, String display, Item sword, Item axe, Item pick, Item shovel, Item hoe,
                            Item helmet, Item chest, Item legs, Item boots) {}
 
+    private static final ToolMat NETHERITE = new ToolMat("netherite", "Netherite", Items.NETHERITE_SWORD, Items.NETHERITE_AXE, Items.NETHERITE_PICKAXE, Items.NETHERITE_SHOVEL, Items.NETHERITE_HOE,
+        Items.NETHERITE_HELMET, Items.NETHERITE_CHESTPLATE, Items.NETHERITE_LEGGINGS, Items.NETHERITE_BOOTS);
+
     private static final ToolMat[] MATS = {
         new ToolMat("wooden", "Wood", Items.WOODEN_SWORD, Items.WOODEN_AXE, Items.WOODEN_PICKAXE, Items.WOODEN_SHOVEL, Items.WOODEN_HOE,
             Items.LEATHER_HELMET, Items.LEATHER_CHESTPLATE, Items.LEATHER_LEGGINGS, Items.LEATHER_BOOTS),
@@ -83,8 +86,7 @@ public class GivePresetItemsCommand extends Command {
             Items.GOLDEN_HELMET, Items.GOLDEN_CHESTPLATE, Items.GOLDEN_LEGGINGS, Items.GOLDEN_BOOTS),
         new ToolMat("diamond", "Diamond", Items.DIAMOND_SWORD, Items.DIAMOND_AXE, Items.DIAMOND_PICKAXE, Items.DIAMOND_SHOVEL, Items.DIAMOND_HOE,
             Items.DIAMOND_HELMET, Items.DIAMOND_CHESTPLATE, Items.DIAMOND_LEGGINGS, Items.DIAMOND_BOOTS),
-        new ToolMat("netherite", "Netherite", Items.NETHERITE_SWORD, Items.NETHERITE_AXE, Items.NETHERITE_PICKAXE, Items.NETHERITE_SHOVEL, Items.NETHERITE_HOE,
-            Items.NETHERITE_HELMET, Items.NETHERITE_CHESTPLATE, Items.NETHERITE_LEGGINGS, Items.NETHERITE_BOOTS),
+        NETHERITE
     };
 
     private static final IntList FIREWORK_COLORS = new IntArrayList(new int[]{
@@ -92,8 +94,10 @@ public class GivePresetItemsCommand extends Command {
     });
     private static final IntList FIREWORK_FADE = new IntArrayList(new int[]{16777215, 0, 16711680});
 
+    private static final int GOD_KIT_POTIONS = 7;
+
     public GivePresetItemsCommand() {
-        super("givepresetitems", "200+ OP and command-block-only presets. Send via Creative Write Packet.", "gpi");
+        super("givepresetitems", "Gives OP items through the creative slot packet.", "gpi");
         registerAll();
     }
 
@@ -759,6 +763,11 @@ public class GivePresetItemsCommand extends Command {
             new MobEffectInstance(MobEffects.SPEED, 9600, 1))),
     };
 
+    private static PotionDef potion(String name) {
+        for (PotionDef p : POTIONS) if (p.name.equals(name)) return p;
+        throw new IllegalArgumentException("No potion preset named: " + name);
+    }
+
     private void registerPotions() {
         for (PotionDef p : POTIONS) {
             final String safeName = p.name.toLowerCase(Locale.ROOT).replace(' ', '-');
@@ -893,13 +902,13 @@ public class GivePresetItemsCommand extends Command {
         ItemStack box = new ItemStack(Items.SHULKER_BOX, 1);
         box.set(DataComponents.CUSTOM_NAME, name("PvP Kit", ChatFormatting.RED));
         List<ItemStack> contents = new ArrayList<>();
-        contents.add(makeGodSword(MATS[5]));
+        contents.add(makeGodSword(NETHERITE));
         contents.add(makeOpBow());
         contents.add(makeOpCrossbow());
-        contents.add(makeGodHelmet(MATS[5]));
-        contents.add(makeGodChest(MATS[5]));
-        contents.add(makeGodLegs(MATS[5]));
-        contents.add(makeGodBoots(MATS[5]));
+        contents.add(makeGodHelmet(NETHERITE));
+        contents.add(makeGodChest(NETHERITE));
+        contents.add(makeGodLegs(NETHERITE));
+        contents.add(makeGodBoots(NETHERITE));
         contents.add(makeGodShield());
         for (int i = 0; i < 8; i++) {
             ItemStack totem = new ItemStack(Items.TOTEM_OF_UNDYING, 64);
@@ -920,10 +929,10 @@ public class GivePresetItemsCommand extends Command {
         ItemStack box = new ItemStack(Items.SHULKER_BOX, 1);
         box.set(DataComponents.CUSTOM_NAME, name("Mining Kit", ChatFormatting.AQUA));
         List<ItemStack> contents = new ArrayList<>();
-        contents.add(makeGodPickaxe(MATS[5]));
-        contents.add(makeGodAxe(MATS[5]));
-        contents.add(makeGodShovel(MATS[5]));
-        contents.add(makeGodHoe(MATS[5]));
+        contents.add(makeGodPickaxe(NETHERITE));
+        contents.add(makeGodAxe(NETHERITE));
+        contents.add(makeGodShovel(NETHERITE));
+        contents.add(makeGodHoe(NETHERITE));
         contents.add(makeGodShears());
         contents.add(makeGodFlintSteel());
         for (int i = 0; i < 4; i++) {
@@ -934,7 +943,7 @@ public class GivePresetItemsCommand extends Command {
         ItemStack lanterns = new ItemStack(Items.LANTERN, 64);
         lanterns.set(DataComponents.CUSTOM_NAME, name("Lanterns x64", ChatFormatting.YELLOW));
         contents.add(lanterns);
-        for (PotionDef p : new PotionDef[]{POTIONS[0], POTIONS[5], POTIONS[6]}) {
+        for (PotionDef p : new PotionDef[]{potion("God Speed"), potion("God Haste"), potion("God Jump")}) {
             contents.add(makePotion(p, false, false));
         }
         box.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(contents));
@@ -951,7 +960,7 @@ public class GivePresetItemsCommand extends Command {
         Item[] blocks = {
             Items.STONE, Items.DEEPSLATE, Items.OAK_PLANKS, Items.COBBLESTONE,
             Items.BRICKS, Items.STONE_BRICKS, Items.NETHER_BRICKS,
-            Items.GLASS, Items.STAINED_GLASS.pick(DyeColor.WHITE), Items.OBSIDIAN, Items.CRYING_OBSIDIAN,
+            Items.GLASS, ItemCompat.stainedGlass(), Items.OBSIDIAN, Items.CRYING_OBSIDIAN,
             Items.GLOWSTONE, Items.SEA_LANTERN, Items.SHROOMLIGHT, Items.IRON_BLOCK,
             Items.DIAMOND_BLOCK, Items.GOLD_BLOCK, Items.EMERALD_BLOCK, Items.NETHERITE_BLOCK,
             Items.BEDROCK, Items.BARRIER, Items.STRUCTURE_VOID,
@@ -962,8 +971,8 @@ public class GivePresetItemsCommand extends Command {
             stack.set(DataComponents.CUSTOM_NAME, name(b.getName(net.minecraft.world.item.ItemStack.EMPTY).getString() + " x64", ChatFormatting.GREEN));
             contents.add(stack);
         }
-        contents.add(makeGodPickaxe(MATS[5]));
-        contents.add(makeGodAxe(MATS[5]));
+        contents.add(makeGodPickaxe(NETHERITE));
+        contents.add(makeGodAxe(NETHERITE));
         box.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(contents));
         box.set(DataComponents.LORE, new ItemLore(List.of(
             line("25 block types x64 + OP tools • complete building kit"),
@@ -979,7 +988,7 @@ public class GivePresetItemsCommand extends Command {
         for (int f : new int[]{50, 100, 127}) {
             contents.add(makeRocket(f, 64, 1, false));
         }
-        for (PotionDef p : new PotionDef[]{POTIONS[0], POTIONS[2], POTIONS[4], POTIONS[6], POTIONS[8]}) {
+        for (PotionDef p : new PotionDef[]{potion("God Speed"), potion("God Regen"), potion("God Night Vision"), potion("God Jump"), potion("God Invisibility")}) {
             contents.add(makePotion(p, false, false));
         }
         ItemStack food = new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 64);
@@ -1006,28 +1015,31 @@ public class GivePresetItemsCommand extends Command {
         box.set(DataComponents.CUSTOM_NAME, name("God Kit", ChatFormatting.DARK_PURPLE));
         List<ItemStack> contents = new ArrayList<>();
 
-        contents.add(makeGodHelmet(MATS[5]));
-        contents.add(makeGodChest(MATS[5]));
-        contents.add(makeGodLegs(MATS[5]));
-        contents.add(makeGodBoots(MATS[5]));
+        contents.add(makeGodHelmet(NETHERITE));
+        contents.add(makeGodChest(NETHERITE));
+        contents.add(makeGodLegs(NETHERITE));
+        contents.add(makeGodBoots(NETHERITE));
         contents.add(makeGodElytra());
 
-        contents.add(makeGodSword(MATS[5]));
-        contents.add(makeGodAxe(MATS[5]));
+        contents.add(makeGodSword(NETHERITE));
+        contents.add(makeGodAxe(NETHERITE));
         contents.add(makeOpBow());
         contents.add(makeOpCrossbow());
         contents.add(makeOpTrident());
         contents.add(makeOpMace());
         contents.add(makeGodShield());
 
-        contents.add(makeGodPickaxe(MATS[5]));
-        contents.add(makeGodShovel(MATS[5]));
-        contents.add(makeGodHoe(MATS[5]));
+        contents.add(makeGodPickaxe(NETHERITE));
+        contents.add(makeGodShovel(NETHERITE));
+        contents.add(makeGodHoe(NETHERITE));
         contents.add(makeGodShears());
         contents.add(makeGodFishingRod());
 
-        for (int i = 0; i < 7 && i < POTIONS.length; i++) {
-            contents.add(makePotion(POTIONS[i], true, false));
+        int potionsAdded = 0;
+        for (PotionDef p : POTIONS) {
+            if (potionsAdded >= GOD_KIT_POTIONS) break;
+            potionsAdded++;
+            contents.add(makePotion(p, true, false));
         }
         ItemStack totems = new ItemStack(Items.TOTEM_OF_UNDYING, 64);
         totems.set(DataComponents.CUSTOM_NAME, name("Totems x64", ChatFormatting.GOLD));
@@ -1319,8 +1331,8 @@ public class GivePresetItemsCommand extends Command {
 
     private void showList() {
         info("Total presets: " + allPresets.size());
-        info("Type /gpi <name> to get an item. Use /gpi list to see all.");
-        info("Use /gpi all for presets in batches of 27. Use /gpi all reset to restart batches. Use /gpi head <player> for player heads.");
+        info("Use .gpi <name> for one, .gpi head <player> for a head.");
+        info("Use .gpi all for " + ALL_BATCH_SIZE + " at a time, .gpi all reset to go back to batch 1.");
 
         int shown = Math.min(30, allPresets.size());
         StringBuilder sb = new StringBuilder("Preview: ");
@@ -1328,7 +1340,7 @@ public class GivePresetItemsCommand extends Command {
             sb.append(allPresets.get(i).name());
             if (i < shown - 1) sb.append(", ");
         }
-        if (allPresets.size() > 30) sb.append("... (+" + (allPresets.size() - 30) + " more)");
+        if (allPresets.size() > shown) sb.append("... (+" + (allPresets.size() - shown) + " more)");
         info(sb.toString());
     }
 

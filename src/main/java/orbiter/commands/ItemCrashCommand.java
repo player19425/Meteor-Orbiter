@@ -23,7 +23,7 @@ import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 
 public class ItemCrashCommand extends Command {
     public ItemCrashCommand() {
-        super("itemcrash", "Overloads your held item with extreme enchantments, attributes, and NBT data.");
+        super("itemcrash", "Overloads the held item with extreme enchantments, attributes and NBT.");
     }
 
     @Override

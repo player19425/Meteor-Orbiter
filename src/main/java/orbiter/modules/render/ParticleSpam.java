@@ -7,7 +7,6 @@ import orbiter.util.FastSend;
 import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
-import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.arrow.Arrow;
@@ -68,12 +67,6 @@ public class ParticleSpam extends CreativeSafetyModule {
                         .sliderRange(1, 500)
                         .build());
 
-        private final Setting<Boolean> crispTrails = sgTrails.add(new BoolSetting.Builder()
-                        .name("crisp-trails")
-                        .description("Use one short, low-spread particle per projectile update.")
-                        .defaultValue(true)
-                        .build());
-
         private final Setting<Double> speed = sgGeneral.add(new DoubleSetting.Builder()
                         .name("speed")
                         .description("Particle speed/spread.")
@@ -131,6 +124,13 @@ public class ParticleSpam extends CreativeSafetyModule {
                         .visible(trailMode::get)
                         .build());
 
+        private final Setting<Boolean> crispTrails = sgTrails.add(new BoolSetting.Builder()
+                        .name("crisp-trails")
+                        .description("One short, low-spread particle per projectile update, ignores trail-density.")
+                        .defaultValue(true)
+                        .visible(trailMode::get)
+                        .build());
+
         private static final String[] ALL_PARTICLES = {
                         "flame", "soul_fire_flame", "smoke", "large_smoke", "cloud", "explosion",
                         "explosion_emitter", "heart", "angry_villager", "happy_villager",
@@ -153,6 +153,11 @@ public class ParticleSpam extends CreativeSafetyModule {
         public ParticleSpam() {
                 super("particle-spam",
                                 "Spams particles in a radius. OP required.");
+        }
+
+        @Override
+        protected boolean supportsFrameBudget() {
+                return true;
         }
 
         @Override

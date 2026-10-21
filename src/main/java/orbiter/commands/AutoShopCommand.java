@@ -19,7 +19,7 @@ public class AutoShopCommand extends Command {
             AutoShop module = modules.get(AutoShop.class);
             if (module == null) { error("AutoShop module not found!"); return SINGLE_SUCCESS; }
             module.toggle();
-            info("AutoShop is now " + (module.isActive() ? "§aON" : "§cOFF"));
+            info("AutoShop is now %s", module.isActive() ? "§aON" : "§cOFF");
             return SINGLE_SUCCESS;
         });
 
@@ -28,7 +28,7 @@ public class AutoShopCommand extends Command {
             if (modules == null) { error("Modules not initialized."); return SINGLE_SUCCESS; }
             AutoShop module = modules.get(AutoShop.class);
             if (module == null) { error("AutoShop module not found!"); return SINGLE_SUCCESS; }
-            info("AutoShop " + (module.isActive() ? "§aON" : "§cOFF") + " | Buy attempts: " + module.getBuyAttempts());
+            info("AutoShop %s | Buy attempts: %s", module.isActive() ? "§aON" : "§cOFF", module.getBuyAttempts());
             return SINGLE_SUCCESS;
         }));
 

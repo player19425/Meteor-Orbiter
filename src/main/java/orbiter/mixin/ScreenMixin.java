@@ -6,6 +6,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.world.inventory.Slot;
+import orbiter.modules.misc.ItemStealer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -14,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(Screen.class)
 public class ScreenMixin {
 
-    @Inject(method = "keyPressed(Lnet/minecraft/client/input/KeyEvent;)Z", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "keyPressed(Lnet/minecraft/client/input/KeyEvent;)Z", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$onKeyPressed(KeyEvent input, CallbackInfoReturnable<Boolean> cir) {
         Screen self = (Screen) (Object) this;
         if (!(self instanceof AbstractContainerScreen<?> screen)) return;
@@ -28,12 +29,12 @@ public class ScreenMixin {
         KeyMapping pick = mc.options.keyPickItem;
         if (!pick.matches(input)) return;
 
-        if (orbiter.modules.misc.ItemStealer.bypassTrade(hoveredSlot)) {
+        if (ItemStealer.bypassTrade(hoveredSlot)) {
             cir.setReturnValue(true);
             return;
         }
 
-        if (orbiter.modules.misc.ItemStealer.cloneGuiSlot(hoveredSlot)) {
+        if (ItemStealer.cloneGuiSlot(hoveredSlot)) {
             cir.setReturnValue(true);
         }
     }

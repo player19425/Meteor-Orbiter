@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(Player.class)
 public abstract class PlayerEntityVisualSpoofMixin {
-    @Inject(method = "isCreative", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "isCreative", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$isCreative(CallbackInfoReturnable<Boolean> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.visualCreativeEnabled()) return;

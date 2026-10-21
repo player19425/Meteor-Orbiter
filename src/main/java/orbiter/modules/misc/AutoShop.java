@@ -22,6 +22,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.core.Direction;
 import net.minecraft.world.phys.Vec3;
 import orbiter.Orbiter;
+import orbiter.compat.ClientCompat;
 
 import java.util.HashSet;
 import java.util.Locale;
@@ -71,7 +72,7 @@ public class AutoShop extends Module {
 
     private final Setting<Boolean> autoDetectSlots = sgShop.add(new BoolSetting.Builder()
         .name("auto-detect-slots")
-        .description("Detect the category and item buttons. The item is matched directly, independent of language.")
+        .description("Find the category and item buttons by content instead of by slot.")
         .defaultValue(true)
         .build());
 
@@ -92,42 +93,42 @@ public class AutoShop extends Module {
     private final Setting<Integer> categorySlot = sgShop.add(new IntSetting.Builder()
         .name("category-slot")
         .description("Category button slot.")
-        .defaultValue(12).min(0).sliderRange(0, 53)
+        .defaultValue(12).min(0).max(53).sliderRange(0, 53)
         .build());
 
     private final Setting<Integer> itemSlot = sgShop.add(new IntSetting.Builder()
         .name("item-slot")
         .description("Item button slot; used when detection is disabled or cannot find the item.")
-        .defaultValue(3).min(0).sliderRange(0, 53)
+        .defaultValue(3).min(0).max(53).sliderRange(0, 53)
         .build());
 
     private final Setting<Integer> stackBatchSlot = sgShop.add(new IntSetting.Builder()
         .name("stack-batch-slot")
         .description("Stack batch selector. This slot is clicked exactly once.")
-        .defaultValue(31).min(0).sliderRange(0, 53)
+        .defaultValue(31).min(0).max(53).sliderRange(0, 53)
         .build());
 
     private final Setting<Integer> addSlot = sgShop.add(new IntSetting.Builder()
         .name("add-slot")
         .description("Add-more-stacks button.")
-        .defaultValue(25).min(0).sliderRange(0, 53)
+        .defaultValue(25).min(0).max(53).sliderRange(0, 53)
         .build());
 
     private final Setting<Integer> addClicks = sgShop.add(new IntSetting.Builder()
         .name("add-clicks")
-        .description("Number of times to click the add button. Two produces the intended 64-stack batch on this shop.")
+        .description("Clicks of the add button per batch. Two gives a full 64 stack.")
         .defaultValue(2).min(0).max(8).sliderRange(0, 8)
         .build());
 
     private final Setting<Integer> confirmSlot = sgShop.add(new IntSetting.Builder()
         .name("confirm-slot")
         .description("Final purchase confirmation slot.")
-        .defaultValue(13).min(0).sliderRange(0, 53)
+        .defaultValue(13).min(0).max(53).sliderRange(0, 53)
         .build());
 
     private final Setting<Boolean> antiWrongItem = sgSafety.add(new BoolSetting.Builder()
         .name("anti-wrong-item")
-        .description("Refuse to click an item button that does not match the target item or English fallback keyword.")
+        .description("Refuse to buy anything that is not the target item.")
         .defaultValue(true)
         .build());
 
@@ -139,15 +140,15 @@ public class AutoShop extends Module {
 
     private final Setting<Integer> groundItemRange = sgSafety.add(new IntSetting.Builder()
         .name("ground-item-range")
-        .description("Nearby dropped target items are collected and deposited before another purchase.")
-        .defaultValue(6).min(1).sliderRange(1, 16)
+        .description("Waits for dropped target items to be picked up before buying again.")
+        .defaultValue(6).min(1).max(16).sliderRange(1, 16)
         .visible(() -> mode.get() != Mode.Sell)
         .build());
 
     private final Setting<Integer> chestRange = sgChest.add(new IntSetting.Builder()
         .name("chest-search-range")
         .description("Range used to find deposit containers.")
-        .defaultValue(4).min(1).sliderRange(1, 8)
+        .defaultValue(4).min(1).max(8).sliderRange(1, 8)
         .visible(() -> mode.get() == Mode.BuyAndDeposit)
         .build());
 
@@ -179,7 +180,7 @@ public class AutoShop extends Module {
 
     private final Setting<Integer> depositDelay = sgSpeed.add(new IntSetting.Builder()
         .name("deposit-delay")
-        .description("Ticks between chest-dump passes (each pass shift-clicks every target stack at once).")
+        .description("Ticks between chest-dump passes; each pass moves every target stack.")
         .defaultValue(1).min(1).sliderRange(1, 20)
         .visible(() -> mode.get() == Mode.BuyAndDeposit)
         .build());
@@ -218,7 +219,7 @@ public class AutoShop extends Module {
 
     @Override
     public void onDeactivate() {
-        if (mc.player != null && mc.gui.screen() instanceof AbstractContainerScreen<?>) mc.player.closeContainer();
+        if (mc.player != null && ClientCompat.screen() instanceof AbstractContainerScreen<?>) mc.player.closeContainer();
         info("AutoShop stopped. Completed transactions: " + transactionCycles);
     }
 
@@ -378,7 +379,7 @@ public class AutoShop extends Module {
 
         if (completed) {
             transactionCycles++;
-            if (mc.gui.screen() instanceof AbstractContainerScreen<?>) mc.player.closeContainer();
+            if (ClientCompat.screen() instanceof AbstractContainerScreen<?>) mc.player.closeContainer();
             tickWaiter = normalDelay.get();
             if (mode.get() == Mode.BuyAndDeposit) {
                 state = currentCount > 0 ? FIND_CHEST : WAIT_GROUND_PICKUP;
@@ -390,7 +391,7 @@ public class AutoShop extends Module {
         }
 
         if (--timeout <= 0) {
-            if (mc.gui.screen() instanceof AbstractContainerScreen<?>) mc.player.closeContainer();
+            if (ClientCompat.screen() instanceof AbstractContainerScreen<?>) mc.player.closeContainer();
 
             if (getTargetItemCount() > 0) {
                 state = FIND_CHEST;
@@ -453,9 +454,8 @@ public class AutoShop extends Module {
 
         currentChest = findNearbyChest();
         if (currentChest == null) {
-
             if (noChestRetries == 0 || noChestRetries % 20 == 0) {
-                warning("No usable chest in range; waiting for one to become available (items stay safe in inventory).");
+                warning("No usable chest in range; waiting for one (items stay in inventory).");
             }
             noChestRetries++;
             tickWaiter = normalDelay.get();
@@ -476,7 +476,6 @@ public class AutoShop extends Module {
         if (screen != null && getContainerSize(screen) > 0) {
             int remaining = computeChestRemainingCapacity(screen);
             if (remaining <= 0) {
-
                 markChestFull(currentChest);
                 mc.player.closeContainer();
                 state = FIND_CHEST;
@@ -513,7 +512,6 @@ public class AutoShop extends Module {
     private void depositMoveAll() {
         AbstractContainerScreen<?> screen = getHandledScreen();
         if (screen == null) {
-
             if (++chestReopenFails > 6) {
                 markChestFull(currentChest);
                 warning("Chest at " + currentChest + " could not be kept open; skipping it.");
@@ -543,7 +541,6 @@ public class AutoShop extends Module {
 
         int count = getTargetItemCount();
         if (count == 0) {
-
             mc.player.closeContainer();
             state = getNearbyGroundTargetItemCount() > 0 ? WAIT_GROUND_PICKUP : START;
             groundWaitTicks = 0;
@@ -563,7 +560,6 @@ public class AutoShop extends Module {
         depositLastCount = count;
 
         if (computeChestRemainingCapacity(screen) <= 0) {
-
             markChestFull(currentChest);
             mc.player.closeContainer();
             state = FIND_CHEST;
@@ -622,7 +618,7 @@ public class AutoShop extends Module {
     }
 
     private AbstractContainerScreen<?> getHandledScreen() {
-        return mc.gui.screen() instanceof AbstractContainerScreen<?> handled ? handled : null;
+        return ClientCompat.screen() instanceof AbstractContainerScreen<?> handled ? handled : null;
     }
 
     private int getContainerSize(AbstractContainerScreen<?> screen) {
@@ -734,7 +730,7 @@ public class AutoShop extends Module {
         if (state != null && state.is(Blocks.CHEST)) {
             for (Direction direction : Direction.Plane.HORIZONTAL) {
                 BlockPos adjacent = pos.relative(direction);
-                if (mc.level != null && isDepositContainer(mc.level.getBlockState(adjacent))) fullChests.add(adjacent);
+                if (isDepositContainer(mc.level.getBlockState(adjacent))) fullChests.add(adjacent);
             }
         }
     }

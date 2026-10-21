@@ -95,9 +95,9 @@ public class PeakPluginScannerCommand extends Command {
                 error("PeakScanner module is not active. Enable it in Modules.");
                 return SINGLE_SUCCESS;
             }
-            info("Detected " + scanner.getDetectedCount() + " plugins | Brand: "
-                + (scanner.getServerBrand() != null ? scanner.getServerBrand() : "unknown")
-                + " | Probes: " + scanner.getTotalProbesSent());
+            info("Detected %s plugins | Brand: %s | Probes: %s", scanner.getDetectedCount(),
+                scanner.getServerBrand() != null ? scanner.getServerBrand() : "unknown",
+                scanner.getTotalProbesSent());
             return SINGLE_SUCCESS;
         }));
     }

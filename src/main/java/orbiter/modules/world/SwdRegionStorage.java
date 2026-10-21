@@ -13,15 +13,19 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Path;
-import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class SwdRegionStorage implements AutoCloseable {
 
+    private static final int MAX_OPEN_REGIONS = 64;
+
     private final Path directory;
     private final RegionStorageInfo storageKey;
-    private final Map<Long, RegionFile> regionCache = new HashMap<>();
+    private final Map<Long, RegionFile> regionCache = new LinkedHashMap<>(16, 0.75f, true);
     private boolean closed;
 
     public SwdRegionStorage(Path directory, ResourceKey<Level> dimension) {
@@ -32,12 +36,41 @@ public class SwdRegionStorage implements AutoCloseable {
         } catch (IOException ignored) {}
     }
 
-    public void write(ChunkPos pos, CompoundTag nbt) throws IOException {
+    public long write(ChunkPos pos, CompoundTag nbt) throws IOException {
         synchronized (this) {
             RegionFile rf = getOrOpenRegion(pos);
-            try (DataOutputStream out = rf.getChunkDataOutputStream(pos)) {
-                NbtIo.write(nbt, (DataOutput) out);
+            DataOutputStream out = rf.getChunkDataOutputStream(pos);
+            CountingDataOutput counting = new CountingDataOutput(out);
+            try {
+                NbtIo.write(nbt, counting);
+            } finally {
+                out.close();
             }
+            return counting.count();
+        }
+    }
+
+    private static final class CountingDataOutput extends DataOutputStream {
+        private long count;
+
+        CountingDataOutput(OutputStream out) {
+            super(out);
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            count++;
+            super.write(b);
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            count += len;
+            super.write(b, off, len);
+        }
+
+        long count() {
+            return count;
         }
     }
 
@@ -54,13 +87,24 @@ public class SwdRegionStorage implements AutoCloseable {
     private RegionFile getOrOpenRegion(ChunkPos pos) throws IOException {
         if (closed) throw new IOException("Region storage is closed");
         long regionKey = packRegion(pos.getRegionX(), pos.getRegionZ());
-        RegionFile rf = regionCache.get(regionKey);
-        if (rf == null) {
-            Path path = directory.resolve("r." + pos.getRegionX() + "." + pos.getRegionZ() + ".mca");
-            rf = new RegionFile(storageKey, path, directory, false);
-            regionCache.put(regionKey, rf);
+        RegionFile cached = regionCache.get(regionKey);
+        if (cached != null) return cached;
+        evictOldestRegions();
+        Path path = directory.resolve("r." + pos.getRegionX() + "." + pos.getRegionZ() + ".mca");
+        RegionFile opened = new RegionFile(storageKey, path, directory, false);
+        regionCache.put(regionKey, opened);
+        return opened;
+    }
+
+    private void evictOldestRegions() {
+        while (regionCache.size() >= MAX_OPEN_REGIONS) {
+            Iterator<Map.Entry<Long, RegionFile>> iterator = regionCache.entrySet().iterator();
+            Map.Entry<Long, RegionFile> eldest = iterator.next();
+            iterator.remove();
+            try {
+                eldest.getValue().close();
+            } catch (IOException ignored) {}
         }
-        return rf;
     }
 
     @Override

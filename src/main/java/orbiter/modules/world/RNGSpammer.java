@@ -128,18 +128,22 @@ public class RNGSpammer extends CreativeSafetyModule {
     @EventHandler
     private void onTick(TickEvent.Post event) {
         if (mc.player == null || mc.player.connection == null) return;
-        if (++tickCounter < Math.max(1, delay.get())) return;
+        tickCounter++;
+        if (tickCounter < delay.get()) return;
         tickCounter = 0;
 
         String target = resolveTarget();
         if (target == null) return;
+        String[] tables = resolveTables();
         int total = Math.min(commandsPerTick.get(), maxCommands.get());
+        boolean spread = randomPosition.get();
+        int radius = spreadRadius.get();
         for (int i = 0; i < total; i++) {
             if (!GlobalSendLimiter.tryAcquireOne()) break;
-            String table = getNextLootTable();
-            double x = (randomPosition.get() ? offset(random, spreadRadius.get()) : 0);
-            double y = randomPosition.get() ? random.nextDouble() * 3 : 0;
-            double z = (randomPosition.get() ? offset(random, spreadRadius.get()) : 0);
+            String table = tables[tableIndex++ % tables.length];
+            double x = spread ? offset(radius) : 0;
+            double y = spread ? random.nextDouble() * 3 : 0;
+            double z = spread ? offset(radius) : 0;
             String cmd = CommandUtils.formatCommand(
                 "execute at %s run loot spawn ~%.2f ~%.2f ~%.2f loot %s", target, x, y, z, table);
             FastSend.command(CommandUtils.vanilla(cmd));
@@ -181,14 +185,18 @@ public class RNGSpammer extends CreativeSafetyModule {
             || trimmed.indexOf('\r') >= 0 || !(lower.startsWith("@a") || lower.startsWith("@p") || lower.startsWith("@r"))) {
             return rejectSelector();
         }
-        if (lower.startsWith("@a") && !lower.contains("limit=")) {
-            trimmed = trimmed.equalsIgnoreCase("@a")
-                ? "@a[limit=" + maxTargets.get() + "]"
-                : trimmed.substring(0, trimmed.length() - 1) + ",limit=" + maxTargets.get() + "]";
-        }
         for (int i = 2; i < trimmed.length(); i++) {
             char c = trimmed.charAt(i);
             if (!(Character.isLetterOrDigit(c) || "_[],:.=!+-".indexOf(c) >= 0)) return rejectSelector();
+        }
+        boolean bare = trimmed.length() == 2;
+        if (!bare && (trimmed.charAt(2) != '[' || trimmed.charAt(trimmed.length() - 1) != ']')) {
+            return rejectSelector();
+        }
+        if (lower.startsWith("@a") && !lower.contains("limit=")) {
+            trimmed = bare
+                ? "@a[limit=" + maxTargets.get() + "]"
+                : trimmed.substring(0, trimmed.length() - 1) + ",limit=" + maxTargets.get() + "]";
         }
         return trimmed;
     }
@@ -199,25 +207,21 @@ public class RNGSpammer extends CreativeSafetyModule {
         return null;
     }
 
-    private double offset(Random rng, int radius) {
-        return (rng.nextDouble() * 2 - 1) * radius;
+    private double offset(int radius) {
+        return (random.nextDouble() * 2 - 1) * radius;
     }
 
-    private String getNextLootTable() {
-        String[] tables;
-        switch (profile.get()) {
-            case TrialChambers -> tables = TRIAL_LOOT_TABLES;
-            case Dungeon -> tables = DUNGEON_LOOT_TABLES;
-            case EntityDrops -> tables = ENTITY_LOOT_TABLES;
-            case Custom -> tables = getCustomTables();
-            default -> tables = CHEST_LOOT_TABLES;
-        }
-        String table = tables[tableIndex % tables.length];
-        tableIndex++;
-        return table;
+    private String[] resolveTables() {
+        return switch (profile.get()) {
+            case TrialChambers -> TRIAL_LOOT_TABLES;
+            case Dungeon -> DUNGEON_LOOT_TABLES;
+            case EntityDrops -> ENTITY_LOOT_TABLES;
+            case Custom -> customTables();
+            default -> CHEST_LOOT_TABLES;
+        };
     }
 
-    private String[] getCustomTables() {
+    private String[] customTables() {
         return switch (lootTableSet.get()) {
             case Chests -> CHEST_LOOT_TABLES;
             case Entities -> ENTITY_LOOT_TABLES;

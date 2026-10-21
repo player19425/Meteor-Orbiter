@@ -1,7 +1,6 @@
 package orbiter.modules.misc;
 
 import orbiter.Orbiter;
-import orbiter.util.ClientSpoofState;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
@@ -13,6 +12,7 @@ import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.settings.StringSetting;
 import meteordevelopment.meteorclient.systems.modules.Module;
+import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.BossEvent;
@@ -29,7 +29,6 @@ import net.minecraft.util.Mth;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 
 public class ClientSideThings extends Module {
@@ -321,12 +320,6 @@ public class ClientSideThings extends Module {
         .visible(() -> fireOverlayMode.get() == OverlayMode.ForceOn)
         .build());
 
-    private final Setting<OverlayMode> pumpkinOverlayMode = sgOverlay.add(new EnumSetting.Builder<OverlayMode>()
-        .name("pumpkin-overlay-mode")
-        .description("Server preserves vanilla; ForceOff hides the pumpkin overlay.")
-        .defaultValue(OverlayMode.Server)
-        .build());
-
     private final Setting<OverlayMode> waterOverlayMode = sgOverlay.add(new EnumSetting.Builder<OverlayMode>()
         .name("water-overlay-mode")
         .description("Server preserves vanilla; ForceOn/ForceOff control the local underwater overlay.")
@@ -418,21 +411,18 @@ public class ClientSideThings extends Module {
 
     private final Setting<Boolean> bossbarHideAll = sgBossbar.add(new BoolSetting.Builder()
         .name("bossbar-hide-all")
-        .description("Hide all boss bars completely.")
         .defaultValue(false)
         .visible(bossbarOverrideEnabled::get)
         .build());
 
     private final Setting<Boolean> bossbarColorOverride = sgBossbar.add(new BoolSetting.Builder()
         .name("bossbar-color-override")
-        .description("Override boss bar color.")
         .defaultValue(false)
         .visible(bossbarOverrideEnabled::get)
         .build());
 
     private final Setting<BossEvent.BossBarColor> bossbarColor = sgBossbar.add(new EnumSetting.Builder<BossEvent.BossBarColor>()
         .name("bossbar-color")
-        .description("Color to override boss bars with.")
         .defaultValue(BossEvent.BossBarColor.RED)
         .visible(() -> bossbarOverrideEnabled.get() && bossbarColorOverride.get())
         .build());
@@ -468,8 +458,6 @@ public class ClientSideThings extends Module {
 
     private final Random random = new Random();
 
-    private int backupXpLevel;
-    private float backupXpProgress;
     private int latestRealXpLevel;
     private float latestRealXpProgress;
     private volatile boolean xpSnapshotValid;
@@ -489,6 +477,8 @@ public class ClientSideThings extends Module {
 
     private GameType realGameMode;
     private int realLatency = -1;
+    private boolean gameModeSpoofed;
+    private boolean latencySpoofed;
 
     private boolean showingFakeDeath = false;
     private boolean fakeDeathSettingWasEnabled = false;
@@ -530,6 +520,8 @@ public class ClientSideThings extends Module {
         xpTrackedPlayer = null;
         realGameMode = null;
         realLatency = -1;
+        gameModeSpoofed = false;
+        latencySpoofed = false;
         showingFakeDeath = false;
         fakeDeathSettingWasEnabled = false;
         fakeDeathFadeAlpha = 0.0f;
@@ -538,17 +530,11 @@ public class ClientSideThings extends Module {
             synchronized (xpLock) {
                 latestRealXpLevel = mc.player.experienceLevel;
                 latestRealXpProgress = mc.player.experienceProgress;
-                backupXpLevel = latestRealXpLevel;
-                backupXpProgress = latestRealXpProgress;
                 xpSnapshotValid = true;
             }
 
-            if (mc.gameMode != null && currentGameModeField != null) {
-                try {
-                    realGameMode = (GameType) currentGameModeField.get(mc.gameMode);
-                } catch (IllegalAccessException ignored) {
-                    realGameMode = mc.gameMode.getPlayerMode();
-                }
+            if (mc.gameMode != null) {
+                realGameMode = readGameMode();
             }
 
             if (mc.player.connection != null) {
@@ -564,16 +550,15 @@ public class ClientSideThings extends Module {
     public void onDeactivate() {
         restoreXp();
         restoreSpoof();
+        gameModeSpoofed = false;
+        latencySpoofed = false;
         showingFakeDeath = false;
         fakeDeathFadeAlpha = 0.0f;
     }
 
     private void restoreSpoof() {
-
         if (mc.gameMode != null && realGameMode != null && currentGameModeField != null) {
-            try {
-                currentGameModeField.set(mc.gameMode, realGameMode);
-            } catch (IllegalAccessException ignored) {}
+            writeGameMode(realGameMode);
         }
 
         if (mc.player != null && mc.player.connection != null && realLatency >= 0 && latencyField != null) {
@@ -587,30 +572,17 @@ public class ClientSideThings extends Module {
         PlayerInfo entry = mc.player.connection.getPlayerInfo(mc.player.getUUID());
         if (entry == null || latencyField == null) return;
 
-        try {
-            latencyField.setInt(entry, realLatency);
-        } catch (IllegalAccessException ignored) {}
+        writeLatency(entry, realLatency);
     }
 
     private void restoreXp() {
         if (mc.player == null) return;
 
         synchronized (xpLock) {
-            if (!xpSnapshotValid) {
-                xpOverridden = false;
-                return;
+            if (xpSnapshotValid) {
+                mc.player.experienceLevel = latestRealXpLevel;
+                mc.player.experienceProgress = latestRealXpProgress;
             }
-
-            int level = latestRealXpLevel;
-            float progress = latestRealXpProgress;
-
-            if (level <= 0 && progress <= 0.0f && (backupXpLevel > 0 || backupXpProgress > 0.0f)) {
-                level = backupXpLevel;
-                progress = backupXpProgress;
-            }
-
-            mc.player.experienceLevel = level;
-            mc.player.experienceProgress = progress;
             xpOverridden = false;
         }
     }
@@ -624,8 +596,6 @@ public class ClientSideThings extends Module {
             synchronized (xpLock) {
                 latestRealXpLevel = mc.player.experienceLevel;
                 latestRealXpProgress = mc.player.experienceProgress;
-                backupXpLevel = latestRealXpLevel;
-                backupXpProgress = latestRealXpProgress;
                 xpSnapshotValid = true;
                 xpOverridden = false;
             }
@@ -638,8 +608,8 @@ public class ClientSideThings extends Module {
         if (shouldSpoofXp()) {
             synchronized (xpLock) {
                 if (!xpSnapshotValid) {
-                    backupXpLevel = mc.player.experienceLevel;
-                    backupXpProgress = mc.player.experienceProgress;
+                    latestRealXpLevel = mc.player.experienceLevel;
+                    latestRealXpProgress = mc.player.experienceProgress;
                     xpSnapshotValid = true;
                 }
                 mc.player.experienceLevel = getEffectiveXpLevel();
@@ -652,63 +622,94 @@ public class ClientSideThings extends Module {
             synchronized (xpLock) {
                 latestRealXpLevel = mc.player.experienceLevel;
                 latestRealXpProgress = mc.player.experienceProgress;
-                backupXpLevel = latestRealXpLevel;
-                backupXpProgress = latestRealXpProgress;
                 xpSnapshotValid = true;
             }
         }
 
-        if (realGameMode == null && mc.gameMode != null && currentGameModeField != null) {
-            try {
-                realGameMode = (GameType) currentGameModeField.get(mc.gameMode);
-            } catch (IllegalAccessException ignored) {
-                realGameMode = mc.gameMode.getPlayerMode();
-            }
-        }
+        applyGameModeSpoof();
+        applyPingSpoof();
 
-        if (mc.gameMode != null && fakeGamemode.get() != FakeGameMode.Server && currentGameModeField != null) {
-            GameType target = fakeGamemode.get().mode;
-            if (target != null) {
-                try {
-                    currentGameModeField.set(mc.gameMode, target);
-                } catch (IllegalAccessException ignored) {}
-            }
-        }
-
-        if (realLatency < 0 && mc.player.connection != null) {
-            PlayerInfo entry = mc.player.connection.getPlayerInfo(mc.player.getUUID());
-            if (entry != null) {
-                realLatency = entry.getLatency();
-            }
-        }
-
-        if (mc.player != null && mc.player.connection != null && fakePing.get() > 0 && latencyField != null) {
-            PlayerInfo entry = mc.player.connection.getPlayerInfo(mc.player.getUUID());
-            if (entry != null) {
-                try {
-                    latencyField.setInt(entry, fakePing.get());
-                } catch (IllegalAccessException ignored) {}
-            }
-        }
-
-        if (fakeBreatheEnabled.get() && mc.player != null) {
+        if (fakeBreatheEnabled.get()) {
             mc.player.setAirSupply(mc.player.getMaxAirSupply());
         }
 
         updateFakeDeathScreen();
     }
 
+    private void applyGameModeSpoof() {
+        if (mc.gameMode == null || currentGameModeField == null) return;
+
+        GameType target = fakeGamemode.get().mode;
+        if (target != null) {
+            if (!gameModeSpoofed) {
+                realGameMode = readGameMode();
+                gameModeSpoofed = true;
+            }
+            writeGameMode(target);
+            return;
+        }
+
+        if (gameModeSpoofed) {
+            if (realGameMode != null) writeGameMode(realGameMode);
+            gameModeSpoofed = false;
+        }
+
+        realGameMode = readGameMode();
+    }
+
+    private void applyPingSpoof() {
+        if (mc.player.connection == null || latencyField == null) return;
+
+        PlayerInfo entry = mc.player.connection.getPlayerInfo(mc.player.getUUID());
+        if (entry == null) return;
+
+        int spoofed = fakePing.get();
+        if (spoofed > 0) {
+            if (!latencySpoofed) {
+                realLatency = entry.getLatency();
+                latencySpoofed = true;
+            }
+            writeLatency(entry, spoofed);
+            return;
+        }
+
+        if (latencySpoofed) {
+            latencySpoofed = false;
+            if (realLatency >= 0) writeLatency(entry, realLatency);
+        }
+    }
+
+    private GameType readGameMode() {
+        if (mc.gameMode == null) return null;
+
+        if (currentGameModeField != null) {
+            try {
+                return (GameType) currentGameModeField.get(mc.gameMode);
+            } catch (IllegalAccessException ignored) {}
+        }
+
+        return mc.gameMode.getPlayerMode();
+    }
+
+    private void writeGameMode(GameType target) {
+        try {
+            currentGameModeField.set(mc.gameMode, target);
+        } catch (IllegalAccessException ignored) {}
+    }
+
+    private void writeLatency(PlayerInfo entry, int value) {
+        try {
+            latencyField.setInt(entry, value);
+        } catch (IllegalAccessException ignored) {}
+    }
+
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
-        if (event.packet instanceof net.minecraft.network.protocol.game.ClientboundSetExperiencePacket packet) {
+        if (event.packet instanceof ClientboundSetExperiencePacket packet) {
             synchronized (xpLock) {
                 latestRealXpLevel = packet.getExperienceLevel();
                 latestRealXpProgress = packet.getExperienceProgress();
-                if (!xpOverridden) {
-                    backupXpLevel = latestRealXpLevel;
-                    backupXpProgress = latestRealXpProgress;
-                    xpSnapshotValid = true;
-                }
+                xpSnapshotValid = true;
             }
         }
     }
@@ -756,7 +757,6 @@ public class ClientSideThings extends Module {
             fakeDeathStartTimeMs = System.currentTimeMillis();
             fakeDeathFadeAlpha = 0.0f;
         } else if (showingFakeDeath) {
-
             fakeDeathFadeAlpha = Math.min(1.0f, fakeDeathFadeAlpha + 0.02f);
 
             if (fakeDeathScreenDuration.get() > 0.0) {
@@ -891,10 +891,6 @@ public class ClientSideThings extends Module {
 
     public double getFireOverlayHeight() {
         return fireOverlayHeight.get();
-    }
-
-    public boolean shouldDisablePumpkinOverlay() {
-        return pumpkinOverlayMode.get() == OverlayMode.ForceOff;
     }
 
     public boolean shouldDisableWaterOverlay() {
@@ -1101,16 +1097,27 @@ public class ClientSideThings extends Module {
     public String getInfoString() {
         List<String> parts = new ArrayList<>();
         if (fakeHealthEnabled.get() || chaosEnabled.get()) parts.add("HP");
-        if (fakeAbsorptionEnabled.get()) parts.add("Abs");
+        if (fakeAbsorptionEnabled.get() || chaosEnabled.get()) parts.add("Abs");
         if (fakeHungerEnabled.get() || chaosEnabled.get()) parts.add("Hunger");
         if (fakeXpEnabled.get() || chaosEnabled.get()) parts.add("XP");
         if (shouldOverrideFireOverlay()) parts.add("Fire");
-        if (shouldDisablePumpkinOverlay()) parts.add("Pumpkin");
         if (shouldDisableWaterOverlay()) parts.add("Water");
         if (isCrosshairOverrideActive()) parts.add("Cross");
         if (shouldOverrideBossbar()) parts.add("Boss");
         if (isShowingFakeDeath()) parts.add("Death");
         if (shouldFakeBreathe()) parts.add("Breathe");
         return parts.isEmpty() ? null : String.join(",", parts);
+    }
+
+    @EventHandler
+    private void onGameLeft(GameLeftEvent event) {
+        showingFakeDeath = false;
+        fakeDeathFadeAlpha = 0.0f;
+        fakeDeathStartTimeMs = 0;
+        realGameMode = null;
+        realLatency = -1;
+        gameModeSpoofed = false;
+        latencySpoofed = false;
+        chaosTimer = 0;
     }
 }

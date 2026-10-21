@@ -50,7 +50,7 @@ public abstract class Camera360Mixin {
         return np > 90 || np < -90;
     }
 
-    @Inject(method = "turn", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "turn", at = @At("HEAD"), cancellable = true, require = 1)
     private void orbiter$changeLookDirection(double cursorDeltaX, double cursorDeltaY, CallbackInfo ci) {
         if (!orbiter$is360Active()) return;
         ci.cancel();
@@ -75,6 +75,7 @@ public abstract class Camera360Mixin {
     }
 
     @WrapOperation(
+        require = 1,
         method = "setXRot",
         at = @At(value = "INVOKE", target = "Ljava/lang/Math;clamp(FFF)F")
     )
@@ -89,14 +90,14 @@ public abstract class Camera360Mixin {
 @Mixin(LivingEntity.class)
 abstract class Camera360JumpMixin {
 
-    @Redirect(method = "jumpFromGround", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Mth;sin(D)F"))
+    @Redirect(method = "jumpFromGround", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Mth;sin(D)F"), require = 1)
     private float orbiter$invertJumpSin(double value) {
         float result = Mth.sin(value);
         if (Camera360.isLocalPlayerUpsideDown((Entity)(Object)this)) return -result;
         return result;
     }
 
-    @Redirect(method = "jumpFromGround", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Mth;cos(D)F"))
+    @Redirect(method = "jumpFromGround", at = @At(value = "INVOKE", target = "Lnet/minecraft/util/Mth;cos(D)F"), require = 1)
     private float orbiter$invertJumpCos(double value) {
         float result = Mth.cos(value);
         if (Camera360.isLocalPlayerUpsideDown((Entity)(Object)this)) return -result;
@@ -107,7 +108,7 @@ abstract class Camera360JumpMixin {
 @Mixin(LivingEntity.class)
 abstract class Camera360TravelMixin {
 
-    @ModifyVariable(method = "travel", at = @At("HEAD"), argsOnly = true)
+    @ModifyVariable(method = "travel", at = @At("HEAD"), argsOnly = true, require = 1)
     private Vec3 orbiter$invertMovement(Vec3 movementInput) {
         if (movementInput == null) return movementInput;
         if (!Camera360.isLocalPlayerUpsideDown((Entity)(Object)this)) return movementInput;
