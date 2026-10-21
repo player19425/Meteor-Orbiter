@@ -86,7 +86,38 @@ import orbiter.compat.PacketCompat;
 
 public class SwdSaveManager implements AutoCloseable {
 
-    private static final int DATA_VERSION = 4671;
+    private static final int FALLBACK_DATA_VERSION = 4671;
+
+    /**
+     * The data version of the Minecraft this build runs on. The world the
+     * downloader writes has to carry the version of the game that opens it,
+     * or the game treats it as an old world and tries to convert it.
+     */
+    private static int dataVersion() {
+        try {
+            return net.minecraft.SharedConstants.getCurrentVersion().dataVersion().version();
+        } catch (Throwable t) {
+            return FALLBACK_DATA_VERSION;
+        }
+    }
+
+    /** The Minecraft version this build runs on, for the level.dat header. */
+    private static String versionName() {
+        try {
+            return net.minecraft.SharedConstants.getCurrentVersion().name();
+        } catch (Throwable t) {
+            return "1.21.11";
+        }
+    }
+
+    /** The world series, "main" for every release. */
+    private static String versionSeries() {
+        try {
+            return net.minecraft.SharedConstants.getCurrentVersion().dataVersion().series();
+        } catch (Throwable t) {
+            return "main";
+        }
+    }
 
     public final Path path;
     public volatile boolean isSaving = false;
@@ -273,7 +304,7 @@ public class SwdSaveManager implements AutoCloseable {
         Files.createDirectories(path);
         CompoundTag data = new CompoundTag();
 
-        data.putInt("DataVersion", DATA_VERSION);
+        data.putInt("DataVersion", dataVersion());
         data.putString("LevelName", name);
         data.putLong("LastPlayed", System.currentTimeMillis());
         data.putInt("version", 19133);
@@ -302,9 +333,9 @@ public class SwdSaveManager implements AutoCloseable {
         data.put("spawn", spawn);
 
         CompoundTag version = new CompoundTag();
-        version.putString("Name", "1.21.11");
-        version.putInt("Id", DATA_VERSION);
-        version.putString("Series", "main");
+        version.putString("Name", versionName());
+        version.putInt("Id", dataVersion());
+        version.putString("Series", versionSeries());
         version.putByte("Snapshot", (byte) 0);
         data.put("Version", version);
 
@@ -509,7 +540,7 @@ public class SwdSaveManager implements AutoCloseable {
 
         if (mc.level == null) return null;
         CompoundTag nbt = new CompoundTag();
-        nbt.putInt("DataVersion", DATA_VERSION);
+        nbt.putInt("DataVersion", dataVersion());
         nbt.putInt("xPos", chunk.getPos().x());
         nbt.putInt("yPos", chunk.getMinSectionY());
         nbt.putInt("zPos", chunk.getPos().z());
@@ -696,7 +727,7 @@ public class SwdSaveManager implements AutoCloseable {
             player.put("Inventory", encodePlayerInventory(inv));
             Tag gear = encodeEquipment(inv.player);
             if (gear != null) player.put("equipment", gear);
-            player.putInt("DataVersion", DATA_VERSION);
+            player.putInt("DataVersion", dataVersion());
             writeCompressedTag(player, file);
         } catch (IOException e) {
             System.err.println("Failed to write player inventory: " + e.getMessage());
@@ -758,7 +789,7 @@ public class SwdSaveManager implements AutoCloseable {
 
             CompoundTag player = readOrCreateTag(file);
             player.put("EnderItems", encodeItems(items));
-            player.putInt("DataVersion", DATA_VERSION);
+            player.putInt("DataVersion", dataVersion());
             writeCompressedTag(player, file);
         } catch (IOException e) {
             System.err.println("Failed to write player ender chest: " + e.getMessage());
@@ -918,7 +949,7 @@ public class SwdSaveManager implements AutoCloseable {
 
         JsonObject root = new JsonObject();
         root.add("stats", mergedStats);
-        root.addProperty("DataVersion", DATA_VERSION);
+        root.addProperty("DataVersion", dataVersion());
         writeJsonObject(statsFile, root);
     }
 
@@ -943,7 +974,7 @@ public class SwdSaveManager implements AutoCloseable {
             }
         }
 
-        mergedRoot.addProperty("DataVersion", DATA_VERSION);
+        mergedRoot.addProperty("DataVersion", dataVersion());
         writeJsonObject(advancementsFile, mergedRoot);
     }
 

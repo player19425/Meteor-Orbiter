@@ -7,12 +7,12 @@
   <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/badge/Version-1.0.6-orange" alt="Version"></a>
   <img src="https://img.shields.io/badge/Minecraft-26.3%20%7C%2026.2%20%7C%2026.1.2%20%7C%201.21.11-blue" alt="Supported Minecraft versions">
   <img src="https://img.shields.io/badge/Java-25%20%7C%2021-green" alt="Java version">
-  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/github/downloads/player19425/Meteor-Orbiter/total" alt="Downloads"></a>
-  <a href="https://github.com/player19425/Meteor-Orbiter/stargazers"><img src="https://img.shields.io/github/stars/player19425/Meteor-Orbiter" alt="Stars"></a>
-  <a href="https://github.com/player19425/Meteor-Orbiter/commits/26.2"><img src="https://img.shields.io/github/last-commit/player19425/Meteor-Orbiter" alt="Last commit"></a>
-  <img src="https://img.shields.io/github/languages/code-size/player19425/Meteor-Orbiter" alt="Code size">
-  <img src="https://img.shields.io/github/issues/player19425/Meteor-Orbiter" alt="Issues">
-  <img src="https://img.shields.io/github/license/player19425/Meteor-Orbiter" alt="License">
+  <a href="https://github.com/player19425/Meteor-Orbiter/releases"><img src="https://img.shields.io/github/downloads/player19425/Meteor-Orbiter/total?style=flat" alt="Downloads"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/stargazers"><img src="https://img.shields.io/github/stars/player19425/Meteor-Orbiter?style=flat&cacheSeconds=3600" alt="Stars"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/commits/26.2"><img src="https://img.shields.io/github/last-commit/player19425/Meteor-Orbiter/26.2?style=flat&cacheSeconds=3600" alt="Last commit"></a>
+  <img src="https://img.shields.io/github/languages/code-size/player19425/Meteor-Orbiter?style=flat" alt="Code size">
+  <a href="https://github.com/player19425/Meteor-Orbiter/issues"><img src="https://img.shields.io/github/issues/player19425/Meteor-Orbiter?style=flat" alt="Issues"></a>
+  <a href="https://github.com/player19425/Meteor-Orbiter/blob/26.2/LICENSE"><img src="https://img.shields.io/github/license/player19425/Meteor-Orbiter?style=flat" alt="License"></a>
 </div>
 
 <hr />
@@ -73,6 +73,8 @@ Each project produces `build/libs/meteor-orbiter-1.0.6-<mc>.jar`.
 4. It should be properly installed by now.
 
 Orbiter can also keep itself up to date: when you join a server or world it checks for a new release and shows you an in-game popup with update / ignore / changelog options, and it can even download and install the new jar for you if you turn that on. Everything lives in Meteor Config → Orbiter, and both toggles are yours to flip (the popup is on by default).
+
+Each Minecraft version gets its own release, so the checker only ever offers you the jar built for the version you are running on. It never hands you another Minecraft's jar.
 
 # Modules:
 

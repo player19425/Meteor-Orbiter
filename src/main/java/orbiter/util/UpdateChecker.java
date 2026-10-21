@@ -1,6 +1,7 @@
 package orbiter.util;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import meteordevelopment.meteorclient.MeteorClient;
@@ -20,6 +21,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -27,6 +29,7 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 
 public final class UpdateChecker {
     private static final HttpClient HTTP = HttpClient.newBuilder()
@@ -34,8 +37,10 @@ public final class UpdateChecker {
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build();
 
-    private static final String LATEST_URL =
-        "https://api.github.com/repos/player19425/Meteor-Orbiter/releases/latest";
+    // The whole release list, not `/releases/latest`: one release is published
+    // per Minecraft target, so "latest" would be another version's jar.
+    private static final String RELEASES_URL =
+        "https://api.github.com/repos/player19425/Meteor-Orbiter/releases?per_page=30";
     private static final String MOD_ID = "meteor-orbiter";
     private static final long MAX_RESPONSE_BYTES = 1024 * 1024;
     private static final long MAX_JAR_BYTES = 32L * 1024 * 1024;
@@ -44,6 +49,25 @@ public final class UpdateChecker {
     private static final AtomicBoolean installing = new AtomicBoolean();
 
     private UpdateChecker() {}
+
+    /** A release found on GitHub, or the reason there was none. */
+    private static final class FetchResult {
+        final String[] release;
+        final String error;
+
+        private FetchResult(String[] release, String error) {
+            this.release = release;
+            this.error = error;
+        }
+
+        static FetchResult found(String[] release) {
+            return new FetchResult(release, null);
+        }
+
+        static FetchResult failed(String error) {
+            return new FetchResult(null, error);
+        }
+    }
 
     public static void init() {
         sweepLeftovers();
@@ -61,9 +85,12 @@ public final class UpdateChecker {
         if (notifyWhenUpToDate) checkedThisSession.set(true);
 
         CompletableFuture.supplyAsync(() -> fetchLatest())
-            .thenAccept(release -> {
+            .thenAccept(result -> {
+                String[] release = result == null ? null : result.release;
                 if (release == null) {
-                    if (notifyWhenUpToDate) error("Could not reach GitHub to check for updates.");
+                    if (notifyWhenUpToDate) {
+                        error(result == null ? "Could not reach GitHub to check for updates." : result.error);
+                    }
                     return;
                 }
                 if (!isNewer(release[0])) {
@@ -109,7 +136,16 @@ public final class UpdateChecker {
 
                 Path mods = FabricLoader.getInstance().getGameDir().resolve("mods");
                 String fileName = downloadUrl.substring(downloadUrl.lastIndexOf('/') + 1);
-                if (!fileName.endsWith(".jar")) fileName = "meteor-orbiter-" + sanitizeTag(tag) + "-26.2.jar";
+                if (!fileName.endsWith(".jar")) {
+                    // No usable name in the URL. Fall back to the tag, which
+                    // already carries the Minecraft version on the per-target
+                    // release tags (v1.0.6-26.3).
+                    String base = sanitizeTag(tag);
+                    String mc = currentMinecraftVersion();
+                    fileName = !mc.isEmpty() && base.endsWith("-" + mc)
+                        ? "meteor-orbiter-" + base + ".jar"
+                        : "meteor-orbiter-" + base + (mc.isEmpty() ? "" : "-" + mc) + ".jar";
+                }
 
                 Path target = mods.resolve(fileName);
                 Path staging = mods.resolve(fileName + ".new");
@@ -158,47 +194,95 @@ public final class UpdateChecker {
         }
     }
 
-    private static String[] fetchLatest() {
+    private static FetchResult fetchLatest() {
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(LATEST_URL))
+            HttpRequest request = HttpRequest.newBuilder(URI.create(RELEASES_URL))
                 .timeout(Duration.ofSeconds(15))
                 .header("User-Agent", MOD_ID)
                 .header("Accept", "application/vnd.github+json")
                 .GET()
                 .build();
             HttpResponse<byte[]> response = HTTP.send(request, HttpResponse.BodyHandlers.ofByteArray());
-            if (response.statusCode() / 100 != 2) return null;
+            if (response.statusCode() / 100 != 2) return FetchResult.failed("Could not reach GitHub to check for updates.");
             byte[] body = response.body();
-            if (body == null || body.length > MAX_RESPONSE_BYTES) return null;
+            if (body == null || body.length > MAX_RESPONSE_BYTES) return FetchResult.failed("GitHub sent an unreadable answer.");
 
-            JsonObject json = JsonParser.parseString(new String(body, java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
-            String tag = json.has("tag_name") ? json.get("tag_name").getAsString() : "";
-            String pageUrl = json.has("html_url") ? json.get("html_url").getAsString() : "";
-            String downloadUrl = "";
-            if (json.has("assets") && json.get("assets").isJsonArray()) {
-                JsonArray assets = json.getAsJsonArray("assets");
-                for (int i = 0; i < assets.size(); i++) {
-                    JsonObject asset = assets.get(i).getAsJsonObject();
-                    String name = asset.has("name") ? asset.get("name").getAsString() : "";
-                    String url = asset.has("browser_download_url") ? asset.get("browser_download_url").getAsString() : "";
-                    if (name.endsWith(".jar") && !name.contains("sources")) {
-                        downloadUrl = url;
-                        break;
-                    }
-                }
+            JsonElement parsed = JsonParser.parseString(new String(body, StandardCharsets.UTF_8));
+            if (!parsed.isJsonArray()) return FetchResult.failed("GitHub sent an unreadable answer.");
+            JsonArray releases = parsed.getAsJsonArray();
+
+            String mc = currentMinecraftVersion();
+            if (mc.isEmpty()) return FetchResult.failed("Could not work out which Minecraft version this build is for.");
+            Pattern asset = assetPattern(mc);
+
+            // GitHub returns the releases newest first. The first one that
+            // carries a jar for this Minecraft version is the one to offer.
+            for (int i = 0; i < releases.size(); i++) {
+                if (!releases.get(i).isJsonObject()) continue;
+                JsonObject release = releases.get(i).getAsJsonObject();
+                if (release.has("draft") && release.get("draft").getAsBoolean()) continue;
+
+                String tag = release.has("tag_name") ? release.get("tag_name").getAsString() : "";
+                if (tag.isBlank()) continue;
+
+                String downloadUrl = assetUrlFor(release, asset);
+                if (downloadUrl.isBlank()) continue;
+
+                String pageUrl = release.has("html_url") ? release.get("html_url").getAsString() : "";
+                return FetchResult.found(new String[]{tag, pageUrl, downloadUrl});
             }
-            if (tag.isBlank() || downloadUrl.isBlank()) return null;
-            return new String[]{tag, pageUrl, downloadUrl};
+            return FetchResult.failed("No Orbiter release for Minecraft " + mc + " yet.");
         } catch (Exception e) {
-            return null;
+            return FetchResult.failed("Could not reach GitHub to check for updates.");
         }
     }
 
-    private static boolean isNewer(String tag) {
-        String current = FabricLoader.getInstance()
+    private static String assetUrlFor(JsonObject release, Pattern asset) {
+        if (!release.has("assets") || !release.get("assets").isJsonArray()) return "";
+        JsonArray assets = release.getAsJsonArray("assets");
+
+        for (int i = 0; i < assets.size(); i++) {
+            if (!assets.get(i).isJsonObject()) continue;
+            JsonObject entry = assets.get(i).getAsJsonObject();
+
+            String name = entry.has("name") ? entry.get("name").getAsString() : "";
+            if (!name.endsWith(".jar") || name.contains("sources")) continue;
+            if (!asset.matcher(name).matches()) continue;
+
+            return entry.has("browser_download_url") ? entry.get("browser_download_url").getAsString() : "";
+        }
+        return "";
+    }
+
+    /**
+     * Matches the release asset built for this Minecraft version.
+     * {@code meteor-orbiter-1.0.6-26.3.jar} and the experimental
+     * {@code meteor-orbiter-1.0.6-26.2-exp.jar} both match their target.
+     */
+    private static Pattern assetPattern(String mc) {
+        return Pattern.compile("meteor-orbiter-.*-" + Pattern.quote(mc) + "(-[A-Za-z0-9]+)?\\.jar");
+    }
+
+    /**
+     * The Minecraft version this build targets, taken from the mod version
+     * itself ({@code 1.0.6-26.3}) so it cannot drift from the jar.
+     */
+    private static String currentMinecraftVersion() {
+        String version = currentVersionString();
+        int dash = version.lastIndexOf('-');
+        if (dash <= 0 || dash == version.length() - 1) return "";
+        return version.substring(dash + 1);
+    }
+
+    private static String currentVersionString() {
+        return FabricLoader.getInstance()
             .getModContainer(MOD_ID)
             .map(container -> container.getMetadata().getVersion().getFriendlyString())
             .orElse("");
+    }
+
+    private static boolean isNewer(String tag) {
+        String current = currentVersionString();
 
         String left = stripNumeric(tag);
         String right = stripNumeric(current);

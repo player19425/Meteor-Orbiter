@@ -1383,7 +1383,8 @@ public class WorldEditModule extends CreativeSafetyModule {
         BlockState headState = mc.level.getBlockState(feet.above());
         BlockState floorState = mc.level.getBlockState(feet.below());
 
-        return feetState.isAir() && headState.isAir() && floorState.isSolid();
+        return feetState.isAir() && headState.isAir()
+            && floorState.isCollisionShapeFullBlock(mc.level, feet.below());
     }
     private Identifier normalizeItemIdentifier(String raw) {
         if (raw == null) return null;
