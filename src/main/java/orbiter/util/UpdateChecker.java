@@ -37,8 +37,6 @@ public final class UpdateChecker {
         .followRedirects(HttpClient.Redirect.NORMAL)
         .build();
 
-    // The whole release list, not `/releases/latest`: one release is published
-    // per Minecraft target, so "latest" would be another version's jar.
     private static final String RELEASES_URL =
         "https://api.github.com/repos/player19425/Meteor-Orbiter/releases?per_page=30";
     private static final String MOD_ID = "meteor-orbiter";
@@ -50,7 +48,6 @@ public final class UpdateChecker {
 
     private UpdateChecker() {}
 
-    /** A release found on GitHub, or the reason there was none. */
     private static final class FetchResult {
         final String[] release;
         final String error;
@@ -137,9 +134,6 @@ public final class UpdateChecker {
                 Path mods = FabricLoader.getInstance().getGameDir().resolve("mods");
                 String fileName = downloadUrl.substring(downloadUrl.lastIndexOf('/') + 1);
                 if (!fileName.endsWith(".jar")) {
-                    // No usable name in the URL. Fall back to the tag, which
-                    // already carries the Minecraft version on the per-target
-                    // release tags (v1.0.6-26.3).
                     String base = sanitizeTag(tag);
                     String mc = currentMinecraftVersion();
                     fileName = !mc.isEmpty() && base.endsWith("-" + mc)
@@ -215,8 +209,6 @@ public final class UpdateChecker {
             if (mc.isEmpty()) return FetchResult.failed("Could not work out which Minecraft version this build is for.");
             Pattern asset = assetPattern(mc);
 
-            // GitHub returns the releases newest first. The first one that
-            // carries a jar for this Minecraft version is the one to offer.
             for (int i = 0; i < releases.size(); i++) {
                 if (!releases.get(i).isJsonObject()) continue;
                 JsonObject release = releases.get(i).getAsJsonObject();
@@ -254,19 +246,10 @@ public final class UpdateChecker {
         return "";
     }
 
-    /**
-     * Matches the release asset built for this Minecraft version.
-     * {@code meteor-orbiter-1.0.6-26.3.jar} and the experimental
-     * {@code meteor-orbiter-1.0.6-26.2-exp.jar} both match their target.
-     */
     private static Pattern assetPattern(String mc) {
         return Pattern.compile("meteor-orbiter-.*-" + Pattern.quote(mc) + "(-[A-Za-z0-9]+)?\\.jar");
     }
 
-    /**
-     * The Minecraft version this build targets, taken from the mod version
-     * itself ({@code 1.0.6-26.3}) so it cannot drift from the jar.
-     */
     private static String currentMinecraftVersion() {
         String version = currentVersionString();
         int dash = version.lastIndexOf('-');
