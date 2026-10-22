@@ -7,7 +7,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.entity.player.Inventory;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -56,7 +56,7 @@ public abstract class HandledScreenMixin {
                 if (hoveredSlot != null) {
                     int slotIndex = hoveredSlot.index;
                     boolean shouldCancel = ItemStealer.onShiftClickSlot(
-                        slotIndex, 0, ClickType.QUICK_MOVE
+                        slotIndex, 0, ContainerInput.QUICK_MOVE
                     );
                     if (shouldCancel) {
                         cir.setReturnValue(true);

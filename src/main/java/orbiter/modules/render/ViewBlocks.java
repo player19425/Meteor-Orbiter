@@ -218,7 +218,7 @@ public class ViewBlocks extends Module {
 
         int r = radius.get();
         int chunkRadius = (r >> 4) + 1;
-        ChunkPos center = new ChunkPos(mc.player.blockPosition());
+        ChunkPos center = ChunkPos.containing(mc.player.blockPosition());
         int playerX = mc.player.blockPosition().getX();
         int playerY = mc.player.blockPosition().getY();
         int playerZ = mc.player.blockPosition().getZ();
@@ -230,9 +230,9 @@ public class ViewBlocks extends Module {
         chunkLoop:
         for (int cx = -chunkRadius; cx <= chunkRadius; cx++) {
             for (int cz = -chunkRadius; cz <= chunkRadius; cz++) {
-                int chunkX = center.x + cx;
-                int chunkZ = center.z + cz;
-                long chunkLong = ChunkPos.asLong(chunkX, chunkZ);
+                int chunkX = center.x() + cx;
+                int chunkZ = center.z() + cz;
+                long chunkLong = ChunkPos.pack(chunkX, chunkZ);
                 boolean resuming = scanChunkLong == chunkLong;
 
                 if (!mc.level.hasChunk(chunkX, chunkZ)) {

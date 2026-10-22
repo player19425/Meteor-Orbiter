@@ -2,7 +2,7 @@ package orbiter.commands;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
-import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
 import orbiter.util.CameraPosition;
 
 public class CopyPosCommand extends Command {
@@ -12,7 +12,7 @@ public class CopyPosCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<SharedSuggestionProvider> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.executes(ctx -> copy(CameraPosition.coords()));
 
         builder.then(literal("look").executes(ctx -> copy(CameraPosition.coordsWithLook())));

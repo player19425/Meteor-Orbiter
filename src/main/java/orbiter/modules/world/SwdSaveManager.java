@@ -534,9 +534,9 @@ public class SwdSaveManager implements AutoCloseable {
         if (mc.level == null) return null;
         CompoundTag nbt = new CompoundTag();
         nbt.putInt("DataVersion", dataVersion());
-        nbt.putInt("xPos", chunk.getPos().x);
+        nbt.putInt("xPos", chunk.getPos().x());
         nbt.putInt("yPos", chunk.getMinSectionY());
-        nbt.putInt("zPos", chunk.getPos().z);
+        nbt.putInt("zPos", chunk.getPos().z());
         nbt.putLong("LastUpdate", 0L);
         nbt.putLong("InhabitedTime", 0L);
         nbt.putString("Status", "full");

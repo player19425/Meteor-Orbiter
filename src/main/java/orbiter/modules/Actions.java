@@ -845,7 +845,7 @@ public class Actions extends Module {
         }
         String filter = entityNearFilter.get();
         boolean matched = false;
-        for (Entity entity : mc.level.entitiesForRendering()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (entity == mc.player) continue;
             if (mc.player.distanceTo(entity) > entityNearDistance.get()) continue;
             if (filter == null || filter.isEmpty()) {

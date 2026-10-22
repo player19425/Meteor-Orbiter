@@ -330,7 +330,7 @@ public class MaceAssist extends Module {
         LivingEntity bestTarget = null;
         double bestScore = Double.MAX_VALUE;
 
-        for (var entity : mc.level.entitiesForRendering()) {
+        for (var entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (!isValidTarget(living)) continue;
 

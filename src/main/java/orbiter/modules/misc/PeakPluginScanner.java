@@ -740,7 +740,7 @@ public class PeakPluginScanner extends Module {
             probing = true;
             probeTickCounter = 0;
             if (mc.player != null) {
-                mc.player.displayClientMessage(txt("§e[PeakScanner] §7Starting probe scan: §f" + totalProbesQueued + " §7probes queued"), true);
+                mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Starting probe scan: §f" + totalProbesQueued + " §7probes queued"));
             }
         }
 
@@ -795,7 +795,7 @@ public class PeakPluginScanner extends Module {
         }
 
         if (mc.player != null) {
-            mc.player.displayClientMessage(txt("§e[PeakScanner] §7Command tree: §f" + totalCommandsScanned + " §7roots scanned, §f" + observedPluginCommands.size() + " §7observed"), true);
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Command tree: §f" + totalCommandsScanned + " §7roots scanned, §f" + observedPluginCommands.size() + " §7observed"));
         }
     }
 
@@ -913,7 +913,7 @@ public class PeakPluginScanner extends Module {
         }
 
         if (mc.player != null) {
-            mc.player.displayClientMessage(txt("§e[PeakScanner] §7Probing complete. §f" + totalProbesSent + " §7probes sent, §f" + detectedPlugins.size() + " §7plugins found so far"), true);
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Probing complete. §f" + totalProbesSent + " §7probes sent, §f" + detectedPlugins.size() + " §7plugins found so far"));
         }
 
         if (showResults.get()) displayResults();
@@ -1120,7 +1120,7 @@ public class PeakPluginScanner extends Module {
         if (found > 0) {
             waitingForPluginList = false;
             if (mc.player != null) {
-                mc.player.displayClientMessage(txt("§e[PeakScanner] §7Plugin list: §f" + found + " §7plugins from /plugins"), true);
+                mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Plugin list: §f" + found + " §7plugins from /plugins"));
             }
         }
     }
@@ -1287,17 +1287,17 @@ public class PeakPluginScanner extends Module {
     public void displayResults() {
         if (mc.player == null) return;
         if (detectedPlugins.isEmpty() && serverBrand == null) {
-            mc.player.displayClientMessage(txt("§e[PeakScanner] §7No plugins detected."), true);
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7No plugins detected."));
             return;
         }
 
         List<String> anticheats = detectAnticheats();
 
-        mc.player.displayClientMessage(txt("§e═══════════════════════════════════"), true);
-        mc.player.displayClientMessage(txt("§e[PeakScanner] §f" + detectedPlugins.size() + " §7plugins detected"), true);
-        if (serverBrand != null) mc.player.displayClientMessage(txt("§b  Server: §f" + serverBrand + (serverVersion != null ? " " + serverVersion : "")), true);
-        if (serverIp != null) mc.player.displayClientMessage(txt("§b  IP: §f" + serverIp), true);
-        if (!anticheats.isEmpty()) mc.player.displayClientMessage(txt("§c  AntiCheat: §f" + String.join(", ", anticheats)), true);
+        mc.player.sendSystemMessage(txt("§e═══════════════════════════════════"));
+        mc.player.sendSystemMessage(txt("§e[PeakScanner] §f" + detectedPlugins.size() + " §7plugins detected"));
+        if (serverBrand != null) mc.player.sendSystemMessage(txt("§b  Server: §f" + serverBrand + (serverVersion != null ? " " + serverVersion : "")));
+        if (serverIp != null) mc.player.sendSystemMessage(txt("§b  IP: §f" + serverIp));
+        if (!anticheats.isEmpty()) mc.player.sendSystemMessage(txt("§c  AntiCheat: §f" + String.join(", ", anticheats)));
 
         Map<Confidence, List<DetectedPlugin>> byConfidence = new LinkedHashMap<>();
         byConfidence.put(Confidence.EXACT, new ArrayList<>());
@@ -1317,14 +1317,14 @@ public class PeakPluginScanner extends Module {
                 case FEATURE -> "§e";
                 case UNKNOWN -> "§7";
             };
-            mc.player.displayClientMessage(txt(color + "── " + entry.getKey().name() + " (" + entry.getValue().size() + ") ──"), true);
+            mc.player.sendSystemMessage(txt(color + "── " + entry.getKey().name() + " (" + entry.getValue().size() + ") ──"));
 
             List<String> names = new ArrayList<>(entry.getValue().size());
             for (DetectedPlugin dp : entry.getValue()) names.add(dp.name);
             sendChunked(names);
         }
 
-        mc.player.displayClientMessage(txt("§e═══════════════════════════════════"), true);
+        mc.player.sendSystemMessage(txt("§e═══════════════════════════════════"));
     }
 
     private void sendChunked(List<String> names) {
@@ -1332,18 +1332,18 @@ public class PeakPluginScanner extends Module {
         for (int i = 0; i < names.size(); i++) {
             String piece = (i > 0 ? "§7, " : "") + "§f" + names.get(i);
             if (i > 0 && sb.length() + piece.length() > 200) {
-                mc.player.displayClientMessage(txt(sb.toString()), true);
+                mc.player.sendSystemMessage(txt(sb.toString()));
                 sb = new StringBuilder("§7  ");
             }
             sb.append(piece);
         }
-        if (sb.length() > 4) mc.player.displayClientMessage(txt(sb.toString()), true);
+        if (sb.length() > 4) mc.player.sendSystemMessage(txt(sb.toString()));
     }
 
     public void copyToClipboard() {
         if (mc.player == null) return;
         if (detectedPlugins.isEmpty()) {
-            mc.player.displayClientMessage(txt("§e[PeakScanner] §7No plugins detected yet."), true);
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7No plugins detected yet."));
             return;
         }
 
@@ -1376,20 +1376,20 @@ public class PeakPluginScanner extends Module {
             java.awt.Toolkit.getDefaultToolkit()
                 .getSystemClipboard()
                 .setContents(new java.awt.datatransfer.StringSelection(sb.toString()), null);
-            mc.player.displayClientMessage(txt("§a[PeakScanner] §7Copied §f" + detectedPlugins.size() + " §7plugins to clipboard."), true);
+            mc.player.sendSystemMessage(txt("§a[PeakScanner] §7Copied §f" + detectedPlugins.size() + " §7plugins to clipboard."));
         } catch (Exception e) {
-            mc.player.displayClientMessage(txt("§c[PeakScanner] Failed to copy: " + e.getMessage()), true);
+            mc.player.sendSystemMessage(txt("§c[PeakScanner] Failed to copy: " + e.getMessage()));
         }
     }
 
     public void displayList() {
         if (mc.player == null) return;
         if (detectedPlugins.isEmpty()) {
-            mc.player.displayClientMessage(txt("§e[PeakScanner] §7No plugins detected yet. Enable and wait for scan."), true);
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7No plugins detected yet. Enable and wait for scan."));
             return;
         }
 
-        mc.player.displayClientMessage(txt("§e[PeakScanner] §f" + detectedPlugins.size() + " plugins:"), true);
+        mc.player.sendSystemMessage(txt("§e[PeakScanner] §f" + detectedPlugins.size() + " plugins:"));
 
         List<DetectedPlugin> sorted = new ArrayList<>(detectedPlugins.values());
         sorted.sort((a, b) -> a.name.compareToIgnoreCase(b.name));
@@ -1443,9 +1443,9 @@ public class PeakPluginScanner extends Module {
                 }
             }
 
-            mc.player.displayClientMessage(txt("§a[PeakScanner] §7Exported to §fpeakscan_results.txt"), true);
+            mc.player.sendSystemMessage(txt("§a[PeakScanner] §7Exported to §fpeakscan_results.txt"));
         } catch (Exception e) {
-            mc.player.displayClientMessage(txt("§c[PeakScanner] Export failed: " + e.getMessage()), true);
+            mc.player.sendSystemMessage(txt("§c[PeakScanner] Export failed: " + e.getMessage()));
         }
     }
 
@@ -1490,7 +1490,7 @@ public class PeakPluginScanner extends Module {
         probing = false;
         waitingForPluginList = false;
         if (mc.player != null) {
-            mc.player.displayClientMessage(txt("§e[PeakScanner] §7Stopped. §f" + detectedPlugins.size() + " §7plugins detected."), true);
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Stopped. §f" + detectedPlugins.size() + " §7plugins detected."));
         }
         if (showResults.get() && !detectedPlugins.isEmpty()) displayResults();
     }
@@ -1520,8 +1520,8 @@ public class PeakPluginScanner extends Module {
         seedFromCache(cached);
         scanTimestampMs = cached.scannedAtMs;
         if (mc.player != null) {
-            mc.player.displayClientMessage(txt("§e[PeakScanner] §7Loaded §f" + detectedPlugins.size()
-                + " §7plugins from cache (§f" + address + "§7). Live evidence still being collected."), true);
+            mc.player.sendSystemMessage(txt("§e[PeakScanner] §7Loaded §f" + detectedPlugins.size()
+                + " §7plugins from cache (§f" + address + "§7). Live evidence still being collected."));
         }
         return true;
     }

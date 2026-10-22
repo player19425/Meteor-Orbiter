@@ -6,7 +6,7 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import orbiter.modules.misc.ClientSideThings;
 import orbiter.util.ClientSpoofState;
@@ -17,8 +17,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Gui.class)
 public abstract class ClientSideHudMixin {
-    @Inject(method = "renderCrosshair(Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/client/DeltaTracker;)V", at = @At("HEAD"), cancellable = true, require = 0)
-    private void orbiter$renderCrosshair(GuiGraphics context, DeltaTracker tickCounter, CallbackInfo ci) {
+    @Inject(method = "extractCrosshair(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("HEAD"), cancellable = true, require = 0)
+    private void orbiter$renderCrosshair(GuiGraphicsExtractor context, DeltaTracker tickCounter, CallbackInfo ci) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.isCrosshairOverrideActive()) return;
 
@@ -55,8 +55,8 @@ public abstract class ClientSideHudMixin {
         ci.cancel();
     }
 
-    @WrapMethod(method = "render(Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/client/DeltaTracker;)V", require = 0)
-    private void orbiter$hudRenderScope(GuiGraphics context, DeltaTracker tickCounter, Operation<Void> original) {
+    @WrapMethod(method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", require = 0)
+    private void orbiter$hudRenderScope(GuiGraphicsExtractor context, DeltaTracker tickCounter, Operation<Void> original) {
         ClientSpoofState.pushHudRenderScope();
         try {
             original.call(context, tickCounter);
@@ -65,16 +65,16 @@ public abstract class ClientSideHudMixin {
         }
     }
 
-    @Inject(method = "render(Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/client/DeltaTracker;)V", at = @At("RETURN"), require = 0)
-    private void orbiter$renderFakeDeath(GuiGraphics context, DeltaTracker tickCounter, CallbackInfo ci) {
+    @Inject(method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V", at = @At("RETURN"), require = 0)
+    private void orbiter$renderFakeDeath(GuiGraphicsExtractor context, DeltaTracker tickCounter, CallbackInfo ci) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.isShowingFakeDeath()) return;
         int alpha = Math.max(0, Math.min(255, Math.round(module.getFakeDeathAlpha() * module.getFakeDeathBgOpacity())));
         context.fill(0, 0, context.guiWidth(), context.guiHeight(), alpha << 24);
         Font renderer = Minecraft.getInstance().font;
         String title = module.getFakeDeathMessageText();
-        context.drawString(renderer, Component.literal(title), context.guiWidth() / 2 - renderer.width(title) / 2, context.guiHeight() / 2 - 20, 0xFFFFFFFF);
+        context.text(renderer, Component.literal(title), context.guiWidth() / 2 - renderer.width(title) / 2, context.guiHeight() / 2 - 20, 0xFFFFFFFF);
         String hint = "Press the module toggle to dismiss";
-        context.drawString(renderer, Component.literal(hint), context.guiWidth() / 2 - renderer.width(hint) / 2, context.guiHeight() / 2 + 4, 0xFFAAAAAA);
+        context.text(renderer, Component.literal(hint), context.guiWidth() / 2 - renderer.width(hint) / 2, context.guiHeight() / 2 + 4, 0xFFAAAAAA);
     }
 }

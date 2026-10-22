@@ -3,11 +3,9 @@ package orbiter.compat;
 import com.mojang.blaze3d.platform.InputConstants;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -66,14 +64,6 @@ public final class EntityCompat {
         }
 
         return true;
-    }
-
-    public static Iterable<Entity> allEntities(ClientLevel level) {
-        return level.entitiesForRendering();
-    }
-
-    public static Entity entityByUuid(ClientLevel level, java.util.UUID uuid) {
-        return level.getEntity(uuid);
     }
 
     public static void openUri(java.net.URI uri) {

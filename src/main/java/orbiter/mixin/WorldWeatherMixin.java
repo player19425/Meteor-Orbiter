@@ -37,7 +37,7 @@ public abstract class WorldWeatherMixin {
         else if (mode == ClientSideThings.WeatherMode.Rain || mode == ClientSideThings.WeatherMode.Snow) cir.setReturnValue(true);
     }
 
-    @Inject(method = "getDayTime", at = @At("HEAD"), cancellable = true, require = 0)
+    @Inject(method = "getOverworldClockTime", at = @At("HEAD"), cancellable = true, require = 0)
     private void orbiter$getTimeOfDay(CallbackInfoReturnable<Long> cir) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldFakeTime()) return;

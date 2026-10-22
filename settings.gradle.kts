@@ -1,4 +1,4 @@
-// Meteor Orbiter for Minecraft 1.21.11, standalone project.
+// Meteor Orbiter for Minecraft 26.1.2, standalone project.
 //
 //   gradlew build        -> build the jar
 //   gradlew runClient    -> launch a dev client with the addon loaded
@@ -18,4 +18,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = "orbiter-1.21.11"
+rootProject.name = "orbiter-26.1.2"

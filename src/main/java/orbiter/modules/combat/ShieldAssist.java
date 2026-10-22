@@ -325,7 +325,7 @@ public class ShieldAssist extends Module {
         double detectionRange = projectileRange.get();
         double dotThreshold = projectileDotThreshold.get();
 
-        for (Entity entity : mc.level.entitiesForRendering()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof Projectile proj)) continue;
             if (proj.getOwner() == mc.player) continue;
 
@@ -356,7 +356,7 @@ public class ShieldAssist extends Module {
     }
 
     private boolean detectMeleeThreat(float angleLimit, double meleeDist) {
-        for (Entity entity : mc.level.entitiesForRendering()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (living == mc.player || !living.isAlive()) continue;
             if (!entities.get().isEmpty() && !entities.get().contains(living.getType())) continue;
@@ -397,7 +397,7 @@ public class ShieldAssist extends Module {
         trackedAxeUsers.clear();
         double detectionRange = meleeRange.get() + 4.0;
 
-        for (Entity entity : mc.level.entitiesForRendering()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (living == mc.player || !living.isAlive()) continue;
 

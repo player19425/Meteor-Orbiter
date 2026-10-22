@@ -10,6 +10,7 @@ import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.friends.Friends;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.network.protocol.game.ServerboundAttackPacket;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -47,30 +48,22 @@ public class NoFriendHit extends Module {
 
     @EventHandler
     private void onPacketSend(PacketEvent.Send event) {
-        if (event.packet instanceof ServerboundInteractPacket packet && isFriend(((orbiter.mixin.ServerboundInteractPacketAccessor) packet).orbiter$getEntityId())) {
-            if (isAttackPacket(packet) || mode.get() == Mode.AllInteractions) {
-                event.cancel();
-                blocked();
-            }
+        if (event.packet instanceof ServerboundAttackPacket attack && isFriend(attack.entityId())) {
+            event.cancel();
+            blocked();
             return;
         }
-    }
 
-    private static boolean isAttackPacket(ServerboundInteractPacket packet) {
-        try {
-            java.lang.reflect.Field field = ServerboundInteractPacket.class.getDeclaredField("action");
-            field.setAccessible(true);
-            Object action = field.get(packet);
-            Object type = action.getClass().getMethod("getType").invoke(action);
-            return ((Enum<?>) type).name().equals("ATTACK");
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            return false;
+        if (mode.get() == Mode.AllInteractions
+            && event.packet instanceof ServerboundInteractPacket interact
+            && isFriend(interact.entityId())) {
+            event.cancel();
+            blocked();
         }
     }
 
     public boolean shouldBlockPacket(ServerboundInteractPacket packet, boolean forceStrict) {
-        if (packet == null) return false;
-        if (!isFriend(((orbiter.mixin.ServerboundInteractPacketAccessor) packet).orbiter$getEntityId())) return false;
+        if (packet == null || !isFriend(packet.entityId())) return false;
         return forceStrict || mode.get() == Mode.AllInteractions;
     }
 

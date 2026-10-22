@@ -50,7 +50,7 @@ Orbiter 是一套为 [Meteor Client](https://meteorclient.com/) 打造的模块�
 gradlew build
 ```
 
-生成的 jar 在 `build/libs/meteor-orbiter-1.0.6-1.21.11.jar`。
+生成的 jar 在 `build/libs/meteor-orbiter-1.0.6-26.1.2.jar`。
 
 | 命令 | 作用 |
 |---|---|

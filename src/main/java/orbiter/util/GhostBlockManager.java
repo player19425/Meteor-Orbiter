@@ -143,7 +143,7 @@ public final class GhostBlockManager {
                 .append(BuiltInRegistries.BLOCK.getKey(entry.state().getBlock()));
 
             List<String> props = new ArrayList<>();
-            entry.state().getValues().entrySet().forEach(e -> props.add(e.getKey().getName() + "=" + String.valueOf(e.getValue())));
+            entry.state().getValues().forEach(v -> props.add(v.property().getName() + "=" + v.valueName()));
             if (!props.isEmpty()) sb.append('[').append(String.join(",", props)).append(']');
 
             lines.add(sb.toString());

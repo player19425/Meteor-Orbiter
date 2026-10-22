@@ -24,6 +24,6 @@ public final class ItemCompat {
     }
 
     public static List<ItemStack> chargedProjectiles(ChargedProjectiles charged) {
-        return charged.getItems();
+        return charged.itemCopies();
     }
 }

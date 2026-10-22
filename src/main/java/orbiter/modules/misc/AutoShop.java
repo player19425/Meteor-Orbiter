@@ -13,7 +13,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.core.BlockPos;
@@ -320,7 +320,7 @@ public class AutoShop extends Module {
         if (screen == null) return;
         int detected = autoDetectSlots.get() ? findSlotByKeywords(screen, categoryKeyword.get()) : -1;
         int slot = detected >= 0 ? detected : categorySlot.get();
-        if (handleClickType(screen, slot)) advanceAfterClick(CLICK_ITEM);
+        if (handleContainerInput(screen, slot)) advanceAfterClick(CLICK_ITEM);
     }
 
     private void clickItem() {
@@ -337,13 +337,13 @@ public class AutoShop extends Module {
             toggle();
             return;
         }
-        if (handleClickType(screen, slot)) advanceAfterClick(CLICK_STACK_BATCH);
+        if (handleContainerInput(screen, slot)) advanceAfterClick(CLICK_STACK_BATCH);
     }
 
     private void clickFixedShopSlot(int slot, int nextState) {
         AbstractContainerScreen<?> screen = requireShopScreen();
         if (screen == null) return;
-        if (handleClickType(screen, slot)) advanceAfterClick(nextState);
+        if (handleContainerInput(screen, slot)) advanceAfterClick(nextState);
     }
 
     private void clickAddButton() {
@@ -354,7 +354,7 @@ public class AutoShop extends Module {
         }
         AbstractContainerScreen<?> screen = requireShopScreen();
         if (screen == null) return;
-        if (handleClickType(screen, addSlot.get())) {
+        if (handleContainerInput(screen, addSlot.get())) {
             addClicksDone++;
             tickWaiter = clickDelay.get();
         }
@@ -364,7 +364,7 @@ public class AutoShop extends Module {
         AbstractContainerScreen<?> screen = requireShopScreen();
         if (screen == null) return;
         preTransactionCount = getTargetItemCount();
-        if (handleClickType(screen, confirmSlot.get())) {
+        if (handleContainerInput(screen, confirmSlot.get())) {
             state = WAIT_TRANSACTION;
             timeout = 80;
             tickWaiter = clickDelay.get();
@@ -429,14 +429,14 @@ public class AutoShop extends Module {
         tickWaiter = clickDelay.get();
     }
 
-    private boolean handleClickType(AbstractContainerScreen<?> screen, int slot) {
+    private boolean handleContainerInput(AbstractContainerScreen<?> screen, int slot) {
         int containerSlots = getContainerSize(screen);
         if (slot < 0 || slot >= containerSlots) {
             error("Configured shop slot " + slot + " is outside the shop container. Stopping.");
             toggle();
             return false;
         }
-        mc.gameMode.handleInventoryMouseClick(screen.getMenu().containerId, slot, 0, ClickType.PICKUP, mc.player);
+        mc.gameMode.handleContainerInput(screen.getMenu().containerId, slot, 0, ContainerInput.PICKUP, mc.player);
         return true;
     }
 
@@ -572,7 +572,7 @@ public class AutoShop extends Module {
         for (int i = containerSize; i < total; i++) {
             ItemStack stack = screen.getMenu().slots.get(i).getItem();
             if (!stack.isEmpty() && stack.getItem() == targetItem.get()) {
-                clickSlotRaw(screen, i, ClickType.QUICK_MOVE);
+                clickSlotRaw(screen, i, ContainerInput.QUICK_MOVE);
             }
         }
 
@@ -582,14 +582,14 @@ public class AutoShop extends Module {
         tickWaiter = depositDelay.get();
     }
 
-    private boolean clickSlotRaw(AbstractContainerScreen<?> screen, int slot, ClickType action) {
+    private boolean clickSlotRaw(AbstractContainerScreen<?> screen, int slot, ContainerInput action) {
         int total = screen.getMenu().slots.size();
         if (slot < 0 || slot >= total) {
             error("Slot " + slot + " is outside the screen. Stopping.");
             toggle();
             return false;
         }
-        mc.gameMode.handleInventoryMouseClick(screen.getMenu().containerId, slot, 0, action, mc.player);
+        mc.gameMode.handleContainerInput(screen.getMenu().containerId, slot, 0, action, mc.player);
         return true;
     }
 

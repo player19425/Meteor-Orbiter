@@ -43,8 +43,6 @@
     "ServerProtectRecipeBookMixin",
     "ServerProtectCommandTreeAccessor",
     "ConnectionChannelAccessor",
-    "ServerboundInteractPacketAccessor",
-    "ClientboundSetEntityMotionPacketAccessor",
     "ClientPacketListenerDeathOverrideMixin",
     "EnchantTableUseMixin",
     "ServerProtectDialogPacketMixin",

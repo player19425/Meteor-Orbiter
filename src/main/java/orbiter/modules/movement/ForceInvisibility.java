@@ -13,8 +13,9 @@ import meteordevelopment.meteorclient.events.game.GameJoinedEvent;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.events.render.Render3DEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
-import meteordevelopment.meteorclient.mixin.PlayerMoveC2SPacketAccessor;
-import meteordevelopment.meteorclient.mixininterface.IPlayerMoveC2SPacket;
+import meteordevelopment.meteorclient.mixin.LevelAccessor;
+import meteordevelopment.meteorclient.mixin.ServerboundMovePlayerPacketAccessor;
+import meteordevelopment.meteorclient.mixininterface.IServerboundMovePlayerPacket;
 import meteordevelopment.meteorclient.renderer.ShapeMode;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.ColorSetting;
@@ -104,12 +105,9 @@ extends Module {
     private static final int RESPAWN_GRACE_TICKS = 40;
     private static final int MINING_HOLD_FAILSAFE_TICKS = 50;
     private static final int DAMAGE_VCLIP_SAFETY_TICKS = 12;
-    private static final int EXTRA_NO_FALL_TICKS = 8;
     private static final int VCLIP_PENDING_TICKS = 3;
     private static final int PACKET_BUDGET_WINDOW_MS = 5000;
     private static final int PACKET_BUDGET_LIMIT = 300;
-    private static final int MAX_BUFFERED_PACKETS = 256;
-    private static final int MAX_BUFFER_FLUSH_PER_TICK = 12;
     private static final int MIN_PACKET_RESERVE = 8;
     private static final int CORRECTION_WINDOW_TICKS = 20;
     private static final int CORRECTION_STRIKE_THRESHOLD = 4;
@@ -120,11 +118,8 @@ extends Module {
     private static final int ESCAPE_BURST_MAX_RETRIES = 16;
     private static final int ESCAPE_BURST_RETRY_TICKS = 2;
     private static final double HARD_DESYNC_RESET_Y = 192.0;
-    private static final double POSITION_EPSILON = 0.05;
-    private static final double HORIZONTAL_EPSILON_SQ = 9.0E-4;
     private static final int SEND_STALL_THRESHOLD = 18;
     private static final int SEND_STALL_RECOVERY_COOLDOWN = 6;
-    private static final double HARD_MAX_PACKET_Y_STEP = 8.0;
     private static final double HARD_MAX_PACKET_XZ_STEP = 3.0;
     private final SettingGroup sgGeneral;
     private final SettingGroup sgActions;
@@ -225,7 +220,6 @@ extends Module {
     private volatile int correctionFreezeTicks;
     private volatile int consecutiveSendFailures;
     private final Deque<Long> sentPacketTimesMs;
-    private final Deque<Packet<?>> bufferedPackets;
     private volatile boolean vclipAttemptPending;
     private double pendingVClipStartY;
     private double pendingVClipTargetY;
@@ -343,7 +337,6 @@ extends Module {
         this.correctionFreezeTicks = 0;
         this.consecutiveSendFailures = 0;
         this.sentPacketTimesMs = new ArrayDeque<Long>();
-        this.bufferedPackets = new ArrayDeque<>();
         this.vclipAttemptPending = false;
         this.pendingVClipStartY = Double.NaN;
         this.pendingVClipTargetY = Double.NaN;
@@ -361,8 +354,8 @@ extends Module {
     }
 
     public void onActivate() {
-        if (this.mc.player == null || this.mc.getConnection() == null) return;
         this.resetRuntimeState();
+        if (this.mc.player == null || this.mc.getConnection() == null) return;
         this.serverX = this.mc.player.getX();
         this.serverZ = this.mc.player.getZ();
         this.currentServerY = this.clampWorldY(this.mc.player.getY());
@@ -381,17 +374,15 @@ extends Module {
             this.currentServerY = realY;
             this.withPacketBypass(() -> this.sendDirectResyncPackets(realX, realY, realZ, 6));
             this.mc.player.setPos(realX, realY, realZ);
-            this.mc.player.setDeltaMovement(this.mc.player.getDeltaMovement().x, 0.0, this.mc.player.getDeltaMovement().z);
             this.mc.player.fallDistance = 0.0;
         }
         this.resetRuntimeState();
-        this.escapeOverrideActive = false;
     }
 
     @EventHandler
     private void onGameJoined(GameJoinedEvent event) {
         this.resetRuntimeState();
-        this.respawnGraceTicks = 40;
+        this.respawnGraceTicks = RESPAWN_GRACE_TICKS;
         if (this.mc.player != null) {
             this.serverX = this.mc.player.getX();
             this.serverZ = this.mc.player.getZ();
@@ -416,7 +407,7 @@ extends Module {
         if (!Double.isFinite(this.currentServerY)) {
             this.currentServerY = this.clampWorldY(realY);
         }
-        if (Math.abs(this.currentServerY - realY) > 192.0) {
+        if (Math.abs(this.currentServerY - realY) > HARD_DESYNC_RESET_Y) {
             this.hardResyncToReal(realX, realY, realZ, false);
         }
         boolean deadNow = this.isPlayerDead();
@@ -430,10 +421,10 @@ extends Module {
         if (playerChanged || this.sawDeath) {
             this.hardResyncToReal(realX, realY, realZ, true);
             this.sawDeath = false;
-            this.respawnGraceTicks = Math.max(this.respawnGraceTicks, 40);
+            this.respawnGraceTicks = Math.max(this.respawnGraceTicks, RESPAWN_GRACE_TICKS);
         }
         if (this.mc.player.hurtTime > 0 || this.mc.player.getHealth() <= 4.0f) {
-            this.vclipDamageSafetyTicks = Math.max(this.vclipDamageSafetyTicks, 12);
+            this.vclipDamageSafetyTicks = Math.max(this.vclipDamageSafetyTicks, DAMAGE_VCLIP_SAFETY_TICKS);
             this.extraNoFallTicks = Math.max(this.extraNoFallTicks, 24);
         }
         if (this.respawnGraceTicks > 0) {
@@ -454,7 +445,7 @@ extends Module {
             this.trackPlayerState();
             return;
         }
-        if (this.consecutiveSendFailures >= 18) {
+        if (this.consecutiveSendFailures >= SEND_STALL_THRESHOLD) {
             this.recoverFromSendStall(realX, realY, realZ);
             this.sendPermanentNoFall(realX, realY, realZ);
             this.trackPlayerState();
@@ -478,13 +469,12 @@ extends Module {
         if (this.vclipDamageSafetyTicks > 0) {
             --this.vclipDamageSafetyTicks;
         }
-        this.flushBufferedPackets();
         this.updateVClipAttemptState();
         this.updateHoldState();
         this.updateMiningHoldSafety();
         if (this.escapeBurstPending) {
             this.escapeBurstPending = false;
-            this.escapeBurstRetriesLeft = 16;
+            this.escapeBurstRetriesLeft = ESCAPE_BURST_MAX_RETRIES;
             this.escapeBurstRetryTicks = 0;
         }
         this.processEscapeBurst(realY);
@@ -496,7 +486,7 @@ extends Module {
         }
         if (this.activeAction != null) {
             ++this.activeActionTicks;
-            if (this.activeActionTicks > 60) {
+            if (this.activeActionTicks > ACTION_TIMEOUT_TICKS) {
                 this.activeAction = null;
                 this.activeActionTicks = 0;
                 this.hardResyncToReal(realX, realY, realZ, false);
@@ -504,9 +494,8 @@ extends Module {
                 this.processActiveAction(realX, realY, realZ);
             }
         } else {
-            double targetY;
             TravelMode travelMode = this.getSafeTravelMode();
-            double d = targetY = this.holdMode == HoldMode.None ? this.getDesiredAnchorY(realY) : this.clampWorldY(realY);
+            double targetY = this.holdMode == HoldMode.None ? this.getDesiredAnchorY(realY) : this.clampWorldY(realY);
             if (this.correctionFreezeTicks > 0 && targetY > this.currentServerY && this.holdMode == HoldMode.None && !this.escapeOverrideActive) {
                 targetY = this.currentServerY;
             }
@@ -533,10 +522,10 @@ extends Module {
         Packet packet = event.packet;
         if (packet instanceof ServerboundMovePlayerPacket) {
             ServerboundMovePlayerPacket move = (ServerboundMovePlayerPacket)packet;
-            if (((IPlayerMoveC2SPacket)move).meteor$getTag() == 1337) {
+            if (((IServerboundMovePlayerPacket)move).meteor$getTag() == INTERNAL_PACKET_TAG) {
                 return;
             }
-            ((PlayerMoveC2SPacketAccessor)move).meteor$setOnGround(true);
+            ((ServerboundMovePlayerPacketAccessor)move).meteor$setOnGround(true);
             if (this.mc.player.fallDistance > 2.5 || this.mc.player.getDeltaMovement().y < -0.3) {
                 this.extraNoFallTicks = Math.max(this.extraNoFallTicks, 24);
                 this.noFallAssistCooldownTicks = 0;
@@ -592,8 +581,8 @@ extends Module {
     @EventHandler
     private void onPacketReceive(PacketEvent.Receive event) {
         if (event.packet instanceof ClientboundRespawnPacket) {
-            this.respawnGraceTicks = 40;
-            this.vclipDamageSafetyTicks = 12;
+            this.respawnGraceTicks = RESPAWN_GRACE_TICKS;
+            this.vclipDamageSafetyTicks = DAMAGE_VCLIP_SAFETY_TICKS;
             if (this.mc.player != null) {
                 this.hardResyncToReal(this.mc.player.getX(), this.mc.player.getY(), this.mc.player.getZ(), true);
             } else {
@@ -631,7 +620,7 @@ extends Module {
             return;
         }
         if (this.correctionWindowTicks <= 0) {
-            this.correctionWindowTicks = 20;
+            this.correctionWindowTicks = CORRECTION_WINDOW_TICKS;
             this.correctionStrikes = 0;
         }
         if (this.isCorrectionNearTracked(packetPos)) {
@@ -641,9 +630,9 @@ extends Module {
         }
         ++this.correctionStrikes;
         this.adaptiveVClipStep = Math.max(this.getVclipMinStepValue(), this.adaptiveVClipStep * 0.75);
-        int freezeBase = (Boolean)this.paperOptimized.get() != false ? Math.max(8, (Integer)this.paperFailureBackoffTicks.get()) : 8;
+        int freezeBase = (Boolean)this.paperOptimized.get() != false ? Math.max(CORRECTION_FREEZE_BASE_TICKS, (Integer)this.paperFailureBackoffTicks.get()) : CORRECTION_FREEZE_BASE_TICKS;
         int freezePenalty = Math.min(20, this.correctionStrikes * 2);
-        this.correctionFreezeTicks = Math.max(this.correctionFreezeTicks, Math.min(40, freezeBase + freezePenalty));
+        this.correctionFreezeTicks = Math.max(this.correctionFreezeTicks, Math.min(CORRECTION_FREEZE_MAX_TICKS, freezeBase + freezePenalty));
         this.movementCooldownTicks = Math.max(this.movementCooldownTicks, 2);
         this.extraNoFallTicks = Math.max(this.extraNoFallTicks, 16);
         boolean nearReal = this.isCorrectionNearReal(packetPos, realX, realY, realZ);
@@ -652,7 +641,7 @@ extends Module {
             this.hardResyncToReal(realX, realY, realZ, false);
             return;
         }
-        if (farFromTracked || this.correctionStrikes >= 4) {
+        if (farFromTracked || this.correctionStrikes >= CORRECTION_STRIKE_THRESHOLD) {
             this.handleAcceptedCorrection(packetPos);
             this.correctionFreezeTicks = Math.max(this.correctionFreezeTicks, 4);
             this.movementCooldownTicks = Math.max(this.movementCooldownTicks, 2);
@@ -691,15 +680,14 @@ extends Module {
         this.correctionStrikes = 0;
         this.correctionWindowTicks = 0;
         this.escapeBurstPending = true;
-        this.escapeBurstRetriesLeft = 16;
+        this.escapeBurstRetriesLeft = ESCAPE_BURST_MAX_RETRIES;
         this.escapeBurstRetryTicks = 0;
         this.movementCooldownTicks = 0;
     }
 
     public void requestEscapeBedrock() {
-        double baseY;
         this.escapeOverrideActive = true;
-        double d = baseY = this.mc.player != null ? this.mc.player.getY() : this.currentServerY;
+        double baseY = this.mc.player != null ? this.mc.player.getY() : this.currentServerY;
         if (!Double.isFinite(baseY)) {
             baseY = this.currentServerY;
         }
@@ -712,7 +700,7 @@ extends Module {
         this.correctionStrikes = 0;
         this.correctionWindowTicks = 0;
         this.escapeBurstPending = true;
-        this.escapeBurstRetriesLeft = 16;
+        this.escapeBurstRetriesLeft = ESCAPE_BURST_MAX_RETRIES;
         this.escapeBurstRetryTicks = 0;
         this.movementCooldownTicks = 0;
     }
@@ -736,7 +724,6 @@ extends Module {
     }
 
     private void processEscapeBurst(double realY) {
-        boolean done;
         if (!this.escapeOverrideActive) {
             return;
         }
@@ -746,13 +733,13 @@ extends Module {
         if (this.escapeBurstRetryTicks > 0) {
             return;
         }
-        boolean bl = done = this.trySendEscapeBurst(realY) || Math.abs(this.getDesiredAnchorY(realY) - this.currentServerY) <= 1.0;
+        boolean done = this.trySendEscapeBurst(realY) || Math.abs(this.getDesiredAnchorY(realY) - this.currentServerY) <= 1.0;
         if (done) {
             this.escapeBurstRetriesLeft = 0;
             return;
         }
         --this.escapeBurstRetriesLeft;
-        this.escapeBurstRetryTicks = 2;
+        this.escapeBurstRetryTicks = ESCAPE_BURST_RETRY_TICKS;
     }
 
     private boolean trySendEscapeBurst(double realY) {
@@ -763,12 +750,12 @@ extends Module {
         if (Math.abs(targetY - this.currentServerY) < 1.0) {
             return true;
         }
-        int budgetRemaining = Math.max(0, this.getPacketBudgetRemaining() - 8);
+        int budgetRemaining = Math.max(0, this.getPacketBudgetRemaining() - MIN_PACKET_RESERVE);
         if (budgetRemaining <= 0) {
             return false;
         }
-        int packetLimit = Math.max(1, Math.min(20, budgetRemaining));
-        double maxBurstDistance = Math.max(8.0, 200.0);
+        int packetLimit = Math.max(1, Math.min(ESCAPE_MAX_BURST_PACKETS, budgetRemaining));
+        double maxBurstDistance = Math.max(8.0, ESCAPE_BURST_BLOCKS);
         double[] sentDistance = new double[]{0.0};
         boolean[] sent = new boolean[]{false};
         this.withPacketBypass(() -> {
@@ -796,10 +783,10 @@ extends Module {
         }
         boolean start = action == ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK;
         boolean stop = action == ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK || action == ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK;
-        int n = this.lastMiningPacketAge = this.mc.player != null ? this.mc.player.tickCount : -1;
+        this.lastMiningPacketAge = this.mc.player.tickCount;
         if (start) {
             this.miningHoldActive = true;
-            this.miningHoldFailsafeTicks = 50;
+            this.miningHoldFailsafeTicks = MINING_HOLD_FAILSAFE_TICKS;
             this.miningNoInputReleaseTicks = Math.max(2, (Integer)this.miningNoInputReleaseTicksSetting.get());
         }
         if (stop) {
@@ -849,7 +836,7 @@ extends Module {
             }
             this.holdMode = HoldMode.Mining;
             this.miningHoldActive = true;
-            this.miningHoldFailsafeTicks = 50;
+            this.miningHoldFailsafeTicks = MINING_HOLD_FAILSAFE_TICKS;
             this.miningNoInputReleaseTicks = Math.max(2, (Integer)this.miningNoInputReleaseTicksSetting.get());
         } else if (stop) {
             this.miningHoldActive = false;
@@ -966,20 +953,19 @@ extends Module {
             return;
         }
         if (prioritizeFront) {
-            while (this.actionQueue.size() >= 8) {
+            while (this.actionQueue.size() >= MAX_ACTION_QUEUE) {
                 this.actionQueue.pollLast();
             }
             this.actionQueue.addFirst(queued);
             return;
         }
-        while (this.actionQueue.size() >= 8) {
+        while (this.actionQueue.size() >= MAX_ACTION_QUEUE) {
             this.actionQueue.pollFirst();
         }
         this.actionQueue.addLast(queued);
     }
 
     private void processActiveAction(double realX, double realY, double realZ) {
-        boolean forceNow;
         if (this.activeAction == null) {
             return;
         }
@@ -990,7 +976,7 @@ extends Module {
         double verticalDesync = Math.abs(this.currentServerY - realY);
         int plannedSyncPackets = this.getActionSyncPacketCount(actionY);
         double forcedReach = (Double)this.actionReachThreshold.get() + this.getEffectiveMaxYStep() * (double)plannedSyncPackets;
-        boolean bl = forceNow = this.activeActionTicks >= 8;
+        boolean forceNow = this.activeActionTicks >= ACTION_FORCE_EXECUTE_TICKS;
         if (this.activeActionTicks >= 16 && verticalDesync > forcedReach) {
             this.serverX = realX;
             this.serverZ = realZ;
@@ -1190,7 +1176,6 @@ extends Module {
     }
 
     private void updateMiningHoldSafety() {
-        boolean noInputExpired;
         if (this.holdMode != HoldMode.Mining || this.mc.player == null) {
             return;
         }
@@ -1203,7 +1188,7 @@ extends Module {
         }
         int silenceTicks = Math.max(4, (Integer)this.miningPacketSilenceTicks.get());
         boolean packetSilenceExpired = this.lastMiningPacketAge >= 0 && this.mc.player.tickCount > this.lastMiningPacketAge + silenceTicks;
-        boolean bl = noInputExpired = !attackPressed && this.miningNoInputReleaseTicks <= 0;
+        boolean noInputExpired = !attackPressed && this.miningNoInputReleaseTicks <= 0;
         if ((packetSilenceExpired || noInputExpired) && this.activeAction == null) {
             this.miningHoldActive = false;
             this.miningHoldFailsafeTicks = 0;
@@ -1220,15 +1205,14 @@ extends Module {
             return false;
         }
         double rangeSq = (Double)this.collectRange.get() * (Double)this.collectRange.get();
-        for (Entity entity : this.mc.level.entitiesForRendering()) {
-            if (!(entity instanceof ItemEntity) && !(entity instanceof ExperienceOrb) || entity.isRemoved() || !(entity.distanceToSqr((Entity)this.mc.player) <= rangeSq)) continue;
+        for (Entity entity : ((LevelAccessor) this.mc.level).meteor$getEntityLookup().getAll()) {
+            if (!(entity instanceof ItemEntity) && !(entity instanceof ExperienceOrb) || entity.isRemoved() || !(entity.distanceToSqr(this.mc.player) <= rangeSq)) continue;
             return true;
         }
         return false;
     }
 
     private void sendPermanentNoFall(double realX, double realY, double realZ) {
-        boolean needsAssist;
         if (this.mc.player == null || this.mc.getConnection() == null) {
             return;
         }
@@ -1236,7 +1220,7 @@ extends Module {
         double desyncY = Math.abs(this.currentServerY - realY);
         boolean emergencyAssist = this.mc.player.fallDistance >= 2.5 || this.mc.player.getDeltaMovement().y <= -0.3;
         boolean aggressiveAssist = (Boolean)this.aggressiveNoFall.get() != false && desyncY >= (Double)this.noFallDesyncThreshold.get();
-        boolean bl = needsAssist = this.extraNoFallTicks > 0 || this.mc.player.fallDistance > (double)0.8f || this.mc.player.getDeltaMovement().y < -0.08 || this.mc.player.hurtTime > 0 || vclipFalling || aggressiveAssist || emergencyAssist;
+        boolean needsAssist = this.extraNoFallTicks > 0 || this.mc.player.fallDistance > (double)0.8f || this.mc.player.getDeltaMovement().y < -0.08 || this.mc.player.hurtTime > 0 || vclipFalling || aggressiveAssist || emergencyAssist;
         if (needsAssist && (emergencyAssist || this.noFallAssistCooldownTicks <= 0)) {
             boolean horizontalCollision = this.mc.player.horizontalCollision;
             this.withPacketBypass(() -> {
@@ -1283,12 +1267,11 @@ extends Module {
     }
 
     private boolean travelToward(double targetY, TravelMode mode, double x, double z) {
-        boolean horizontalOnly;
         double clampedTarget = this.clampWorldY(targetY);
         double dx = x - this.serverX;
         double dz = z - this.serverZ;
         double delta = clampedTarget - this.currentServerY;
-        boolean bl = horizontalOnly = Math.abs(delta) <= 0.05;
+        boolean horizontalOnly = Math.abs(delta) <= 0.05;
         if (horizontalOnly && dx * dx + dz * dz <= 9.0E-4) {
             return true;
         }
@@ -1320,7 +1303,7 @@ extends Module {
             this.vclipAttemptPending = true;
             this.pendingVClipStartY = previousServerY;
             this.pendingVClipTargetY = this.currentServerY;
-            this.pendingVClipTicks = 3;
+            this.pendingVClipTicks = VCLIP_PENDING_TICKS;
         }
         this.movementCooldownTicks = this.getStepCooldown(mode, horizontalOnly);
         return Math.abs(nextY - clampedTarget) <= 0.01;
@@ -1356,15 +1339,14 @@ extends Module {
     }
 
     private void evaluateVClipCorrection(Vec3 packetPos) {
-        boolean closerToStart;
-        boolean bl = closerToStart = Math.abs(packetPos.y - this.pendingVClipStartY) + 0.05 < Math.abs(packetPos.y - this.pendingVClipTargetY);
+        boolean closerToStart = Math.abs(packetPos.y - this.pendingVClipStartY) + 0.05 < Math.abs(packetPos.y - this.pendingVClipTargetY);
         if (closerToStart) {
             ++this.vclipFailureCount;
             this.adaptiveVClipStep = Math.max(this.getVclipMinStepValue(), this.adaptiveVClipStep * 0.5);
             int baseBackoff = (Boolean)this.paperOptimized.get() != false ? Math.max((Integer)this.vclipFailureBackoffTicks.get(), (Integer)this.paperFailureBackoffTicks.get()) : (Integer)this.vclipFailureBackoffTicks.get();
             int backoff = baseBackoff + Math.min(20, this.vclipFailureCount * 3);
             this.movementCooldownTicks = Math.max(this.movementCooldownTicks, backoff);
-            this.correctionFreezeTicks = Math.max(this.correctionFreezeTicks, Math.min(40, backoff));
+            this.correctionFreezeTicks = Math.max(this.correctionFreezeTicks, Math.min(CORRECTION_FREEZE_MAX_TICKS, backoff));
         } else {
             this.markVClipAttemptSuccess();
         }
@@ -1453,7 +1435,7 @@ extends Module {
         }
         double targetY = this.clampWorldY(y);
         double maxYStep = this.getEffectiveMaxYStep();
-        double maxXZStep = Math.min(3.0, Math.max(0.25, (Double)this.maxPacketXZStep.get()));
+        double maxXZStep = Math.min(HARD_MAX_PACKET_XZ_STEP, Math.max(0.25, (Double)this.maxPacketXZStep.get()));
         double dx = x - this.serverX;
         double dz = z - this.serverZ;
         double horizontal = Math.sqrt(dx * dx + dz * dz);
@@ -1488,17 +1470,6 @@ extends Module {
         return true;
     }
 
-    private boolean sendPacket(Packet<?> packet) {
-        if (this.mc.getConnection() == null) {
-            return false;
-        }
-        if (this.trySendPacketNow(packet)) {
-            return true;
-        }
-        this.bufferPacket(packet);
-        return false;
-    }
-
     private void sendDirectResyncPackets(double x, double y, double z, int count) {
         if (this.mc.player == null || this.mc.getConnection() == null) {
             return;
@@ -1528,53 +1499,31 @@ extends Module {
         }
         long now = System.currentTimeMillis();
         this.trimOldPacketTimes(now);
-        if (this.sentPacketTimesMs.size() >= 300) {
+        if (this.sentPacketTimesMs.size() >= PACKET_BUDGET_LIMIT) {
             return false;
         }
-        if (packet instanceof IPlayerMoveC2SPacket) {
-            IPlayerMoveC2SPacket taggedPacket = (IPlayerMoveC2SPacket)packet;
-            taggedPacket.meteor$setTag(1337);
+        if (packet instanceof IServerboundMovePlayerPacket) {
+            IServerboundMovePlayerPacket taggedPacket = (IServerboundMovePlayerPacket)packet;
+            taggedPacket.meteor$setTag(INTERNAL_PACKET_TAG);
         }
         this.mc.getConnection().send(packet);
         this.sentPacketTimesMs.addLast(now);
         return true;
     }
 
-    private void flushBufferedPackets() {
-        Packet<?> packet;
-        if (this.bufferedPackets.isEmpty()) {
-            return;
-        }
-        if (this.mc.getConnection() == null) {
-            this.bufferedPackets.clear();
-            return;
-        }
-        for (int flushed = 0; flushed < 12 && !this.bufferedPackets.isEmpty() && this.trySendPacketNow(packet = this.bufferedPackets.peekFirst()); ++flushed) {
-            this.bufferedPackets.pollFirst();
-        }
-    }
-
-    private void bufferPacket(Packet<?> packet) {
-        while (this.bufferedPackets.size() >= 256) {
-            this.bufferedPackets.pollFirst();
-        }
-        this.bufferedPackets.addLast(packet);
-    }
-
     private void trimOldPacketTimes(long now) {
         long age;
-        while (!this.sentPacketTimesMs.isEmpty() && (age = now - this.sentPacketTimesMs.peekFirst()) >= 5000L) {
+        while (!this.sentPacketTimesMs.isEmpty() && (age = now - this.sentPacketTimesMs.peekFirst()) >= PACKET_BUDGET_WINDOW_MS) {
             this.sentPacketTimesMs.pollFirst();
         }
     }
 
     private int getPacketBudgetRemaining() {
         this.trimOldPacketTimes(System.currentTimeMillis());
-        return Math.max(0, 300 - this.sentPacketTimesMs.size());
+        return Math.max(0, PACKET_BUDGET_LIMIT - this.sentPacketTimesMs.size());
     }
 
     private void clearPacketBudgetState() {
-        this.bufferedPackets.clear();
         this.sentPacketTimesMs.clear();
     }
 
@@ -1604,7 +1553,7 @@ extends Module {
         this.hardResyncToReal(x, y, z, true);
         if (this.mc.player != null) this.mc.player.fallDistance = 0.0;
         this.sawDeath = true;
-        this.respawnGraceTicks = Math.max(this.respawnGraceTicks, 40);
+        this.respawnGraceTicks = Math.max(this.respawnGraceTicks, RESPAWN_GRACE_TICKS);
     }
 
     private void resetRuntimeState() {
@@ -1630,6 +1579,8 @@ extends Module {
         this.escapeBurstPending = false;
         this.escapeBurstRetriesLeft = 0;
         this.escapeBurstRetryTicks = 0;
+        this.escapeOverrideActive = false;
+        this.escapeOverrideY = (double)((Integer)this.escapeSkyY.get()).intValue();
         this.sawDeath = false;
         this.lastPlayerEntityId = Integer.MIN_VALUE;
         this.lastPlayerAge = -1;
@@ -1745,17 +1696,13 @@ extends Module {
         }
         Entity closest = null;
         double closestSq = 36.0;
-        for (Entity entity : this.mc.level.entitiesForRendering()) {
+        for (Entity entity : ((LevelAccessor) this.mc.level).meteor$getEntityLookup().getAll()) {
             double distSq;
-            if (entity == this.mc.player || entity.isRemoved() || (distSq = entity.distanceToSqr((Entity)this.mc.player)) > closestSq) continue;
+            if (entity == this.mc.player || entity.isRemoved() || (distSq = entity.distanceToSqr(this.mc.player)) > closestSq) continue;
             closestSq = distSq;
             closest = entity;
         }
         return closest != null ? closest.getBoundingBox().getCenter() : new Vec3(this.mc.player.getX(), this.mc.player.getY(), this.mc.player.getZ());
-    }
-
-    private Vec3 resolveEntityTarget() {
-        return this.resolveEntityTarget(null);
     }
 
     private Entity resolvePacketEntity(ServerboundInteractPacket packet) {
@@ -1772,8 +1719,7 @@ extends Module {
                     return entity;
                 }
             }
-            catch (Throwable result) {
-
+            catch (Throwable ignored) {
             }
         }
         if ((field = this.getPacketEntityIdField()) != null) {
@@ -1784,8 +1730,7 @@ extends Module {
                     return entity;
                 }
             }
-            catch (Throwable throwable) {
-
+            catch (Throwable ignored) {
             }
         }
         return this.mc.crosshairPickEntity;
@@ -1932,7 +1877,7 @@ extends Module {
         this.resetVClipState();
         this.clearPacketBudgetState();
         this.hardResyncToReal(x, y, z, false);
-        this.movementCooldownTicks = Math.max(this.movementCooldownTicks, 6);
+        this.movementCooldownTicks = Math.max(this.movementCooldownTicks, SEND_STALL_RECOVERY_COOLDOWN);
         this.consecutiveSendFailures = 0;
     }
 

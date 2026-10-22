@@ -41,7 +41,7 @@ public class TridentAssist extends Module {
     public enum RenderMode { Off, Line, Both }
     public enum EnchantMode { Off, Detect, Respect }
 
-    private static final int VANILLA_THROW_THRESHOLD_TICKS = 10;
+    private static final int VANILLA_THROW_THRESHOLD_TICKS = TridentItem.THROW_THRESHOLD_TIME;
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
     private final SettingGroup sgTarget = settings.createGroup("Targeting");
@@ -502,7 +502,7 @@ public class TridentAssist extends Module {
     private LivingEntity findBestTarget() {
         Vec3 eyes = mc.player.getEyePosition();
         List<LivingEntity> candidates = new ArrayList<>();
-        for (Entity entity : mc.level.entitiesForRendering()) {
+        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (!isValidTarget(living)) continue;
             if (!isInRange(living)) continue;

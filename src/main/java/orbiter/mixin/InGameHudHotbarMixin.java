@@ -4,7 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import orbiter.modules.misc.ClientSideThings;
@@ -16,10 +16,10 @@ import org.spongepowered.asm.mixin.injection.At;
 public abstract class InGameHudHotbarMixin {
     @WrapOperation(
         require = 0,
-        method = "renderItemHotbar",
-        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;renderSlot(Lnet/minecraft/client/gui/GuiGraphics;IILnet/minecraft/client/DeltaTracker;Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/item/ItemStack;I)V")
+        method = "extractItemHotbar",
+        at = @At(value = "INVOKE", target = "Lnet/minecraft/client/gui/Gui;extractSlot(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IILnet/minecraft/client/DeltaTracker;Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/item/ItemStack;I)V")
     )
-    private void orbiter$renderSlot(Gui gui, GuiGraphics context, int x, int y, DeltaTracker tickCounter, Player player, ItemStack stack, int slot, Operation<Void> original) {
+    private void orbiter$extractSlot(Gui gui, GuiGraphicsExtractor extractor, int x, int y, DeltaTracker tickCounter, Player player, ItemStack stack, int slot, Operation<Void> original) {
         ItemStack render = stack;
         ClientSideThings module = ClientSpoofState.module();
         if (module != null && module.isFakeHotbarItemsEnabled()) {
@@ -33,6 +33,6 @@ public abstract class InGameHudHotbarMixin {
                 render = out;
             }
         }
-        original.call(gui, context, x, y, tickCounter, player, render, slot);
+        original.call(gui, extractor, x, y, tickCounter, player, render, slot);
     }
 }

@@ -7,7 +7,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
-import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.core.BlockPos;
@@ -18,7 +18,7 @@ import java.util.Set;
 import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 
 public class WorldEditCommand extends Command {
-    private static final SuggestionProvider<SharedSuggestionProvider> DIRECTION_SUGGESTIONS = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> DIRECTION_SUGGESTIONS = (context, builder) -> {
         String[] dirs = { "north", "south", "east", "west", "up", "down" };
         String remaining = builder.getRemainingLowerCase();
         for (String d : dirs) {
@@ -27,7 +27,7 @@ public class WorldEditCommand extends Command {
         return builder.buildFuture();
     };
 
-    private static final SuggestionProvider<SharedSuggestionProvider> BLOCK_SUGGESTIONS = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> BLOCK_SUGGESTIONS = (context, builder) -> {
         String remaining = builder.getRemainingLowerCase();
         Set<String> suggested = new HashSet<>();
 
@@ -44,7 +44,7 @@ public class WorldEditCommand extends Command {
         return builder.buildFuture();
     };
 
-    private static final SuggestionProvider<SharedSuggestionProvider> ITEM_SUGGESTIONS = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> ITEM_SUGGESTIONS = (context, builder) -> {
         String remaining = builder.getRemainingLowerCase();
         Set<String> suggested = new HashSet<>();
 
@@ -82,7 +82,7 @@ public class WorldEditCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<SharedSuggestionProvider> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
 
         builder.then(literal("pos1")
                 .executes(ctx -> {

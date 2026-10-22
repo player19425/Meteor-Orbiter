@@ -173,7 +173,7 @@ public final class ControlPlayer extends CreativeSafetyModule {
 
     private net.minecraft.world.entity.player.Player orbiter$findPlayer(java.util.UUID uuid) {
         if (mc.level == null) return null;
-        net.minecraft.world.entity.Entity e = mc.level.getEntity(uuid);
+        net.minecraft.world.entity.Entity e = ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().get(uuid);
         return e instanceof net.minecraft.world.entity.player.Player p ? p : null;
     }
 }

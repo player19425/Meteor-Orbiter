@@ -4,6 +4,7 @@ import orbiter.modules.misc.ClientSideThings;
 import orbiter.util.ClientSpoofState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Camera;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -15,8 +16,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class CameraPositionSpoofMixin {
     @Shadow protected abstract void setPosition(double x, double y, double z);
 
-    @Inject(method = "tick()V", at = @At("RETURN"), require = 1)
-    private void orbiter$offsetCamera(CallbackInfo ci) {
+    @Inject(method = "update(Lnet/minecraft/client/DeltaTracker;)V", at = @At("RETURN"), require = 0)
+    private void orbiter$offsetCamera(DeltaTracker deltaTracker, CallbackInfo ci) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldSpoofPosition()) return;
         Camera camera = (Camera) (Object) this;

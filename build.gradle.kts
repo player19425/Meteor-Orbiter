@@ -1,4 +1,4 @@
-// Meteor Orbiter for Minecraft 1.21.11, standalone project.
+// Meteor Orbiter for Minecraft 26.1.2, standalone project.
 //
 //   gradlew build        -> build the jar
 //   gradlew runClient    -> launch a dev client with the addon loaded
@@ -10,10 +10,7 @@
 import java.util.Properties
 
 plugins {
-    // Minecraft 1.21.11 ships obfuscated, so Loom has to remap it. The 26.x
-    // projects use the plain plugin because those jars already come named, and
-    // the plain plugin is the one without a `mappings` configuration here.
-    alias(libs.plugins.fabric.loom.remap)
+    alias(libs.plugins.fabric.loom)
 }
 
 val targetProps = Properties().apply {
@@ -55,27 +52,16 @@ repositories {
 
 dependencies {
     minecraft("com.mojang:minecraft:$mc")
-
-    // The whole codebase is written against Mojang names, so even though 1.21.11
-    // is obfuscated we ask for the official mappings rather than switching the
-    // project over to Yarn.
-    mappings(loom.officialMojangMappings())
-
     implementation("net.fabricmc:fabric-loader:${target("loader")}")
+    implementation("meteordevelopment:meteor-client:${target("meteor")}")
 
-    // modImplementation, not implementation: Meteor 1.21.11 is published in the
-    // intermediary namespace, and Loom only remaps a mod into this project's
-    // namespace when it is declared as one. As a plain implementation it
-    // arrives untouched and every signature reads class_310 / method_1551.
-    modImplementation("meteordevelopment:meteor-client:${target("meteor")}")
-
-    // Compile-time only. The merged Minecraft jar of this version still exposes
-    // Fabric API types, so they have to be on the classpath.
+    // Compile-time only. The merged Minecraft jar of these versions still
+    // exposes Fabric API types, so they have to be on the classpath.
     targetOrNull("resource-loader")?.let {
-        modImplementation("net.fabricmc.fabric-api:fabric-resource-loader-v1:$it")
+        implementation("net.fabricmc.fabric-api:fabric-resource-loader-v1:$it")
     }
     targetOrNull("fabric-api-base")?.let {
-        modImplementation("net.fabricmc.fabric-api:fabric-api-base:$it")
+        implementation("net.fabricmc.fabric-api:fabric-api-base:$it")
     }
 }
 

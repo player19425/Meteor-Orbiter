@@ -50,7 +50,7 @@ Each released version has its own tag with the whole project at the root, so any
 gradlew build
 ```
 
-The jar lands in `build/libs/meteor-orbiter-1.0.6-1.21.11.jar`.
+The jar lands in `build/libs/meteor-orbiter-1.0.6-26.1.2.jar`.
 
 | Command | What it does |
 |---|---|

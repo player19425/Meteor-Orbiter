@@ -12,7 +12,7 @@ import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.inventory.Slot;
 
@@ -22,7 +22,7 @@ import static com.mojang.brigadier.Command.SINGLE_SUCCESS;
 
 public class ItemStealerCommand extends Command {
 
-    private static final SuggestionProvider<SharedSuggestionProvider> IDS = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> IDS = (context, builder) -> {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod != null) {
             for (String id : mod.listItems()) builder.suggest(id);
@@ -30,7 +30,7 @@ public class ItemStealerCommand extends Command {
         return builder.buildFuture();
     };
 
-    private static final SuggestionProvider<SharedSuggestionProvider> HOTBAR_PRESETS = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> HOTBAR_PRESETS = (context, builder) -> {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod != null) {
             for (String id : mod.listHotbarPresets()) builder.suggest(id);
@@ -38,7 +38,7 @@ public class ItemStealerCommand extends Command {
         return builder.buildFuture();
     };
 
-    private static final SuggestionProvider<SharedSuggestionProvider> SNAPSHOTS = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> SNAPSHOTS = (context, builder) -> {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod != null) {
             for (String id : mod.listSnapshots()) builder.suggest(id);
@@ -46,7 +46,7 @@ public class ItemStealerCommand extends Command {
         return builder.buildFuture();
     };
 
-    private static final SuggestionProvider<SharedSuggestionProvider> PRESET_NAMES = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> PRESET_NAMES = (context, builder) -> {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod != null) {
             for (String name : mod.getPresetNames()) builder.suggest(name);
@@ -59,7 +59,7 @@ public class ItemStealerCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<SharedSuggestionProvider> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
 
         builder.then(literal("save").then(argument("id", StringArgumentType.string()).executes(this::save)));
         builder.then(literal("load").then(argument("id", StringArgumentType.string()).suggests(IDS).executes(this::load)));
@@ -92,7 +92,7 @@ public class ItemStealerCommand extends Command {
             .then(argument("name", StringArgumentType.string()).suggests(HOTBAR_PRESETS).executes(this::stealHotbarDelete)));
     }
 
-    private int save(CommandContext<SharedSuggestionProvider> ctx) {
+    private int save(CommandContext<ClientSuggestionProvider> ctx) {
         String id = StringArgumentType.getString(ctx, "id");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -129,7 +129,7 @@ public class ItemStealerCommand extends Command {
         return 0;
     }
 
-    private int load(CommandContext<SharedSuggestionProvider> ctx) {
+    private int load(CommandContext<ClientSuggestionProvider> ctx) {
         String id = StringArgumentType.getString(ctx, "id");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -143,7 +143,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int delete(CommandContext<SharedSuggestionProvider> ctx) {
+    private int delete(CommandContext<ClientSuggestionProvider> ctx) {
         String id = StringArgumentType.getString(ctx, "id");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -155,7 +155,7 @@ public class ItemStealerCommand extends Command {
         return 0;
     }
 
-    private int listLegacy(CommandContext<SharedSuggestionProvider> ctx) {
+    private int listLegacy(CommandContext<ClientSuggestionProvider> ctx) {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
         Set<String> ids = mod.listItems();
@@ -172,11 +172,11 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int inject(CommandContext<SharedSuggestionProvider> ctx) {
+    private int inject(CommandContext<ClientSuggestionProvider> ctx) {
         return load(ctx);
     }
 
-    private int stealAll(CommandContext<SharedSuggestionProvider> ctx) {
+    private int stealAll(CommandContext<ClientSuggestionProvider> ctx) {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
 
@@ -194,7 +194,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealSave(CommandContext<SharedSuggestionProvider> ctx) {
+    private int stealSave(CommandContext<ClientSuggestionProvider> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -212,7 +212,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealLoad(CommandContext<SharedSuggestionProvider> ctx) {
+    private int stealLoad(CommandContext<ClientSuggestionProvider> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -230,7 +230,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealList(CommandContext<SharedSuggestionProvider> ctx) {
+    private int stealList(CommandContext<ClientSuggestionProvider> ctx) {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
 
@@ -271,7 +271,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealDumpTrades(CommandContext<SharedSuggestionProvider> ctx) {
+    private int stealDumpTrades(CommandContext<ClientSuggestionProvider> ctx) {
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
 
@@ -289,7 +289,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealRange(CommandContext<SharedSuggestionProvider> ctx) {
+    private int stealRange(CommandContext<ClientSuggestionProvider> ctx) {
         int start = IntegerArgumentType.getInteger(ctx, "start");
         int end = IntegerArgumentType.getInteger(ctx, "end");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
@@ -314,7 +314,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealSnapshot(CommandContext<SharedSuggestionProvider> ctx) {
+    private int stealSnapshot(CommandContext<ClientSuggestionProvider> ctx) {
         String id = StringArgumentType.getString(ctx, "id");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -323,7 +323,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealPreset(CommandContext<SharedSuggestionProvider> ctx) {
+    private int stealPreset(CommandContext<ClientSuggestionProvider> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }
@@ -346,7 +346,7 @@ public class ItemStealerCommand extends Command {
         return SINGLE_SUCCESS;
     }
 
-    private int stealHotbarDelete(CommandContext<SharedSuggestionProvider> ctx) {
+    private int stealHotbarDelete(CommandContext<ClientSuggestionProvider> ctx) {
         String name = StringArgumentType.getString(ctx, "name");
         ItemStealer mod = Modules.get().get(ItemStealer.class);
         if (mod == null) { error("ItemStealer not available."); return 0; }

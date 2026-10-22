@@ -5,7 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import meteordevelopment.meteorclient.commands.Command;
-import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.client.multiplayer.ClientSuggestionProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
@@ -17,7 +17,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class GhostBlockCommand extends Command {
-    private static final SuggestionProvider<SharedSuggestionProvider> BLOCK_SUGGESTIONS = (context, builder) -> {
+    private static final SuggestionProvider<ClientSuggestionProvider> BLOCK_SUGGESTIONS = (context, builder) -> {
         String remaining = builder.getRemainingLowerCase();
         Set<String> suggested = new HashSet<>();
 
@@ -39,7 +39,7 @@ public class GhostBlockCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<SharedSuggestionProvider> builder) {
+    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
         builder.executes(ctx -> {
             info("Usage: ghostblock create <x> <y> <z> <block>, create here <block>, delete <x> <y> <z>, delete here, delete all, list.");
             return SINGLE_SUCCESS;

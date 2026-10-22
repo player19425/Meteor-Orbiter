@@ -212,7 +212,7 @@ public class ParticleSpam extends CreativeSafetyModule {
                 if (trailMode.get() && mc.level != null && mc.player != null && mc.player.connection != null) {
                         String trailP = "minecraft:" + trailParticle.get().replace("minecraft:", "");
                         int trailBudget = Math.min(maxParticlesPerBurst.get(), 64);
-                        for (Entity entity : mc.level.entitiesForRendering()) {
+                        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
                                 if (trailBudget <= 0 || System.nanoTime() >= deadline) break;
                                 if (entity instanceof Arrow || entity instanceof Snowball
                                                 || entity instanceof ThrownEgg || entity instanceof ThrownTrident
