@@ -18,7 +18,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.ClickType;
 import orbiter.systems.combat.CombatEngine;
 
 import java.util.List;
@@ -143,7 +143,7 @@ public class Restock extends Module {
             if (containerSlotId == -1) continue;
 
             if (useQuickMove.get()) {
-                mc.gameMode.handleContainerInput(handler.containerId, containerSlotId, 0, ContainerInput.QUICK_MOVE, mc.player);
+                mc.gameMode.handleInventoryMouseClick(handler.containerId, containerSlotId, 0, ClickType.QUICK_MOVE, mc.player);
                 failedMoveAttempts = 0;
                 timer = tickDelay.get();
                 return;
@@ -212,11 +212,11 @@ public class Restock extends Module {
         ItemStack before = mc.player.containerMenu.getSlot(toSlot).getItem().copy();
         int beforeCount = before.getCount();
 
-        mc.gameMode.handleContainerInput(syncId, fromSlot, 0, ContainerInput.PICKUP, mc.player);
-        mc.gameMode.handleContainerInput(syncId, toSlot, 0, ContainerInput.PICKUP, mc.player);
+        mc.gameMode.handleInventoryMouseClick(syncId, fromSlot, 0, ClickType.PICKUP, mc.player);
+        mc.gameMode.handleInventoryMouseClick(syncId, toSlot, 0, ClickType.PICKUP, mc.player);
 
         if (!mc.player.containerMenu.getCarried().isEmpty()) {
-            mc.gameMode.handleContainerInput(syncId, fromSlot, 0, ContainerInput.PICKUP, mc.player);
+            mc.gameMode.handleInventoryMouseClick(syncId, fromSlot, 0, ClickType.PICKUP, mc.player);
         }
 
         ItemStack after = mc.player.containerMenu.getSlot(toSlot).getItem();

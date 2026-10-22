@@ -15,7 +15,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.ClickType;
 
 public class AutoCraftPlus extends Module {
 
@@ -287,11 +287,11 @@ public class AutoCraftPlus extends Module {
                         return false;
                     }
 
-                    mc.gameMode.handleContainerInput(syncId, srcSlot, 0, ContainerInput.PICKUP, mc.player);
-                    mc.gameMode.handleContainerInput(syncId, craftSlot, 1, ContainerInput.PICKUP, mc.player);
+                    mc.gameMode.handleInventoryMouseClick(syncId, srcSlot, 0, ClickType.PICKUP, mc.player);
+                    mc.gameMode.handleInventoryMouseClick(syncId, craftSlot, 1, ClickType.PICKUP, mc.player);
 
                     if (!mc.player.containerMenu.getCarried().isEmpty()) {
-                        mc.gameMode.handleContainerInput(syncId, srcSlot, 0, ContainerInput.PICKUP, mc.player);
+                        mc.gameMode.handleInventoryMouseClick(syncId, srcSlot, 0, ClickType.PICKUP, mc.player);
                     }
                 }
 
@@ -336,7 +336,7 @@ public class AutoCraftPlus extends Module {
                 Slot result = screen.getMenu().slots.get(resultSlot);
                 if (!result.getItem().isEmpty()) {
 
-                    mc.gameMode.handleContainerInput(syncId, resultSlot, 0, ContainerInput.QUICK_MOVE, mc.player);
+                    mc.gameMode.handleInventoryMouseClick(syncId, resultSlot, 0, ClickType.QUICK_MOVE, mc.player);
                     totalCrafted++;
                 }
 
@@ -345,7 +345,7 @@ public class AutoCraftPlus extends Module {
                     for (int i = getPlayerInventoryStart(); i < screen.getMenu().slots.size(); i++) {
                         Slot s = screen.getMenu().slots.get(i);
                         if (s.getItem().isEmpty()) {
-                            mc.gameMode.handleContainerInput(syncId, i, 0, ContainerInput.PICKUP, mc.player);
+                            mc.gameMode.handleInventoryMouseClick(syncId, i, 0, ClickType.PICKUP, mc.player);
                             break;
                         }
                     }

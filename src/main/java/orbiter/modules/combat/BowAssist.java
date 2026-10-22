@@ -9,7 +9,6 @@ import meteordevelopment.meteorclient.events.game.GameLeftEvent;
 import meteordevelopment.orbit.EventHandler;
 import meteordevelopment.orbit.EventPriority;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -33,12 +32,14 @@ import java.util.List;
 import java.util.Set;
 
 public class BowAssist extends Module {
+
     public enum TargetMode { Closest, Crosshair, LowestHealth, HighestHealth }
     public enum AimMode { Visible, Silent }
     public enum AimStrategy { Direct, Ballistic, Auto }
     public enum RenderMode { Off, Line, Points, Both }
 
-    private static final float SHOT_YAW_OFFSET_DEGREES = 1.0f;
+    private static final float SHOT_YAW_OFFSET = 1.0f;
+
     private static final double ARROW_WATER_INERTIA = 0.6;
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -139,7 +140,7 @@ public class BowAssist extends Module {
 
     private final Setting<Double> targetSwitchDelay = sgTarget.add(new DoubleSetting.Builder()
         .name("target-switch-delay")
-        .description("Seconds to wait before moving to another target.")
+        .description("Seconds before switching to a new target after the current one dies or leaves range.")
         .defaultValue(0.5)
         .min(0.0)
         .sliderRange(0.0, 3.0)
@@ -165,7 +166,7 @@ public class BowAssist extends Module {
 
     private final Setting<AimStrategy> aimStrategy = sgAim.add(new EnumSetting.Builder<AimStrategy>()
         .name("aim-strategy")
-        .description("Direct ignores gravity, Ballistic solves it, Auto picks by distance.")
+        .description("Direct = straight line aim. Ballistic = accounts for gravity and drag. Auto = picks based on distance.")
         .defaultValue(AimStrategy.Auto)
         .build()
     );
@@ -233,7 +234,7 @@ public class BowAssist extends Module {
 
     private final Setting<Integer> predictionSteps = sgAim.add(new IntSetting.Builder()
         .name("prediction-steps")
-        .description("Simulation steps used to estimate movement lead.")
+        .description("Number of simulation steps for movement prediction. Higher = more accurate but slower.")
         .defaultValue(60)
         .min(10)
         .sliderRange(10, 200)
@@ -286,7 +287,7 @@ public class BowAssist extends Module {
 
     private final Setting<Integer> simRaycastInterval = sgPhysics.add(new IntSetting.Builder()
         .name("raycast-interval")
-        .description("Check blocks every N steps, 0 to skip the check.")
+        .description("Check for block collisions every N steps during simulation. 0 = no collision check.")
         .defaultValue(0)
         .min(0)
         .sliderRange(0, 20)
@@ -300,10 +301,30 @@ public class BowAssist extends Module {
         .build()
     );
 
+    private final Setting<Double> renderLineThickness = sgRender.add(new DoubleSetting.Builder()
+        .name("line-thickness")
+        .description("Thickness of the trajectory line.")
+        .defaultValue(2.0)
+        .min(0.5)
+        .sliderRange(0.5, 5.0)
+        .visible(() -> renderMode.get() == RenderMode.Line || renderMode.get() == RenderMode.Both)
+        .build()
+    );
+
     private final Setting<Boolean> trackCombo = sgCombo.add(new BoolSetting.Builder()
         .name("track-combo")
-        .description("Count arrows fired at the same target without a break.")
+        .description("Track consecutive hits on the same target.")
         .defaultValue(true)
+        .build()
+    );
+
+    private final Setting<Integer> comboTimeout = sgCombo.add(new IntSetting.Builder()
+        .name("combo-timeout")
+        .description("Ticks before combo resets if no new hit is registered.")
+        .defaultValue(100)
+        .min(20)
+        .sliderRange(20, 400)
+        .visible(trackCombo::get)
         .build()
     );
 
@@ -369,6 +390,7 @@ public class BowAssist extends Module {
         currentCharge = BowItem.getPowerForTime(elapsedTicks);
 
         if (currentCharge < minChargePercent.get().floatValue()) {
+
             if (isDrawing) {
                 currentTarget = findOrMaintainTarget();
             }
@@ -410,6 +432,7 @@ public class BowAssist extends Module {
     }
 
     private LivingEntity findOrMaintainTarget() {
+
         if (currentTarget != null && isValidTarget(currentTarget) && isInRange(currentTarget)) {
             return currentTarget;
         }
@@ -431,7 +454,7 @@ public class BowAssist extends Module {
         Vec3 eyes = mc.player.getEyePosition();
         List<LivingEntity> candidates = new ArrayList<>();
 
-        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (!isValidTarget(living)) continue;
             if (!isInRange(living)) continue;
@@ -510,9 +533,12 @@ public class BowAssist extends Module {
 
     private Vec3 getTargetPosition(LivingEntity target) {
         if (aimAtHead.get()) {
+
             return new Vec3(target.getX(), target.getEyeY(), target.getZ());
+        } else {
+
+            return target.getBoundingBox().getCenter();
         }
-        return target.getBoundingBox().getCenter();
     }
 
     private Vec3 predictTargetPosition(LivingEntity target, Vec3 currentPos, Vec3 origin) {
@@ -527,7 +553,7 @@ public class BowAssist extends Module {
 
         Vec3 predicted = currentPos.add(targetVel.scale(flightTicks));
 
-        if (predicted.y < mc.level.getMinY()) {
+        if (mc.level != null && predicted.y < mc.level.getMinY()) {
             predicted = new Vec3(predicted.x, mc.level.getMinY(), predicted.z);
         }
 
@@ -537,7 +563,7 @@ public class BowAssist extends Module {
     private double flightTimeTicks(Vec3 origin, Vec3 target, double speed) {
         Vec3 toTarget = target.subtract(origin);
         double horizontal = Math.sqrt(toTarget.x * toTarget.x + toTarget.z * toTarget.z);
-        float arrowYaw = Mth.wrapDegrees((float) (Math.toDegrees(Math.atan2(toTarget.z, toTarget.x)) - 90.0));
+        float arrowYaw = (float) (Math.toDegrees(Math.atan2(toTarget.z, toTarget.x)) - 90.0f);
         float arrowPitch = (float) -Math.toDegrees(Math.atan2(toTarget.y, horizontal));
 
         double g = arrowGravity.get();
@@ -566,22 +592,29 @@ public class BowAssist extends Module {
         double dz = delta.z;
         double horizontalDist = Math.sqrt(dx * dx + dz * dz);
 
-        float arrowYaw = Mth.wrapDegrees((float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0));
+        float arrowYaw = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0f);
         lastCalculatedYaw = arrowYaw;
 
         AimStrategy strategy = aimStrategy.get();
         if (strategy == AimStrategy.Auto) {
-            strategy = horizontalDist < 15.0 ? AimStrategy.Direct : AimStrategy.Ballistic;
+
+            if (horizontalDist < 15.0) {
+                strategy = AimStrategy.Direct;
+            } else {
+                strategy = AimStrategy.Ballistic;
+            }
         }
 
         float pitch;
         if (strategy == AimStrategy.Direct) {
+
             pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontalDist));
         } else {
+
             pitch = solveBallisticPitch(origin, target, charge, horizontalDist, dy);
         }
 
-        return new AimSolution(arrowYaw - SHOT_YAW_OFFSET_DEGREES, pitch);
+        return new AimSolution(arrowYaw - SHOT_YAW_OFFSET, pitch);
     }
 
     private float solveBallisticPitch(Vec3 origin, Vec3 target, float charge, double horizontalDist, double dy) {
@@ -593,6 +626,7 @@ public class BowAssist extends Module {
         double disc = v2 * v2 - g * (g * horizontalDist * horizontalDist + 2 * dy * v2);
 
         if (disc >= 0 && speed > 0.1 && g > 1.0E-4 && horizontalDist > 1.0E-4) {
+
             double tanTheta = (v2 - Math.sqrt(disc)) / (g * horizontalDist);
             float analyticPitch = (float) -Math.toDegrees(Math.atan(tanTheta));
 
@@ -603,6 +637,7 @@ public class BowAssist extends Module {
     }
 
     private float refinePitchWithSimulation(Vec3 origin, Vec3 target, float charge, float initialPitch) {
+
         float bestPitch = initialPitch;
         double bestError = simulateError(origin, target, charge, bestPitch);
 
@@ -653,6 +688,7 @@ public class BowAssist extends Module {
     }
 
     private double simulateError(Vec3 origin, Vec3 target, float charge, float pitch) {
+
         double speed = arrowSpeedMult.get() * charge;
         Vec3 pos = origin;
         Vec3 vel = initialVelocity(lastCalculatedYaw, pitch, speed);
@@ -754,7 +790,6 @@ public class BowAssist extends Module {
             float chargeNow = BowItem.getPowerForTime(maxUseTime - mc.player.getUseItemRemainingTicks());
             if (autoFire.get() && chargeNow >= 0.99f) {
                 mc.gameMode.releaseUsingItem(mc.player);
-                if (trackCombo.get()) ComboTracker.registerHit(target.getUUID());
             }
         }));
     }
@@ -799,6 +834,7 @@ public class BowAssist extends Module {
     }
 
     private float[] getTrajectoryColor(int index, int total) {
+
         float t = (float) index / Math.max(1, total - 1);
         float r = t;
         float g = 1.0f - t * 0.5f;
@@ -819,17 +855,21 @@ public class BowAssist extends Module {
         if (mc.player.getOffhandItem().getItem() == Items.TIPPED_ARROW) return true;
         if (mc.player.getOffhandItem().getItem() == Items.SPECTRAL_ARROW) return true;
 
-        var enchantments = mc.player.getMainHandItem().get(DataComponents.ENCHANTMENTS);
+        var enchantments = mc.player.getMainHandItem().get(net.minecraft.core.component.DataComponents.ENCHANTMENTS);
         if (enchantments != null) {
             for (var entry : enchantments.entrySet()) {
-                boolean infinity = entry.getKey().unwrapKey()
-                    .map(key -> key.identifier().getPath().equals("infinity"))
-                    .orElse(false);
-                if (infinity) return true;
+                if (entry.getKey().unwrapKey().orElseThrow().identifier().getPath().equals("infinity")) {
+                    return true;
+                }
             }
         }
 
         return false;
+    }
+
+    public void onHitEntity(LivingEntity target) {
+        if (!trackCombo.get()) return;
+        ComboTracker.registerHit(target.getUUID());
     }
 
     public int getCurrentCombo() {

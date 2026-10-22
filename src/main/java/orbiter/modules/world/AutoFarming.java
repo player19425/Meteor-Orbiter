@@ -16,7 +16,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CactusBlock;
 import net.minecraft.world.level.block.CropBlock;
-import net.minecraft.world.level.block.FarmlandBlock;
 import net.minecraft.world.level.block.SugarCaneBlock;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.item.Item;
@@ -273,7 +272,7 @@ public class AutoFarming extends Module {
             int prev = mc.player.getInventory().getSelectedSlot();
             InvUtils.swap(slot, false);
 
-            mc.gameMode.interact(mc.player, animal, new EntityHitResult(animal), InteractionHand.MAIN_HAND);
+            mc.gameMode.interactAt(mc.player, animal, new EntityHitResult(animal), InteractionHand.MAIN_HAND);
 
             InvUtils.swap(prev, false);
             return true;
@@ -435,7 +434,7 @@ public class AutoFarming extends Module {
                 for (int z = -r; z <= r; z++) {
                     BlockPos farmlandPos = base.offset(x, y, z);
                     BlockState farmland = mc.level.getBlockState(farmlandPos);
-                    if (!(farmland.getBlock() instanceof FarmlandBlock)) continue;
+                    if (!(farmland.getBlock() == Blocks.FARMLAND)) continue;
                     if (!farmland.hasProperty(BlockStateProperties.MOISTURE)) continue;
                     if (farmland.getValue(BlockStateProperties.MOISTURE) >= 7) continue;
                     if (hasNearbyWater(farmlandPos, 4)) continue;

@@ -428,7 +428,7 @@ public class WorldEditModule extends CreativeSafetyModule {
                     info("Pos2 set to looked-at block: " + formatPos(pos2) + selectionInfo());
                 }
                 case "chunk" -> {
-                    ChunkPos chunk = ChunkPos.containing(mc.player.blockPosition());
+                    ChunkPos chunk = new ChunkPos(mc.player.blockPosition());
                     pos1 = new BlockPos(chunk.getMinBlockX(), mc.level.getMinY(), chunk.getMinBlockZ());
                     pos2 = new BlockPos(chunk.getMaxBlockX(), worldTopY(), chunk.getMaxBlockZ());
                     info("Selection set to current chunk: " + selectionInfo());
@@ -1162,7 +1162,7 @@ public class WorldEditModule extends CreativeSafetyModule {
         StringBuilder sb = new StringBuilder(id.toString());
 
         Map<Property<?>, Comparable<?>> entries = new HashMap<>();
-        state.getValues().forEach(v -> entries.put(v.property(), v.value()));
+        entries.putAll(state.getValues());
         if (!entries.isEmpty()) {
             sb.append('[');
             boolean first = true;

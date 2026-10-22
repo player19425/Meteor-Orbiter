@@ -53,7 +53,7 @@ public class AntiKnockback extends Module {
         var player = mc.player;
 
         if (event.packet instanceof net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket packet) {
-            if (packet.id() != player.getId()) return;
+            if (((orbiter.mixin.ClientboundSetEntityMotionPacketAccessor) packet).orbiter$getId() != player.getId()) return;
             event.cancel();
             if (CombatEngine.get().isFrozen()) return;
             if (mode.get() == Mode.Cancel) {
@@ -64,9 +64,10 @@ public class AntiKnockback extends Module {
                 return;
             }
 
-            double vx = packet.movement().x * horizontal.get();
-            double vy = packet.movement().y * vertical.get();
-            double vz = packet.movement().z * horizontal.get();
+            net.minecraft.world.phys.Vec3 movement = ((orbiter.mixin.ClientboundSetEntityMotionPacketAccessor) packet).orbiter$getMovement();
+            double vx = movement.x * horizontal.get();
+            double vy = movement.y * vertical.get();
+            double vz = movement.z * horizontal.get();
             mc.execute(() -> {
                 if (mc.player != player) return;
                 player.setDeltaMovement(vx, vy, vz);

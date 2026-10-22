@@ -17,6 +17,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.HitResult;
@@ -47,6 +48,7 @@ public class CrossbowAssist extends Module {
     public enum RenderMode { Off, Line, Both }
 
     private static final double FIREWORK_SPEED = 1.6;
+
     private static final double BOLT_WATER_INERTIA = 0.6;
 
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
@@ -58,7 +60,7 @@ public class CrossbowAssist extends Module {
 
     private final Setting<FireMode> fireMode = sgGeneral.add(new EnumSetting.Builder<FireMode>()
         .name("fire-mode")
-        .description("Manual needs a key press, Auto and Burst fire on their own.")
+        .description("Manual = only fire on key press. Auto = fire when aimed. Burst = fire repeatedly.")
         .defaultValue(FireMode.Auto)
         .build()
     );
@@ -340,6 +342,7 @@ public class CrossbowAssist extends Module {
         hasFireworkLoaded = isFireworkLoaded();
 
         if (onlyWhenLoaded.get() && !isLoaded) {
+
             currentTarget = null;
             trajectoryPoints.clear();
             return;
@@ -426,7 +429,7 @@ public class CrossbowAssist extends Module {
 
     private void trackVelocities() {
         Set<UUID> alive = new HashSet<>();
-        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
             if (!(entity instanceof LivingEntity living)) continue;
             UUID id = living.getUUID();
             alive.add(id);
@@ -435,6 +438,7 @@ public class CrossbowAssist extends Module {
             Vec3 prevVel = prevVelocities.get(id);
 
             if (prevVel != null) {
+
                 Vec3 prevSmoothed = smoothedVelocities.getOrDefault(id, prevVel);
                 Vec3 smoothed = new Vec3(
                     prevSmoothed.x * (1 - VEL_SMOOTH_ALPHA) + currentVel.x * VEL_SMOOTH_ALPHA,
@@ -471,7 +475,7 @@ public class CrossbowAssist extends Module {
         Vec3 eyes = mc.player.getEyePosition();
         List<LivingEntity> candidates = new ArrayList<>();
 
-        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
+        for (Entity entity : mc.level.entitiesForRendering()) {
             if (!(entity instanceof LivingEntity living)) continue;
             if (!isValidTarget(living)) continue;
             if (!isInRange(living)) continue;
@@ -607,10 +611,12 @@ public class CrossbowAssist extends Module {
 
         float pitch;
         if (g <= 1.0E-4 || horizontalDist <= 1.0E-4 || speed < 0.1) {
+
             pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontalDist));
         } else {
             double disc = v2 * v2 - g * (g * horizontalDist * horizontalDist + 2 * dy * v2);
             if (disc < 0) {
+
                 pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontalDist));
             } else {
                 double tanTheta = (v2 - Math.sqrt(disc)) / (g * horizontalDist);
@@ -731,11 +737,15 @@ public class CrossbowAssist extends Module {
         if (mc.player == null) return "Off";
         boolean loaded = isCrossbowLoaded();
         if (!loaded) return "Not loaded";
-        if (currentTarget == null) return "Loaded, no target";
+        if (currentTarget == null) return "Loaded • no target";
+
+        String name = currentTarget instanceof Player p
+            ? p.getName().getString()
+            : currentTarget.getName().getString();
 
         int combo = ComboTracker.getCombo(currentTarget.getUUID());
         String comboStr = combo > 0 ? " | combo: " + combo : "";
-        return "\u2192 " + currentTarget.getName().getString() + comboStr;
+        return "\u2192 " + name + comboStr;
     }
 
     @EventHandler

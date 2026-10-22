@@ -6,7 +6,6 @@ import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.network.protocol.game.ClientboundLevelParticlesPacket;
 import net.minecraft.util.RandomSource;
-import orbiter.compat.PacketCompat;
 import orbiter.modules.misc.ServerProtect;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -28,12 +27,12 @@ public class CrashFixerClientPacketListenerMixin {
     @Unique
     private static final int orbiter$MAX_CLAMPED = 512;
 
-    @Inject(method = "handleParticleEvent", at = @At("HEAD"), cancellable = true, require = 0)
+    @Inject(method = "handleParticleEvent", at = @At("HEAD"), cancellable = true)
     private void orbiter$clampParticlePacket(ClientboundLevelParticlesPacket packet, CallbackInfo ci) {
         ServerProtect mod = Modules.get() == null ? null : Modules.get().get(ServerProtect.class);
         if (mod == null || !mod.isActive() || !mod.shouldClampParticlePackets()) return;
         int max = mod.getMaxParticlesPerPacket();
-        int count = PacketCompat.particleCount(packet);
+        int count = packet.getCount();
         if (count <= max || this.level == null) return;
 
         ClientLevel level = this.level;
@@ -43,14 +42,14 @@ public class CrashFixerClientPacketListenerMixin {
         Runnable spawn = () -> {
             try {
                 for (int i = 0; i < clamped; i++) {
-                    double xOff = random.nextGaussian() * PacketCompat.particleXDist(packet);
-                    double yOff = random.nextGaussian() * PacketCompat.particleYDist(packet);
-                    double zOff = random.nextGaussian() * PacketCompat.particleZDist(packet);
-                    double vx = random.nextGaussian() * PacketCompat.particleXMaxSpeed(packet);
-                    double vy = random.nextGaussian() * PacketCompat.particleYMaxSpeed(packet);
-                    double vz = random.nextGaussian() * PacketCompat.particleZMaxSpeed(packet);
-                    level.addParticle(PacketCompat.particleOptions(packet), PacketCompat.particleOverrideLimiter(packet),
-                        PacketCompat.particleAlwaysShow(packet), PacketCompat.particleX(packet) + xOff, PacketCompat.particleY(packet) + yOff, PacketCompat.particleZ(packet) + zOff, vx, vy, vz);
+                    double xOff = random.nextGaussian() * packet.getXDist();
+                    double yOff = random.nextGaussian() * packet.getYDist();
+                    double zOff = random.nextGaussian() * packet.getZDist();
+                    double vx = random.nextGaussian() * packet.getMaxSpeed();
+                    double vy = random.nextGaussian() * packet.getMaxSpeed();
+                    double vz = random.nextGaussian() * packet.getMaxSpeed();
+                    level.addParticle(packet.getParticle(), packet.isOverrideLimiter(),
+                        packet.alwaysShow(), packet.getX() + xOff, packet.getY() + yOff, packet.getZ() + zOff, vx, vy, vz);
                 }
             } catch (Throwable ignored) {
             }

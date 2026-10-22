@@ -211,9 +211,9 @@ public class UUIDBan extends Module {
         ItemStack egg;
 
         if (type != null && type != TypeCompat.ARMOR_STAND) {
-            Optional<Holder<Item>> eggHolder = SpawnEggItem.byId(type);
-            if (eggHolder.isPresent()) {
-                egg = new ItemStack(eggHolder.get());
+            SpawnEggItem eggItem = SpawnEggItem.byId(type);
+            if (eggItem != null) {
+                egg = new ItemStack(eggItem);
                 entityData.putString("id", BuiltInRegistries.ENTITY_TYPE.getKey(type).toString());
             } else {
                 egg = new ItemStack(Items.ARMOR_STAND);

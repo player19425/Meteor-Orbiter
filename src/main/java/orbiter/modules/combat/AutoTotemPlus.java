@@ -24,7 +24,7 @@ import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
-import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.item.Items;
 import orbiter.Orbiter;
@@ -314,7 +314,7 @@ public class AutoTotemPlus extends Module {
     }
 
     private void click(int slot) {
-        mc.gameMode.handleContainerInput(InventoryMenu.CONTAINER_ID, slot, 0, ContainerInput.PICKUP, mc.player);
+        mc.gameMode.handleInventoryMouseClick(InventoryMenu.CONTAINER_ID, slot, 0, ClickType.PICKUP, mc.player);
     }
 
     private void retryOrAbort() {

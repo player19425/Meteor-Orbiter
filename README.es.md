@@ -42,29 +42,19 @@ Todo está organizado en cinco categorías dentro del juego:
 
 En todas las versiones hace falta [Fabric Loader](https://fabricmc.net/use/installer/) 0.19.3 o superior.
 
-Cada versión soportada vive en su propia rama con el proyecto entero en la raíz, así que cualquiera de ellas se puede clonar, compilar, etiquetar o publicar por separado.
+Cada versión publicada tiene su propio tag con el proyecto entero en la raíz, así que cualquiera de ellas se puede comprobar y compilar por separado. Esta rama está congelada, la que se sigue actualizando es la `26.3`.
 
 # Compilar
 
-La rama `26.3` compila Minecraft 26.3:
-
 ```
 gradlew build
 ```
 
-Todas las demás versiones se compilan desde su propia rama:
-
-```
-git clone -b 26.2 https://github.com/player19425/Meteor-Orbiter.git
-cd Meteor-Orbiter
-gradlew build
-```
-
-Cada proyecto produce `build/libs/meteor-orbiter-1.0.6-<mc>.jar`.
+El jar queda en `build/libs/meteor-orbiter-1.0.6-1.21.11.jar`.
 
 | Comando | Qué hace |
 |---|---|
-| `gradlew build` | compila el jar de la versión de Minecraft de esa rama, la de su `version.properties` |
+| `gradlew build` | compila el jar de la versión de Minecraft de `version.properties` |
 | `gradlew runClient` | arranca un cliente de desarrollo con el addon cargado |
 | `gradlew printTarget` | muestra el par de Minecraft/Meteor al que apunta el proyecto |
 

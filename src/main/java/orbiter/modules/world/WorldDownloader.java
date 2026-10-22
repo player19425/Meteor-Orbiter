@@ -452,11 +452,11 @@ public class WorldDownloader extends Module {
     private void markUnsavedChunksDirty() {
         if (mc.player == null || mc.level == null) return;
         int r = chunkRadius.get();
-        int pcx = net.minecraft.world.level.ChunkPos.containing(mc.player.blockPosition()).x();
-        int pcz = net.minecraft.world.level.ChunkPos.containing(mc.player.blockPosition()).z();
+        int pcx = new ChunkPos(mc.player.blockPosition()).x;
+        int pcz = new ChunkPos(mc.player.blockPosition()).z;
         for (int dx = -r; dx <= r; dx++) {
             for (int dz = -r; dz <= r; dz++) {
-                long key = ChunkPos.pack(pcx + dx, pcz + dz);
+                long key = ChunkPos.asLong(pcx + dx, pcz + dz);
                 if (!savedChunks.contains(key)) dirtyChunks.add(key);
             }
         }
@@ -465,15 +465,15 @@ public class WorldDownloader extends Module {
     private void saveChunksAround(long deadline) {
         if (mc.player == null || mc.level == null || saveManager == null) return;
         int r = chunkRadius.get();
-        int pcx = net.minecraft.world.level.ChunkPos.containing(mc.player.blockPosition()).x();
-        int pcz = net.minecraft.world.level.ChunkPos.containing(mc.player.blockPosition()).z();
+        int pcx = new ChunkPos(mc.player.blockPosition()).x;
+        int pcz = new ChunkPos(mc.player.blockPosition()).z;
 
         int budget = Math.max(1, chunksPerTickBudget.get());
 
         int processed = 0;
         for (int dx = -r; dx <= r && processed < budget; dx++) {
             for (int dz = -r; dz <= r && processed < budget; dz++) {
-                long key = ChunkPos.pack(pcx + dx, pcz + dz);
+                long key = ChunkPos.asLong(pcx + dx, pcz + dz);
                 if (!dirtyChunks.remove(key)) continue;
                 LevelChunk chunk = mc.level.getChunkSource().getChunk(pcx + dx, pcz + dz, false);
                 if (chunk == null) continue;
@@ -511,8 +511,8 @@ public class WorldDownloader extends Module {
         if (!saveEntities.get()) return;
         saveManager.saveFullEntityData = saveAllEntityData.get();
         int r = chunkRadius.get();
-        int pcx = net.minecraft.world.level.ChunkPos.containing(mc.player.blockPosition()).x();
-        int pcz = net.minecraft.world.level.ChunkPos.containing(mc.player.blockPosition()).z();
+        int pcx = new ChunkPos(mc.player.blockPosition()).x;
+        int pcz = new ChunkPos(mc.player.blockPosition()).z;
 
         int minY = mc.level.getMinY();
         int maxY = minY + mc.level.getHeight();
@@ -536,7 +536,7 @@ public class WorldDownloader extends Module {
             int ex = entity.blockPosition().getX() >> 4;
             int ez = entity.blockPosition().getZ() >> 4;
             if (ex < fromX || ex > toX || ez < fromZ || ez > toZ) continue;
-            long key = net.minecraft.world.level.ChunkPos.pack(ex, ez);
+            long key = net.minecraft.world.level.ChunkPos.asLong(ex, ez);
             byChunk.computeIfAbsent(key, k -> new java.util.ArrayList<>()).add(entity);
         }
 
@@ -561,7 +561,7 @@ public class WorldDownloader extends Module {
             + "§f  " + formatBytes(saveManager.bytesWritten())
             + "§f  queued §a" + queuedChunkSaves.size()
             + "§f  " + elapsed + "s";
-        mc.player.sendOverlayMessage(Component.literal(text));
+        mc.player.displayClientMessage(Component.literal(text), true);
     }
 
     private void reportWriteErrors() {
@@ -580,7 +580,7 @@ public class WorldDownloader extends Module {
     }
 
     private void enqueueChunkSave(int x, int z) {
-        long key = ChunkPos.pack(x, z);
+        long key = ChunkPos.asLong(x, z);
         while (queuedChunkSaves.size() >= MAX_QUEUED_CHUNK_SAVES) queuedChunkSaves.poll();
         queuedChunkSaves.offer(key);
     }
@@ -611,12 +611,12 @@ public class WorldDownloader extends Module {
         } else if (event.packet instanceof ClientboundBlockUpdatePacket packet) {
 
             if (mc.level != null && saveOnlyChanged.get()) {
-                dirtyChunks.add(ChunkPos.pack(packet.getPos()));
+                dirtyChunks.add(ChunkPos.asLong(packet.getPos()));
             }
         } else if (event.packet instanceof ClientboundSectionBlocksUpdatePacket packet) {
 
             if (mc.level != null && saveOnlyChanged.get()) {
-                packet.runUpdates((pos, state) -> dirtyChunks.add(ChunkPos.pack(pos)));
+                packet.runUpdates((pos, state) -> dirtyChunks.add(ChunkPos.asLong(pos)));
             }
         } else if (event.packet instanceof ClientboundAwardStatsPacket packet) {
             saveManager.cacheStatsPacket(packet);

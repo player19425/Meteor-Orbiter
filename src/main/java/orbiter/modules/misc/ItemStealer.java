@@ -29,7 +29,7 @@ import net.minecraft.resources.RegistryOps;
 import net.minecraft.world.inventory.MerchantMenu;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.Container;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -424,10 +424,10 @@ public class ItemStealer extends Module {
         return cloned;
     }
 
-    public static boolean onShiftClickSlot(int slotIndex, int button, ContainerInput actionType) {
+    public static boolean onShiftClickSlot(int slotIndex, int button, ClickType actionType) {
         ItemStealer m = get();
         if (m == null || !m.isActive() || !m.shiftClickSteal.get()) return false;
-        if (actionType != ContainerInput.QUICK_MOVE) return false;
+        if (actionType != ClickType.QUICK_MOVE) return false;
 
         if (m.mc.player == null || m.mc.player.containerMenu == null) return false;
 
@@ -690,7 +690,7 @@ public class ItemStealer extends Module {
         ItemStack result = merchant.getSlot(MERCHANT_RESULT_SLOT).getItem();
         if (result == null || result.isEmpty()) return;
 
-        boolean quickMove = shiftClickSteal.get() && click.containerInput() == ContainerInput.QUICK_MOVE;
+        boolean quickMove = shiftClickSteal.get() && click.clickType() == ClickType.QUICK_MOVE;
 
         ItemStack copy = perfectClone(result);
         injectClonedIntoInventory(copy);

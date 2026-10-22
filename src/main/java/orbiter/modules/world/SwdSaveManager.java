@@ -88,11 +88,6 @@ public class SwdSaveManager implements AutoCloseable {
 
     private static final int FALLBACK_DATA_VERSION = 4671;
 
-    /**
-     * The data version of the Minecraft this build runs on. The world the
-     * downloader writes has to carry the version of the game that opens it,
-     * or the game treats it as an old world and tries to convert it.
-     */
     private static int dataVersion() {
         try {
             return net.minecraft.SharedConstants.getCurrentVersion().dataVersion().version();
@@ -101,7 +96,6 @@ public class SwdSaveManager implements AutoCloseable {
         }
     }
 
-    /** The Minecraft version this build runs on, for the level.dat header. */
     private static String versionName() {
         try {
             return net.minecraft.SharedConstants.getCurrentVersion().name();
@@ -110,7 +104,6 @@ public class SwdSaveManager implements AutoCloseable {
         }
     }
 
-    /** The world series, "main" for every release. */
     private static String versionSeries() {
         try {
             return net.minecraft.SharedConstants.getCurrentVersion().dataVersion().series();
@@ -541,9 +534,9 @@ public class SwdSaveManager implements AutoCloseable {
         if (mc.level == null) return null;
         CompoundTag nbt = new CompoundTag();
         nbt.putInt("DataVersion", dataVersion());
-        nbt.putInt("xPos", chunk.getPos().x());
+        nbt.putInt("xPos", chunk.getPos().x);
         nbt.putInt("yPos", chunk.getMinSectionY());
-        nbt.putInt("zPos", chunk.getPos().z());
+        nbt.putInt("zPos", chunk.getPos().z);
         nbt.putLong("LastUpdate", 0L);
         nbt.putLong("InhabitedTime", 0L);
         nbt.putString("Status", "full");

@@ -917,7 +917,7 @@ public class AutoFind extends Module {
     }
 
     private void showOverlay(String msg) {
-        if (mc.player != null) mc.player.sendOverlayMessage(Component.literal(msg));
+        if (mc.player != null) mc.player.displayClientMessage(Component.literal(msg), true);
     }
 
     private void showToast(FindResult result) {

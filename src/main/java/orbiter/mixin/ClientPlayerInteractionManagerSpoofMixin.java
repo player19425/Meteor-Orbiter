@@ -26,4 +26,5 @@ public abstract class ClientPlayerInteractionManagerSpoofMixin {
 
         cir.setReturnValue(false);
     }
+
 }

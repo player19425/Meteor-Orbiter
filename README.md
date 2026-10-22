@@ -42,29 +42,19 @@ Everything is organized into five in-game categories:
 
 [Fabric Loader](https://fabricmc.net/use/installer/) 0.19.3+ is required on every version.
 
-Each supported version lives on its own branch with the whole project at the root, so any of them can be cloned, built, tagged or released on its own.
+Each released version has its own tag with the whole project at the root, so any of them can be checked out and built on its own. This branch is frozen, `26.3` is the one that keeps getting updated.
 
 # Building
 
-The `26.3` branch builds Minecraft 26.3:
-
 ```
 gradlew build
 ```
 
-Every other version builds from its own branch:
-
-```
-git clone -b 26.2 https://github.com/player19425/Meteor-Orbiter.git
-cd Meteor-Orbiter
-gradlew build
-```
-
-Each project produces `build/libs/meteor-orbiter-1.0.6-<mc>.jar`.
+The jar lands in `build/libs/meteor-orbiter-1.0.6-1.21.11.jar`.
 
 | Command | What it does |
 |---|---|
-| `gradlew build` | builds the jar for the Minecraft version in that branch's `version.properties` |
+| `gradlew build` | builds the jar for the Minecraft version in `version.properties` |
 | `gradlew runClient` | launches a dev client with the addon loaded |
 | `gradlew printTarget` | prints the Minecraft/Meteor pair the project targets |
 

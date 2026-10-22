@@ -4,7 +4,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
 import meteordevelopment.meteorclient.systems.modules.Modules;
 import orbiter.modules.misc.AutoShop;
-import net.minecraft.client.multiplayer.ClientSuggestionProvider;
+import net.minecraft.commands.SharedSuggestionProvider;
 
 public class AutoShopCommand extends Command {
     public AutoShopCommand() {
@@ -12,7 +12,7 @@ public class AutoShopCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
+    public void build(LiteralArgumentBuilder<SharedSuggestionProvider> builder) {
         builder.executes(context -> {
             Modules modules = Modules.get();
             if (modules == null) { error("Modules not initialized."); return SINGLE_SUCCESS; }

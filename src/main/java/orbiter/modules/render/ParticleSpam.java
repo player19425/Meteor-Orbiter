@@ -7,6 +7,7 @@ import orbiter.util.FastSend;
 import orbiter.util.GlobalSendLimiter;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
+import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.arrow.Arrow;
@@ -67,6 +68,12 @@ public class ParticleSpam extends CreativeSafetyModule {
                         .sliderRange(1, 500)
                         .build());
 
+        private final Setting<Boolean> crispTrails = sgTrails.add(new BoolSetting.Builder()
+                        .name("crisp-trails")
+                        .description("Use one short, low-spread particle per projectile update.")
+                        .defaultValue(true)
+                        .build());
+
         private final Setting<Double> speed = sgGeneral.add(new DoubleSetting.Builder()
                         .name("speed")
                         .description("Particle speed/spread.")
@@ -121,13 +128,6 @@ public class ParticleSpam extends CreativeSafetyModule {
                         .defaultValue(3)
                         .min(1)
                         .sliderRange(1, 20)
-                        .visible(trailMode::get)
-                        .build());
-
-        private final Setting<Boolean> crispTrails = sgTrails.add(new BoolSetting.Builder()
-                        .name("crisp-trails")
-                        .description("One short, low-spread particle per projectile update, ignores trail-density.")
-                        .defaultValue(true)
                         .visible(trailMode::get)
                         .build());
 
@@ -212,7 +212,7 @@ public class ParticleSpam extends CreativeSafetyModule {
                 if (trailMode.get() && mc.level != null && mc.player != null && mc.player.connection != null) {
                         String trailP = "minecraft:" + trailParticle.get().replace("minecraft:", "");
                         int trailBudget = Math.min(maxParticlesPerBurst.get(), 64);
-                        for (Entity entity : ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().getAll()) {
+                        for (Entity entity : mc.level.entitiesForRendering()) {
                                 if (trailBudget <= 0 || System.nanoTime() >= deadline) break;
                                 if (entity instanceof Arrow || entity instanceof Snowball
                                                 || entity instanceof ThrownEgg || entity instanceof ThrownTrident

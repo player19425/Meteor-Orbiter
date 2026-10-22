@@ -2,7 +2,7 @@ package orbiter.commands;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
-import net.minecraft.client.multiplayer.ClientSuggestionProvider;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Entity;
@@ -26,7 +26,7 @@ public class CopyCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
+    public void build(LiteralArgumentBuilder<SharedSuggestionProvider> builder) {
         builder.executes(ctx -> {
             info("Subcommands: coordinates, camerapos, nbt, helditem, looking, blockid, serverip, uuid.");
             return SINGLE_SUCCESS;
@@ -115,9 +115,9 @@ public class CopyCommand extends Command {
 
                 BlockState def = state.getBlock().defaultBlockState();
                 List<String> extra = new ArrayList<>();
-                state.getValues().forEach(v -> {
-                    if (!v.value().equals(def.getValue(v.property()))) {
-                        extra.add(v.property().getName() + "=" + v.valueName());
+                state.getValues().entrySet().forEach(e -> {
+                    if (!e.getValue().equals(def.getValues().get(e.getKey()))) {
+                        extra.add(e.getKey().getName() + "=" + String.valueOf(e.getValue()));
                     }
                 });
                 Collections.sort(extra);

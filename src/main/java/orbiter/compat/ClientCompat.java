@@ -9,23 +9,22 @@ public final class ClientCompat {
     private ClientCompat() {}
 
     public static Screen screen() {
-        return Minecraft.getInstance().gui.screen();
+        return Minecraft.getInstance().screen;
     }
 
     public static ToastManager toastManager() {
-        return Minecraft.getInstance().gui.toastManager();
+        return Minecraft.getInstance().getToastManager();
     }
 
     public static void setScreen(Screen screen) {
-        Minecraft.getInstance().gui.setScreen(screen);
+        Minecraft.getInstance().setScreen(screen);
     }
 
     public static Camera mainCamera() {
-        return Minecraft.getInstance().gameRenderer.mainCamera();
+        return Minecraft.getInstance().gameRenderer.getMainCamera();
     }
 
     public static void invalidateCompiledGeometry() {
-        Minecraft mc = Minecraft.getInstance();
-        mc.levelRenderer.invalidateCompiledGeometry(mc.level, mc.options, mc.gameRenderer.mainCamera(), mc.getBlockColors());
+        Minecraft.getInstance().levelRenderer.allChanged();
     }
 }

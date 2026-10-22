@@ -7,7 +7,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.world.inventory.Slot;
-import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.entity.player.Inventory;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -49,17 +49,34 @@ public abstract class HandledScreenMixin {
             return;
         }
 
-        int button = click.button();
-        if (button == 0) {
+        if (click.button() == 0) {
             Minecraft mc = Minecraft.getInstance();
-            if (mc.player != null && mc.options.keyShift.isDown() && ItemStealer.onShiftClickSlot(hoveredSlot.index, 0, ContainerInput.QUICK_MOVE)) {
-                cir.setReturnValue(true);
-                return;
+            if (mc.player != null && mc.options.keyShift.isDown()) {
+
+                if (hoveredSlot != null) {
+                    int slotIndex = hoveredSlot.index;
+                    boolean shouldCancel = ItemStealer.onShiftClickSlot(
+                        slotIndex, 0, ClickType.QUICK_MOVE
+                    );
+                    if (shouldCancel) {
+                        cir.setReturnValue(true);
+                        return;
+                    }
+                }
             }
         }
 
-        boolean cloneAllowed = button == 2 || button == 1 && ItemStealer.isRightClickCloneEnabled();
-        if (!cloneAllowed) return;
+        if (click.button() != 2) {
+
+            if (click.button() == 1 && ItemStealer.isRightClickCloneEnabled()) {
+                if (ItemStealer.cloneGuiSlot(hoveredSlot)) {
+                    cir.setReturnValue(true);
+                    return;
+                }
+            }
+
+            if (click.button() != 2) return;
+        }
 
         if (ItemStealer.cloneGuiSlot(hoveredSlot)) {
             cir.setReturnValue(true);

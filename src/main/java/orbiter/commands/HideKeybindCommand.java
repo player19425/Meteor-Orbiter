@@ -5,7 +5,7 @@ import meteordevelopment.meteorclient.commands.Command;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.KeyMapping;
-import net.minecraft.client.multiplayer.ClientSuggestionProvider;
+import net.minecraft.commands.SharedSuggestionProvider;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -30,7 +30,7 @@ public class HideKeybindCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
+    public void build(LiteralArgumentBuilder<SharedSuggestionProvider> builder) {
         builder.then(literal("enable")
             .executes(ctx -> apply(true, false))
             .then(literal("permanent").executes(ctx -> apply(true, true)))

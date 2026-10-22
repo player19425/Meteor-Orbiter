@@ -6,7 +6,7 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import meteordevelopment.meteorclient.commands.Command;
-import net.minecraft.client.multiplayer.ClientSuggestionProvider;
+import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.level.entity.EntityTypeTest;
@@ -57,7 +57,7 @@ public class MultiCommand extends Command {
     }
 
     @Override
-    public void build(LiteralArgumentBuilder<ClientSuggestionProvider> builder) {
+    public void build(LiteralArgumentBuilder<SharedSuggestionProvider> builder) {
         builder.then(literal("help")
             .executes(context -> {
                 for (String line : HELP_TEXT.split("\n")) {
@@ -276,7 +276,7 @@ public class MultiCommand extends Command {
             .orElse(Collections.emptySet());
     }
 
-    private CompletableFuture<Suggestions> suggestInputs(CommandContext<ClientSuggestionProvider> ctx, SuggestionsBuilder builder) {
+    private CompletableFuture<Suggestions> suggestInputs(CommandContext<SharedSuggestionProvider> ctx, SuggestionsBuilder builder) {
         String remaining = builder.getRemaining().toLowerCase();
 
         if (remaining.endsWith("{") || remaining.isEmpty() || remaining.endsWith(";")) {
