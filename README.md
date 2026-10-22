@@ -42,7 +42,7 @@ Everything is organized into five in-game categories:
 
 [Fabric Loader](https://fabricmc.net/use/installer/) 0.19.3+ is required on every version.
 
-Each released version has its own tag with the whole project at the root, so any of them can be checked out and built on its own. This branch is frozen, `26.3` is the one that keeps getting updated.
+Each released version has its own tag with the whole project at the root, so any of them can be checked out and built on its own. The `26.3` branch is the one that keeps getting updated.
 
 # Building
 
@@ -50,7 +50,7 @@ Each released version has its own tag with the whole project at the root, so any
 gradlew build
 ```
 
-The jar lands in `build/libs/meteor-orbiter-1.0.6-26.2.jar`.
+The jar lands in `build/libs/meteor-orbiter-1.0.6-26.3.jar`.
 
 | Command | What it does |
 |---|---|

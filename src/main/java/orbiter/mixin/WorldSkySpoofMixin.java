@@ -1,6 +1,6 @@
 package orbiter.mixin;
 
-import com.mojang.blaze3d.buffers.GpuBufferSlice;
+import com.mojang.renderpearl.api.buffers.GpuBufferSlice;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.state.level.SkyRenderState;
 import net.minecraft.world.level.dimension.DimensionType;
@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(LevelRenderer.class)
 public abstract class WorldSkySpoofMixin {
-    @Inject(method = "lambda$addSkyPass$0(Lcom/mojang/blaze3d/buffers/GpuBufferSlice;Lnet/minecraft/client/renderer/state/level/SkyRenderState;)V", at = @At("HEAD"))
+    @Inject(method = "lambda$addSkyPass$0(Lcom/mojang/renderpearl/api/buffers/GpuBufferSlice;Lnet/minecraft/client/renderer/state/level/SkyRenderState;)V", at = @At("HEAD"), require = 0)
     private void orbiter$applySky(GpuBufferSlice fogBuffer, SkyRenderState skyRenderState, CallbackInfo ci) {
         ClientSideThings module = ClientSpoofState.module();
         if (module == null || !module.shouldSpoofSky()) return;

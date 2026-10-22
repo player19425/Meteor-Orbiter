@@ -42,7 +42,7 @@ Orbiter 是一套为 [Meteor Client](https://meteorclient.com/) 打造的模块�
 
 所有版本都需要 [Fabric Loader](https://fabricmc.net/use/installer/) 0.19.3 或更高。
 
-每个发布的版本都有自己独立的 tag，整个工程就放在 tag 的根目录，所以它们都可以单独检出、编译。这个分支已经冻结，持续更新的是 `26.3` 分支。
+每个发布的版本都有自己独立的 tag，整个工程就放在 tag 的根目录，所以它们都可以单独检出、编译。持续更新的只有 `26.3` 分支。
 
 # 编译
 
@@ -50,7 +50,7 @@ Orbiter 是一套为 [Meteor Client](https://meteorclient.com/) 打造的模块�
 gradlew build
 ```
 
-生成的 jar 在 `build/libs/meteor-orbiter-1.0.6-26.2.jar`。
+生成的 jar 在 `build/libs/meteor-orbiter-1.0.6-26.3.jar`。
 
 | 命令 | 作用 |
 |---|---|

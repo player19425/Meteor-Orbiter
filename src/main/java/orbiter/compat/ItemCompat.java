@@ -21,10 +21,10 @@ public final class ItemCompat {
     }
 
     public static List<ItemStack> bundleCopies(BundleContents bundle) {
-        return bundle.itemCopyStream().toList();
+        return bundle.itemCopies().toList();
     }
 
     public static List<ItemStack> chargedProjectiles(ChargedProjectiles charged) {
-        return charged.itemCopies();
+        return charged.itemCopies().toList();
     }
 }

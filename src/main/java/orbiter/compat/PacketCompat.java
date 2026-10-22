@@ -2,6 +2,7 @@ package orbiter.compat;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -14,7 +15,7 @@ import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
 import net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket;
 import net.minecraft.network.protocol.game.ClientboundUpdateAdvancementsPacket;
 import net.minecraft.network.protocol.game.ServerboundAcceptTeleportationPacket;
-import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundPunchPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.resources.Identifier;
@@ -25,51 +26,51 @@ public final class PacketCompat {
     private PacketCompat() {}
 
     public static int particleCount(ClientboundLevelParticlesPacket packet) {
-        return packet.getCount();
+        return packet.count();
     }
 
     public static double particleX(ClientboundLevelParticlesPacket packet) {
-        return packet.getX();
+        return packet.x();
     }
 
     public static double particleY(ClientboundLevelParticlesPacket packet) {
-        return packet.getY();
+        return packet.y();
     }
 
     public static double particleZ(ClientboundLevelParticlesPacket packet) {
-        return packet.getZ();
+        return packet.z();
     }
 
     public static float particleXDist(ClientboundLevelParticlesPacket packet) {
-        return packet.getXDist();
+        return packet.xDist();
     }
 
     public static float particleYDist(ClientboundLevelParticlesPacket packet) {
-        return packet.getYDist();
+        return packet.yDist();
     }
 
     public static float particleZDist(ClientboundLevelParticlesPacket packet) {
-        return packet.getZDist();
+        return packet.zDist();
     }
 
     public static float particleXMaxSpeed(ClientboundLevelParticlesPacket packet) {
-        return packet.getMaxSpeed();
+        return packet.xMaxSpeed();
     }
 
     public static float particleYMaxSpeed(ClientboundLevelParticlesPacket packet) {
-        return packet.getMaxSpeed();
+        return packet.yMaxSpeed();
     }
 
     public static float particleZMaxSpeed(ClientboundLevelParticlesPacket packet) {
-        return packet.getMaxSpeed();
+        return packet.zMaxSpeed();
     }
 
     public static ParticleOptions particleOptions(ClientboundLevelParticlesPacket packet) {
-        return packet.getParticle();
+        return packet.particle();
     }
 
     public static boolean particleOverrideLimiter(ClientboundLevelParticlesPacket packet) {
-        return packet.isOverrideLimiter();
+        return packet.overrideLimiter();
     }
 
     public static boolean particleAlwaysShow(ClientboundLevelParticlesPacket packet) {
@@ -77,35 +78,35 @@ public final class PacketCompat {
     }
 
     public static int chunkX(ClientboundLevelChunkWithLightPacket packet) {
-        return packet.getX();
+        return packet.x();
     }
 
     public static int chunkZ(ClientboundLevelChunkWithLightPacket packet) {
-        return packet.getZ();
+        return packet.z();
     }
 
     public static Map<Identifier, AdvancementProgress> advancementsProgress(ClientboundUpdateAdvancementsPacket packet) {
-        return packet.getProgress();
+        return packet.progress();
     }
 
     public static List<Identifier> advancementsRemoved(ClientboundUpdateAdvancementsPacket packet) {
-        return List.copyOf(packet.getRemoved());
+        return List.copyOf(packet.removed());
     }
 
     public static BlockHitResult useItemOnHitResult(ServerboundUseItemOnPacket packet) {
-        return packet.getHitResult();
+        return packet.hitResult();
     }
 
     public static InteractionHand useItemOnHand(ServerboundUseItemOnPacket packet) {
-        return packet.getHand();
+        return packet.hand();
     }
 
     public static InteractionHand useItemHand(ServerboundUseItemPacket packet) {
-        return packet.getHand();
+        return packet.hand();
     }
 
     public static Component unsignedChatContent(ClientboundPlayerChatPacket packet) {
-        return packet.unsignedContent();
+        return packet.unsignedContent().orElse(null);
     }
 
     public static Component teamDisplayName(ClientboundSetPlayerTeamPacket.Parameters team) {
@@ -121,10 +122,10 @@ public final class PacketCompat {
     }
 
     public static boolean isSwingPacket(Object packet) {
-        return packet instanceof ServerboundSwingPacket;
+        return packet instanceof ServerboundPunchPacket;
     }
 
     public static void acceptTeleport(ClientPacketListener connection, LocalPlayer player, int id) {
-        connection.send(new ServerboundAcceptTeleportationPacket(id));
+        connection.send(new ServerboundAcceptTeleportationPacket(id, player.getX(), player.getY(), player.getZ(), player.getYRot(), player.getXRot()));
     }
 }

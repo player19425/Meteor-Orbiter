@@ -25,6 +25,7 @@
     "EntityFireSpoofMixin",
     "ClientSideHudMixin",
     "ClientSideOverlayMixin",
+    "LevelExtractorMixin",
     "ClientSideBossBarMixin",
     "ClientWorldBiomeSpoofMixin",
     "ClientTickRateMixin",

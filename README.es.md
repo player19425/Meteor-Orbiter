@@ -42,7 +42,7 @@ Todo está organizado en cinco categorías dentro del juego:
 
 En todas las versiones hace falta [Fabric Loader](https://fabricmc.net/use/installer/) 0.19.3 o superior.
 
-Cada versión publicada tiene su propio tag con el proyecto entero en la raíz, así que cualquiera de ellas se puede comprobar y compilar por separado. Esta rama está congelada, la que se sigue actualizando es la `26.3`.
+Cada versión publicada tiene su propio tag con el proyecto entero en la raíz, así que cualquiera de ellas se puede comprobar y compilar por separado. La rama `26.3` es la que se sigue actualizando.
 
 # Compilar
 
@@ -50,7 +50,7 @@ Cada versión publicada tiene su propio tag con el proyecto entero en la raíz, 
 gradlew build
 ```
 
-El jar queda en `build/libs/meteor-orbiter-1.0.6-26.2.jar`.
+El jar queda en `build/libs/meteor-orbiter-1.0.6-26.3.jar`.
 
 | Comando | Qué hace |
 |---|---|
