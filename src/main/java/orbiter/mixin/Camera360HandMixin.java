@@ -19,7 +19,7 @@ public abstract class Camera360HandMixin {
         return mod != null && mod.isActive();
     }
 
-    @WrapOperation(method = "renderHandsWithItems", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getXRot(F)F"))
+    @WrapOperation(method = "submitHandsWithItems", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;getXRot(F)F"))
     private float orbiter$wrapHandTiltPitch(LocalPlayer player, float tickProgress, Operation<Float> original) {
         float pitch = original.call(player, tickProgress);
         if (!orbiter$is360Active()) return pitch;

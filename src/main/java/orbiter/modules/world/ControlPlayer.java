@@ -4,13 +4,15 @@ import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.client.multiplayer.PlayerInfo;
-import orbiter.modules.world.CreativeSafetyModule;
+import net.minecraft.world.entity.player.Player;
 import orbiter.util.CommandUtils;
+import orbiter.util.GlobalSendLimiter;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 public final class ControlPlayer extends CreativeSafetyModule {
     public enum TargetMode { Nearest, NameList, Selector }
@@ -47,7 +49,7 @@ public final class ControlPlayer extends CreativeSafetyModule {
     private final Setting<Integer> updateDelay = sgSafetyControls.add(new IntSetting.Builder()
         .name("update-delay-ticks").description("Ticks between command batches.").defaultValue(2).min(1).sliderRange(1, 20).build());
     private final Setting<Integer> maxCommandsPerTick = sgSafetyControls.add(new IntSetting.Builder()
-        .name("max-commands-per-tick").description("Hard outbound command cap.").defaultValue(5).min(1).sliderRange(1, 20).build());
+        .name("max-commands-per-tick").description("Commands per batch, on top of the shared per-second cap.").defaultValue(5).min(1).sliderRange(1, 20).build());
     private final Setting<Boolean> excludeSelf = sgSafetyControls.add(new BoolSetting.Builder()
         .name("exclude-self").description("Never target your own player account.").defaultValue(true).build());
 
@@ -84,7 +86,7 @@ public final class ControlPlayer extends CreativeSafetyModule {
                 toggle();
                 return;
             }
-            sendOrbitCommand(safe, angle, 0);
+            sendOrbitCommand(safe, angle);
             return;
         }
 
@@ -92,13 +94,13 @@ public final class ControlPlayer extends CreativeSafetyModule {
         int count = Math.min(Math.min(targets.size(), maxPlayers.get()), maxCommandsPerTick.get());
         for (int i = 0; i < count; i++) {
             double offset = spreadEvenly.get() && count > 1 ? i * 360.0 / count : 0;
-            sendOrbitCommand(targets.get(i), angle + offset, i);
+            sendOrbitCommand(targets.get(i), angle + offset);
         }
     }
 
     private List<String> resolveNamedTargets() {
-        List<PlayerInfo> entries = new ArrayList<>(mc.player.connection.getOnlinePlayers());
         String self = mc.player.getGameProfile().name();
+
         if (targetMode.get() == TargetMode.NameList) {
             List<String> requested = new ArrayList<>();
             for (String raw : names.get().split(",")) {
@@ -108,16 +110,24 @@ public final class ControlPlayer extends CreativeSafetyModule {
             return requested.stream().distinct().limit(maxPlayers.get()).toList();
         }
 
-        entries.removeIf(entry -> excludeSelf.get() && entry.getProfile().name().equalsIgnoreCase(self));
-        entries.removeIf(entry -> {
-            if (orbiter$findPlayer(entry.getProfile().id()) == null) return true;
-            return orbiter$findPlayer(entry.getProfile().id()).distanceToSqr(mc.player) > searchRange.get() * searchRange.get();
-        });
-        entries.sort(Comparator.comparingDouble(entry -> orbiter$findPlayer(entry.getProfile().id()).distanceToSqr(mc.player)));
-        return entries.stream().limit(maxPlayers.get()).map(entry -> entry.getProfile().name()).toList();
+        double rangeSq = searchRange.get() * searchRange.get();
+        List<Player> nearby = new ArrayList<>();
+
+        for (PlayerInfo entry : mc.player.connection.getOnlinePlayers()) {
+            Player other = orbiter$findPlayer(entry.getProfile().id());
+            if (other == null) continue;
+            if (excludeSelf.get() && other.getGameProfile().name().equalsIgnoreCase(self)) continue;
+            if (other.distanceToSqr(mc.player) > rangeSq) continue;
+            nearby.add(other);
+        }
+
+        nearby.sort(Comparator.comparingDouble((Player other) -> other.distanceToSqr(mc.player)));
+        return nearby.stream().limit(maxPlayers.get()).map(other -> other.getGameProfile().name()).toList();
     }
 
-    private void sendOrbitCommand(String target, double targetAngle, int index) {
+    private void sendOrbitCommand(String target, double targetAngle) {
+        if (!GlobalSendLimiter.tryAcquireOne()) return;
+
         double radians = Math.toRadians(targetAngle);
         double dx = Math.cos(radians) * radius.get();
         double dz = Math.sin(radians) * radius.get();
@@ -143,7 +153,8 @@ public final class ControlPlayer extends CreativeSafetyModule {
         if (value == null || value.isEmpty() || value.length() > 16) return null;
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
-            if (!(Character.isLetterOrDigit(c) || c == '_')) return null;
+            boolean ascii = c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9';
+            if (!ascii && c != '_') return null;
         }
         return value;
     }
@@ -171,9 +182,9 @@ public final class ControlPlayer extends CreativeSafetyModule {
         return value < 0 ? value + 360.0 : value;
     }
 
-    private net.minecraft.world.entity.player.Player orbiter$findPlayer(java.util.UUID uuid) {
+    private Player orbiter$findPlayer(UUID uuid) {
         if (mc.level == null) return null;
-        net.minecraft.world.entity.Entity e = ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().get(uuid);
-        return e instanceof net.minecraft.world.entity.player.Player p ? p : null;
+        var entity = ((meteordevelopment.meteorclient.mixin.LevelAccessor) mc.level).meteor$getEntityLookup().get(uuid);
+        return entity instanceof Player player ? player : null;
     }
 }

@@ -2,6 +2,7 @@ package orbiter.compat;
 
 import java.util.List;
 
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -12,11 +13,11 @@ public final class ItemCompat {
     private ItemCompat() {}
 
     public static Item copperBlock() {
-        return Items.COPPER_BLOCK;
+        return Items.COPPER_BLOCK.weathering().unaffected();
     }
 
     public static Item stainedGlass() {
-        return Items.WHITE_STAINED_GLASS;
+        return Items.STAINED_GLASS.pick(DyeColor.WHITE);
     }
 
     public static List<ItemStack> bundleCopies(BundleContents bundle) {

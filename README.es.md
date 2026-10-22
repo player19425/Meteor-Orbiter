@@ -50,7 +50,7 @@ Cada versión publicada tiene su propio tag con el proyecto entero en la raíz, 
 gradlew build
 ```
 
-El jar queda en `build/libs/meteor-orbiter-1.0.6-26.1.2.jar`.
+El jar queda en `build/libs/meteor-orbiter-1.0.6-26.2.jar`.
 
 | Comando | Qué hace |
 |---|---|

@@ -109,15 +109,15 @@ public final class PacketCompat {
     }
 
     public static Component teamDisplayName(ClientboundSetPlayerTeamPacket.Parameters team) {
-        return team.getDisplayName();
+        return team.displayName();
     }
 
     public static Component teamPlayerPrefix(ClientboundSetPlayerTeamPacket.Parameters team) {
-        return team.getPlayerPrefix();
+        return team.playerPrefix();
     }
 
     public static Component teamPlayerSuffix(ClientboundSetPlayerTeamPacket.Parameters team) {
-        return team.getPlayerSuffix();
+        return team.playerSuffix();
     }
 
     public static boolean isSwingPacket(Object packet) {
